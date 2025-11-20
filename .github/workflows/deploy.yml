@@ -45,4 +45,4 @@ jobs:
             -o PreferredAuthentications=publickey \
             -o PubkeyAuthentication=yes \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "echo SUCCESS: Connected to server" || echo "SSH FAILED"
+            "echo SUCCESS: Connected to server" || echo "SSH FAILE"
