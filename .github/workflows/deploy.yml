@@ -1,10 +1,46 @@
-name: SSH Deployment
-  uses: appleboy/ssh-action@v1.2.0
-  with:
-    host: ${{ secrets.SERVER_HOST }}
-    username: ${{ secrets.SERVER_USER }}
-    key: ${{ secrets.SSH_PRIVATE_KEY }}
-    port: 22
-    timeout: 30s
-    script_stop: true
-    debug: true
+name: Debug SSH Connection
+
+on:
+  workflow_dispatch:  # Manual trigger saja
+
+jobs:
+  debug-ssh:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check SSH Key Format
+      run: |
+        echo "=== Checking SSH Key ==="
+        echo "Key length: ${#SECRET_KEY}"
+        SECRET_KEY="${{ secrets.SSH_PRIVATE_KEY }}"
+        if [ -z "$SECRET_KEY" ]; then
+          echo "❌ SSH_PRIVATE_KEY is EMPTY!"
+        else
+          echo "✅ SSH_PRIVATE_KEY is set"
+          echo "First 50 chars: ${SECRET_KEY:0:50}"
+        fi
+        
+        echo "=== Host Info ==="
+        echo "Host: ${{ secrets.SERVER_HOST }}"
+        echo "User: ${{ secrets.SERVER_USER }}"
+        echo "Port: 22"
+
+    - name: Test Basic SSH Connection
+      uses: appleboy/ssh-action@v1.2.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 22
+        timeout: 30s
+        debug: true
+        script: |
+          echo "=== Connection Successful ==="
+          echo "Hostname: $(hostname)"
+          echo "Current user: $(whoami)"
+          echo "Working directory: $(pwd)"
+          echo "=== Basic System Info ==="
+          uname -a
+          echo "=== Disk Space ==="
+          df -h
+          echo "=== Debug completed successfully ==="
