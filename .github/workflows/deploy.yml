@@ -1,7 +1,7 @@
 name: Debug SSH Connection
 
 on:
-  workflow_dispatch:   # dijalankan manual
+  workflow_dispatch:   # dijalankan manuall
 
 jobs:
   debug:
