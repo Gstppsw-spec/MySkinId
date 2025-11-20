@@ -1,48 +1,19 @@
-name: Debug SSH Connection
+name: Test SSH Key
 
 on:
-  workflow_dispatch:   # dijalankan manuall
+  workflow_dispatch:
 
 jobs:
-  debug:
+  test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Show raw private key length
-        run: |
-          echo "Private key length:"
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | wc -c
-
-      - name: Create SSH private key file
-        run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > id_rsa
-          chmod 600 id_rsa
-          echo "Private key saved as id_rsa"
-
-      - name: Check private key format
-        run: |
-          echo "=== First 5 lines of private key ==="
-          head -n 5 id_rsa
-          echo "=== Last 5 lines of private key ==="
-          tail -n 5 id_rsa
-
-      - name: Test parsing key
-        run: |
-          echo "Testing ssh-keygen -lf id_rsa"
-          ssh-keygen -lf id_rsa || echo "ssh-keygen FAILED (key corrupt or format wrong)"
-
-      - name: Add server to known_hosts
-        run: |
-          echo "Fetching SSH fingerprint..."
-          ssh-keyscan -p ${{ secrets.SERVER_SSH_PORT || 22 }} ${{ secrets.SERVER_HOST }} > known_hosts
-          cat known_hosts
-
-      - name: Test SSH connection
-        run: |
-          echo "Testing SSH connection..."
-          ssh -v -i id_rsa \
-            -o StrictHostKeyChecking=no \
-            -o PreferredAuthentications=publickey \
-            -o PubkeyAuthentication=yes \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            "echo SUCCESS: Connected to server" || echo "SSH FAILE"
+      - name: Test SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          debug: true
+          script: |
+            echo "SSH OK"
+            hostname
