@@ -1,13 +1,13 @@
 name: SSH Deployment
 
 on:
-  workflow_dispatch:  # Untuk testing, jalankan manual
+  workflow_dispatch:
 
 jobs:
-  debug-ssh:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Check SSH Connection
+      - name: SSH Debug
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -18,7 +18,7 @@ jobs:
           script_stop: true
           debug: true
           script: |
-            echo "✅ Connected successfully!"
-            echo "Hostname: $(hostname)"
+            echo "✅ SSH Connection Successful!"
+            echo "Server: $(hostname)"
             echo "User: $(whoami)"
             echo "Directory: $(pwd)"
