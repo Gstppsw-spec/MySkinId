@@ -1,42 +1,57 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/db");
-const MsLocation = require("./locationModel");
+"use strict";
 
-const ImageLocation = sequelize.define(
-  "ImageLocation",
-  {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    locationid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "mslocation",
-        key: "id",
+module.exports = (sequelize, DataTypes) => {
+  const ImageLocation = sequelize.define(
+    "ImageLocation",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      locationid: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      isImageByOutlet: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      isImageByCustomer: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      image_url: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+      updateuserid: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      updatedate: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
       },
     },
-    isImageByOutlet: { type: DataTypes.BOOLEAN, defaultValue: false },
-    isImageByCustomer: { type: DataTypes.BOOLEAN, defaultValue: false },
-    image_url: { type: DataTypes.STRING(255), allowNull: false }, // hanya path/URL
-    updateuserid: { type: DataTypes.UUID, allowNull: true },
-    updatedate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-  },
-  {
-    tableName: "image_location",
-    timestamps: false,
-  }
-);
+    {
+      tableName: "image_location",
+      timestamps: false,
+    }
+  );
 
-ImageLocation.belongsTo(MsLocation, {
-  foreignKey: "locationid",
-  as: "location",
-});
-MsLocation.hasMany(ImageLocation, {
-  foreignKey: "locationid",
-  as: "imagelocation",
-});
+  // RELASI DITARUH DI SINI
+  ImageLocation.associate = (models) => {
+    ImageLocation.belongsTo(models.Mslocation, {
+      foreignKey: "locationid",
+      as: "location",
+    });
 
-module.exports = ImageLocation;
+    models.Mslocation.hasMany(ImageLocation, {
+      foreignKey: "locationid",
+      as: "imagelocation",
+    });
+  };
+
+  return ImageLocation;
+};
