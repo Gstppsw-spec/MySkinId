@@ -2,7 +2,7 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable('msrole', {
+    await queryInterface.createTable('masterRole', {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
