@@ -1,44 +1,53 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/db");
-const ConsultationRoom = require("./roomConsultationModel");
+"use strict";
 
-const ConsultationMessage = sequelize.define(
-  "ConsultationMessage",
-  {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    roomid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: ConsultationRoom,
-        key: "id",
+module.exports = (sequelize, DataTypes) => {
+  const ConsultationMessage = sequelize.define(
+    "ConsultationMessage",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      roomid: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      senderrole: {
+        type: DataTypes.ENUM("customer", "doctor"),
+        allowNull: false,
+      },
+      message: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      messageType: {
+        type: DataTypes.ENUM("text", "image"),
+        defaultValue: "text",
+      },
+      createdate: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
       },
     },
-    senderrole: {
-      type: DataTypes.ENUM("customer", "doctor"),
-      allowNull: false,
-    },
-    message: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-    },
-    messageType: {
-      type: DataTypes.ENUM("text", "image"),
-      defaultValue: "text",
-    },
-    createdate: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
-  },
-  {
-    tableName: "consultationmessage",
-    timestamps: false,
-  }
-);
+    {
+      tableName: "consultationmessage",
+      timestamps: false,
+    }
+  );
 
-module.exports = ConsultationMessage;
+  ConsultationMessage.associate = (models) => {
+    ConsultationMessage.belongsTo(models.ConsultationRoom, {
+      foreignKey: "roomid",
+      as: "room",
+    });
+
+    ConsultationMessage.hasMany(models.ConsultationImage, {
+      foreignKey: "messageid",
+      as: "images",
+    });
+  };
+
+  return ConsultationMessage;
+};
+

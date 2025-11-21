@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const sequelize = require("../config/db");
+const sequelize = require("../../config/config");
 const Mslocation = require("../models/locationModel");
 const MsRole = require("../models/roleModel");
 const MsServiceCategoryMapping = require("../models/serviceCategoryMappingModel");

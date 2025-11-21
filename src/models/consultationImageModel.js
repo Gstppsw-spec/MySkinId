@@ -1,56 +1,58 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/db");
-const ConsultationMessage = require("./consultationMessageModel");
-const ConsultationRoom = require("./roomConsultationModel");
+"use strict";
 
-const ConsultationImage = sequelize.define(
-  "ConsultationImage",
-  {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    messageid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "consultationmessage",
-        key: "id",
+module.exports = (sequelize, DataTypes) => {
+  const ConsultationImage = sequelize.define(
+    "ConsultationImage",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      messageid: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      roomid: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      image_url: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
       },
     },
-    roomid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "consultationroom",
-        key: "id",
-      },
-    },
-    image_url: { type: DataTypes.STRING(255), allowNull: false },
-  },
-  {
-    tableName: "consultationimage",
-    timestamps: false,
-  }
-);
+    {
+      tableName: "consultationimage",
+      timestamps: false,
+    }
+  );
 
-ConsultationImage.belongsTo(ConsultationMessage, {
-  foreignKey: "messageid",
-  as: "message",
-});
-ConsultationMessage.hasMany(ConsultationImage, {
-  foreignKey: "messageid",
-  as: "consultationimage",
-});
+  ConsultationImage.associate = function (models) {
+    // ConsultationImage → belongsTo ConsultationMessage
+    ConsultationImage.belongsTo(models.ConsultationMessage, {
+      foreignKey: "messageid",
+      as: "message",
+    });
 
-ConsultationImage.belongsTo(ConsultationRoom, {
-  foreignKey: "roomid",
-  as: "room",
-});
-ConsultationRoom.hasMany(ConsultationImage, {
-  foreignKey: "roomid",
-  as: "roomimage",
-});
+    // ConsultationMessage → hasMany ConsultationImage
+    models.ConsultationMessage.hasMany(ConsultationImage, {
+      foreignKey: "messageid",
+      as: "consultationimage",
+    });
 
-module.exports = ConsultationImage;
+    // ConsultationImage → belongsTo ConsultationRoom
+    ConsultationImage.belongsTo(models.ConsultationRoom, {
+      foreignKey: "roomid",
+      as: "room",
+    });
+
+    // ConsultationRoom → hasMany ConsultationImage
+    models.ConsultationRoom.hasMany(ConsultationImage, {
+      foreignKey: "roomid",
+      as: "roomimage",
+    });
+  };
+
+  return ConsultationImage;
+};

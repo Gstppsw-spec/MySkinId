@@ -1,25 +1,52 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/db");
+"use strict";
 
-const MsServiceType = sequelize.define(
-  "MsServiceType",
-  {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
+module.exports = (sequelize, DataTypes) => {
+  const MsServiceType = sequelize.define(
+    "MsServiceType",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      name: {
+        type: DataTypes.STRING(100),
+        allowNull: false,
+      },
+      isactive: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+      },
+      createdate: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
+      },
+      createbyuserid: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      updatedate: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
+      },
+      updateuserid: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
-    name: { type: DataTypes.STRING(100), allowNull: false },
-    isactive: { type: DataTypes.BOOLEAN, defaultValue: true },
-    createdate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-    createbyuserid: { type: DataTypes.UUID },
-    updatedate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-    updateuserid: { type: DataTypes.UUID },
-  },
-  {
-    tableName: "msservicetype",
-    timestamps: false,
-  }
-);
+    {
+      tableName: "msservicetype",
+      timestamps: false,
+    }
+  );
 
-module.exports = MsServiceType;
+  // 🔗 Association (dipanggil oleh index.js)
+  MsServiceType.associate = (models) => {
+    MsServiceType.hasMany(models.MsService, {
+      foreignKey: "servicetypeid",
+      as: "services",
+    });
+  };
+
+  return MsServiceType;
+};

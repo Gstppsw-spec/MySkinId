@@ -1,150 +1,95 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/db");
-const Mslocation = require("./locationModel");
-const MsServiceType = require("./serviceTypeModel");
-const MsSubServiceCategory = require("./subCategoryServiceModel");
-const MsServiceCategoryMapping = require("./serviceCategoryMappingModel");
+"use strict";
 
-const MsService = sequelize.define(
-  "MsService",
-  {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    name: { type: DataTypes.STRING(200), allowNull: false },
-    locationid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: "mslocation", key: "id" },
-    },
-    servicetypeid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: "msservicetype", key: "id" },
-    },
-    normalprice: {
-      type: DataTypes.DECIMAL(18, 2),
-      allowNull: false,
-      defaultValue: 0,
-    },
-    discountpercent: { type: DataTypes.FLOAT, defaultValue: 0 },
-    discountvalue: { type: DataTypes.DECIMAL(18, 2), defaultValue: 0 },
-    finalprice: {
-      type: DataTypes.DECIMAL(18, 2),
-      allowNull: false,
-      defaultValue: 0,
-    },
-    isactive: { type: DataTypes.BOOLEAN, defaultValue: true },
-    createdate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-    createbyuserid: { type: DataTypes.UUID },
-    updatedate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
-    updateuserid: { type: DataTypes.UUID },
-  },
-  {
-    tableName: "msservice",
-    timestamps: false,
-  }
-);
-
-const MsServicePackageItem = sequelize.define(
-  "MsServicePackageItem",
-  {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    packageid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "msservice",
-        key: "id",
+module.exports = (sequelize, DataTypes) => {
+  const MsService = sequelize.define(
+    "MsService",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
       },
-    },
-    serviceid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "msservice",
-        key: "id",
+      name: { type: DataTypes.STRING(200), allowNull: false },
+      locationid: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: { model: "mslocation", key: "id" },
       },
+      servicetypeid: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: { model: "msservicetype", key: "id" },
+      },
+      normalprice: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      discountpercent: { type: DataTypes.FLOAT, defaultValue: 0 },
+      discountvalue: { type: DataTypes.DECIMAL(18, 2), defaultValue: 0 },
+      finalprice: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      isactive: { type: DataTypes.BOOLEAN, defaultValue: true },
+      createdate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+      createbyuserid: { type: DataTypes.UUID },
+      updatedate: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+      updateuserid: { type: DataTypes.UUID },
     },
-    quantity: {
-      type: DataTypes.INTEGER,
-      default: 1,
-    },
-    sortorder: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-    },
-    createdate: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
-    createbyuserid: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
-    updatedate: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
-    updateuserid: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
-    isactive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
-    },
-  },
-  {
-    tableName: "msservicepackageitem",
-    timestamps: false,
-  }
-);
+    {
+      tableName: "msservice",
+      timestamps: false,
+    }
+  );
 
-MsService.belongsTo(Mslocation, { foreignKey: "locationid", as: "location" });
-Mslocation.hasMany(MsService, { foreignKey: "locationid", as: "services" });
+  MsService.associate = (models) => {
 
-MsService.belongsTo(MsServiceType, {
-  foreignKey: "servicetypeid",
-  as: "servicetype",
-});
-MsServiceType.hasMany(MsService, {
-  foreignKey: "servicetypeid",
-  as: "services",
-});
+    // LOCATION
+    MsService.belongsTo(models.Mslocation, {
+      foreignKey: "locationid",
+      as: "location",
+    });
 
-MsService.belongsToMany(MsSubServiceCategory, {
-  through: MsServiceCategoryMapping,
-  foreignKey: "serviceid",
-  otherKey: "servicecategoryid",
-  as: "servicecategories",
-});
+    models.Mslocation.hasMany(MsService, {
+      foreignKey: "locationid",
+      as: "services",
+    });
 
-MsSubServiceCategory.belongsToMany(MsService, {
-  through: MsServiceCategoryMapping,
-  foreignKey: "servicecategoryid",
-  otherKey: "serviceid",
-  as: "services",
-});
+    // SERVICE TYPE
+    MsService.belongsTo(models.MsServiceType, {
+      foreignKey: "servicetypeid",
+      as: "servicesByType",
+    });
 
-// Service bisa punya banyak item package
-MsService.hasMany(MsServicePackageItem, {
-  foreignKey: "packageid",
-  as: "packageitems",
-});
+    // models.MsServiceType.hasMany(MsService, {
+    //   foreignKey: "servicetypeid",
+    //   as: "services",
+    // });
 
-// Item package mengarah ke service yang dikandungnya
-MsServicePackageItem.belongsTo(MsService, {
-  foreignKey: "serviceid",
-  as: "serviceitem",
-});
+    // MANY-TO-MANY CATEGORY
+    MsService.belongsToMany(models.MsSubServiceCategory, {
+      through: models.MsServiceCategoryMapping,
+      foreignKey: "serviceid",
+      otherKey: "servicecategoryid",
+      as: "servicecategories",
+    });
 
+    models.MsSubServiceCategory.belongsToMany(MsService, {
+      through: models.MsServiceCategoryMapping,
+      foreignKey: "servicecategoryid",
+      otherKey: "serviceid",
+      as: "services",
+    });
 
-module.exports = { MsService, MsServicePackageItem };
+    // PACKAGE ITEMS
+    MsService.hasMany(models.MsServicePackageItem, {
+      foreignKey: "packageid",
+      as: "packageitems",
+    });
 
+  };
+
+  return MsService;
+};

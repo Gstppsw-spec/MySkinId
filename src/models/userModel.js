@@ -1,86 +1,72 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/db");
+"use strict";
 
-// Import relasi
-const MsCompany = require("./companyModel");
-const MsLocation = require("./locationModel");
-const MsRole = require("./roleModel");
-
-const MsUser = sequelize.define(
-  "MsUser",
-  {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    email: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      unique: true,
-      validate: {
-        isEmail: true,
+module.exports = (sequelize, DataTypes) => {
+  const MsUser = sequelize.define(
+    "MsUser",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      email: {
+        type: DataTypes.STRING(100),
+        allowNull: false,
+        unique: true,
+        validate: { isEmail: true },
+      },
+      password: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
+      roleid: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      companyid: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      locationid: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      isactive: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+      },
+      jwttoken: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      updatedate: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
+      },
+      updateuserid: {
+        type: DataTypes.UUID,
+        allowNull: true,
       },
     },
-    password: {
-      type: DataTypes.STRING(255),
-      allowNull: false,
-    },
-    roleid: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: {
-        model: "msrole",
-        key: "id",
-      },
-    },
-    companyid: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: "mscompany",
-        key: "id",
-      },
-    },
-    locationid: {
-      type: DataTypes.UUID,
-      allowNull: true,
-      references: {
-        model: "mslocation",
-        key: "id",
-      },
-    },
-    isactive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true,
-    },
-    jwttoken: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-    },
-    updatedate: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
-    updateuserid: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
-  },
-  {
-    tableName: "msuser",
-    timestamps: false,
-  }
-);
+    {
+      tableName: "msuser",
+      timestamps: false,
+    }
+  );
 
-// === ASSOCIATIONS ===
-MsUser.belongsTo(MsCompany, { foreignKey: "companyid", as: "company" });
-MsCompany.hasMany(MsUser, { foreignKey: "companyid", as: "users" });
+  MsUser.associate = (models) => {
+    // Company
+    MsUser.belongsTo(models.Mscompany, { foreignKey: "companyid", as: "company" });
+    models.Mscompany.hasMany(MsUser, { foreignKey: "companyid", as: "users" });
 
-MsUser.belongsTo(MsLocation, { foreignKey: "locationid", as: "location" });
-MsLocation.hasMany(MsUser, { foreignKey: "locationid", as: "users" });
+    // Location
+    MsUser.belongsTo(models.Mslocation, { foreignKey: "locationid", as: "location" });
+    models.Mslocation.hasMany(MsUser, { foreignKey: "locationid", as: "users_in_location" });
 
-MsUser.belongsTo(MsRole, { foreignKey: "roleid", as: "role" });
-MsRole.hasMany(MsUser, { foreignKey: "roleid", as: "users" });
+    // Role
+    MsUser.belongsTo(models.MsRole, { foreignKey: "roleid", as: "role" });
+    models.MsRole.hasMany(MsUser, { foreignKey: "roleid", as: "users_role" });
+  };
 
-module.exports = MsUser;
+  return MsUser;
+};

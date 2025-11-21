@@ -1,15 +1,13 @@
-const Mslocation = require("../models/locationModel");
-const ImageLocation = require("../models/imageLocationModel");
-const MsCompany = require("../models/companyModel");
-const MsUser = require("../models/userModel");
-const MsRole = require("../models/roleModel");
+const db = require("../models");
+const { Mslocation, ImageLocation, Mscompany, MsRole, MsUser } = db;
+
 
 exports.getAllLocations = async (req, res) => {
   try {
     const locations = await Mslocation.findAll({
       include: [
         { model: ImageLocation, as: "imagelocation" }, // gambar outlet
-        { model: MsCompany, as: "company", attributes: ["id", "name", "code"] }, // company
+        { model: Mscompany, as: "company", attributes: ["id", "name", "code"] }, // company
       ],
       order: [["updatedate", "DESC"]],
     });
