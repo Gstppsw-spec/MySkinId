@@ -9,7 +9,6 @@ module.exports = {
         primaryKey: true,
       },
 
-      // Basic info
       name: { type: Sequelize.STRING(150), allowNull: false },
       code: { type: Sequelize.STRING(50) },
       address: { type: Sequelize.STRING(255) },

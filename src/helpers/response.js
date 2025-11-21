@@ -1,0 +1,26 @@
+module.exports = {
+  success(res, message = "Success", data = null, code = 200) {
+    return res.status(code).json({
+      status: true,
+      message,
+      data,
+    });
+  },
+
+  error(res, message = "Terjadi kesalahan", data = null, code = 400) {
+    return res.status(code).json({
+      status: false,
+      message,
+      data,
+    });
+  },
+
+  
+  serverError(res, error) {
+    return res.status(500).json({
+      status: false,
+      message: error.message || "Internal server error",
+      data: null,
+    });
+  },
+};

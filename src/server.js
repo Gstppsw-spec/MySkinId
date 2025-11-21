@@ -13,6 +13,10 @@ const serviceRoutes = require("./routes/serviceRoute");
 const consultationRoutes = require("./routes/consultationRoute");
 const consultationCategoryRoutes = require("./routes/consultationCategoryRoute");
 
+//revamp
+const authUserRoute = require("./routes/authUserRoute");
+
+
 const userCustomerRoutes = require("./routes/userCustomerRoute");
 const path = require("path");
 const cors = require("cors");
@@ -53,9 +57,12 @@ app.use("/api/image-location", imageLocationRoutes);
 app.use("/api/userCustomer", userCustomerRoutes);
 app.use("/api/consultation", consultationRoutes);
 app.use("/api/consultation-category", consultationCategoryRoutes);
-
 app.use("/api/service", serviceRoutes);
 app.use("/api/servicetype", serviceTypeRoutes);
+
+//revamp
+app.use("/api/v2/auth", authUserRoute);
+
 
 app.listen(process.env.PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running on port ${process.env.PORT}`)
