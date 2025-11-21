@@ -1,23 +1,32 @@
-name: Test SSH Key
+name: Auto Deploy Node Backend
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - development
+      - staging
+      - main
 
 jobs:
-  test:
+  deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Test SSH
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             if [ "${{ github.ref }}" == "refs/heads/development" ]; then
               cd ${{ secrets.DEV_PATH }}
               git pull
               npm install --production
+              npx sequelize-cli db:migrate --config config/config.js
               pm2 restart myskin-development
             fi
 
@@ -25,6 +34,7 @@ jobs:
               cd ${{ secrets.STAGING_PATH }}
               git pull
               npm install --production
+              npx sequelize-cli db:migrate --config config/config.js
               pm2 restart myskin-staging
             fi
 
@@ -32,5 +42,6 @@ jobs:
               cd ${{ secrets.PROD_PATH }}
               git pull
               npm install --production
+              npx sequelize-cli db:migrate --config config/config.js
               pm2 restart myskin-production
             fi
