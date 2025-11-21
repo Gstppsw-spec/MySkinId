@@ -55,15 +55,12 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   MsUser.associate = (models) => {
-    // Company
     MsUser.belongsTo(models.Mscompany, { foreignKey: "companyid", as: "company" });
     models.Mscompany.hasMany(MsUser, { foreignKey: "companyid", as: "users" });
 
-    // Location
     MsUser.belongsTo(models.Mslocation, { foreignKey: "locationid", as: "location" });
     models.Mslocation.hasMany(MsUser, { foreignKey: "locationid", as: "users_in_location" });
 
-    // Role
     MsUser.belongsTo(models.MsRole, { foreignKey: "roleid", as: "role" });
     models.MsRole.hasMany(MsUser, { foreignKey: "roleid", as: "users_role" });
   };
