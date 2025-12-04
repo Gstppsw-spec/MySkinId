@@ -113,7 +113,7 @@ module.exports = {
         id: user.id,
         email: user.email,
         roleId: user.roleId,
-        roleCode: user.role?.roleCode, // tambahkan roleCode di token
+        roleCode: user.role?.roleCode,
       },
       JWT_SECRET,
       { expiresIn: "7d" }

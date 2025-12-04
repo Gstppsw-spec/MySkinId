@@ -5,7 +5,6 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class masterCompany extends Model {
     static associate(models) {
-      // Relasi ke user (audit trail)
       this.belongsTo(models.masterUser, {
         foreignKey: "createdBy",
         as: "createdByUser",
@@ -24,6 +23,11 @@ module.exports = (sequelize, DataTypes) => {
       this.hasMany(models.masterLocation, {
         foreignKey: "companyId",
         as: "locations",
+      });
+
+      this.hasMany(models.CompanyVerificationRequest, {
+        foreignKey: "companyId",
+        as: "verificationRequests",
       });
     }
   }
@@ -92,6 +96,15 @@ module.exports = (sequelize, DataTypes) => {
       createdAt: DataTypes.DATE,
       updatedAt: DataTypes.DATE,
       deletedAt: DataTypes.DATE,
+      isactive: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      isVerified: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      verifiedDate: DataTypes.DATE
     },
     {
       sequelize,

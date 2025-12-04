@@ -51,6 +51,11 @@ module.exports = (sequelize, DataTypes) => {
       createdAt: { type: DataTypes.DATE },
       updatedAt: { type: DataTypes.DATE },
       deletedAt: { type: DataTypes.DATE },
+      isVerified: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      verifiedDate: DataTypes.DATE,
     },
     {
       tableName: "masterLocation",
@@ -79,6 +84,23 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "deletedBy",
       as: "deleter",
     });
+
+    masterLocation.hasMany(models.masterLocationImage, {
+      foreignKey: "locationId",
+      as: "images",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    });
+
+    masterLocation.hasMany(models.relationshipUserLocation, {
+      foreignKey: "locationId",
+      as: "userLocations",
+    });
+
+    masterLocation.hasMany(models.LocationVerificationRequest, {
+        foreignKey: "locationId",
+        as: "verificationRequests",
+      });
   };
 
   return masterLocation;

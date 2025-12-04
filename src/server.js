@@ -15,7 +15,13 @@ const consultationCategoryRoutes = require("./routes/consultationCategoryRoute")
 
 //revamp
 const authUserRoute = require("./routes/authUserRoute");
-
+const categoryRoute = require("./routes/master/categoryRoute");
+const productRoute = require("./routes/master/product");
+const companyRoute = require("./routes/company/relationshipUserCompany.route");
+const companyVerificationRoute = require("./routes/verification/companyVerificationRoutes");
+const locationRoute = require("./routes/master/masterLocation.route");
+const locationVerificationRoute = require("./routes/verification/locationVerificationRoutes");
+const customerRoute = require("./routes/master/masterCustomer.route");
 
 const userCustomerRoutes = require("./routes/userCustomerRoute");
 const path = require("path");
@@ -41,11 +47,11 @@ app.use(
   express.static(path.join(__dirname, "../uploads/consultation"))
 );
 
-// sequelize.sync({ alter: true })
-//   .then(() => console.log('✅ Tables synchronized'))
-//   .catch(err => console.error('❌ Sync failed:', err));
+app.use(
+  "/uploads/location",
+  express.static(path.join(__dirname, "../uploads/location"))
+);
 
-// Routes
 app.use(bodyParser.json());
 app.use("/api/location", locationsRoute);
 app.use("/api/company", companyRoutes);
@@ -62,7 +68,13 @@ app.use("/api/servicetype", serviceTypeRoutes);
 
 //revamp
 app.use("/api/v2/auth", authUserRoute);
-
+app.use("/api/v2/category", categoryRoute);
+app.use("/api/v2/product", productRoute);
+app.use("/api/v2/company", companyRoute);
+app.use("/api/v2/verification/company", companyVerificationRoute);
+app.use("/api/v2/verification/location", locationVerificationRoute);
+app.use("/api/v2/location", locationRoute);
+app.use("/api/v2/auth-customer", customerRoute);
 
 app.listen(process.env.PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running on port ${process.env.PORT}`)

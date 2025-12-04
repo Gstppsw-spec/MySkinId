@@ -23,26 +23,21 @@ module.exports = {
       email: { type: Sequelize.STRING(150) },
       websiteUrl: { type: Sequelize.STRING(255) },
 
-      // Legal info
       npwp: { type: Sequelize.STRING(30) },
       nib: { type: Sequelize.STRING(50) },
       siup: { type: Sequelize.STRING(50) },
       taxStatus: { type: Sequelize.STRING(50) }, // PKP / NON-PKP
 
-      // Branding
       logo: { type: Sequelize.STRING(255) },
 
-      // Finance
       bankName: { type: Sequelize.STRING(100) },
       bankAccountName: { type: Sequelize.STRING(100) },
       bankAccountNumber: { type: Sequelize.STRING(50) },
       currency: { type: Sequelize.STRING(10), defaultValue: "IDR" },
 
-      // Operational
       timezone: { type: Sequelize.STRING(50), defaultValue: "Asia/Jakarta" },
       locale: { type: Sequelize.STRING(10), defaultValue: "id-ID" },
 
-      // Audit trail
       createdBy: {
         type: Sequelize.UUID,
         references: { model: "masterUser", key: "id" },
@@ -55,8 +50,7 @@ module.exports = {
         type: Sequelize.UUID,
         references: { model: "masterUser", key: "id" },
       },
-
-      // Soft delete + timestamps
+      
       isactive: { type: Sequelize.BOOLEAN, defaultValue: false },
       createdAt: {
         allowNull: false,
