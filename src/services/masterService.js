@@ -2,6 +2,7 @@ const {
   masterService,
   masterSubCategoryService,
   masterLocation,
+  masterLocationImage,
 } = require("../models");
 
 const { Op, Sequelize } = require("sequelize");
@@ -42,6 +43,12 @@ module.exports = {
         {
           model: masterLocation,
           as: "location",
+          include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+            },
+          ],
         },
       ];
 
@@ -71,6 +78,12 @@ module.exports = {
           {
             model: masterLocation,
             as: "location",
+            include: [
+              {
+                model: masterLocationImage,
+                as: "images",
+              },
+            ],
           },
         ],
       });
@@ -138,7 +151,6 @@ module.exports = {
       if (file) {
         imageUrl = file.path; // <-- simpan path image
       }
-
 
       const newService = await masterService.create({
         name,
