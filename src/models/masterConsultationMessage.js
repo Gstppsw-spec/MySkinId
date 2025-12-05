@@ -10,6 +10,11 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "roomId",
         as: "room",
       });
+
+      masterConsultationMessage.hasMany(models.masterConsultationImage, {
+        foreignKey: "messageId",
+        as: "consultationImage",
+      });
     }
   }
 
