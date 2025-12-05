@@ -7,6 +7,10 @@ const path = require("path");
 const fs = require("fs");
 const uploadPath = "uploads/product";
 
+if (!fs.existsSync(uploadPath)) {
+  fs.mkdirSync(uploadPath, { recursive: true });
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadPath);
@@ -34,6 +38,5 @@ router.put(
 );
 
 router.patch("/image/:id", masterProduct.deleteImage);
-
 
 module.exports = router;
