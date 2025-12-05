@@ -82,6 +82,10 @@ module.exports = {
             as: "groupProduct",
             through: { attributes: [] },
           },
+          {
+            model: masterProductImage,
+            as: "images",
+          },
         ],
       });
 
