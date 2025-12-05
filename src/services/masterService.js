@@ -61,13 +61,13 @@ module.exports = {
     try {
       const service = await masterService.findByPk(id, {
         include: [
-          {
-            model: masterSubCategoryService,
-            as: "categories",
-            through: { attributes: [] },
-            where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
-            required: !!categoryIds,
-          },
+          // {
+          //   model: masterSubCategoryService,
+          //   as: "categories",
+          //   through: { attributes: [] },
+          //   where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
+          //   required: !!categoryIds,
+          // },
           {
             model: masterLocation,
             as: "location",
