@@ -12,6 +12,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { Op, Sequelize } = require("sequelize");
+
 module.exports = {
   async getAll(filters = {}) {
     try {

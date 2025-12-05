@@ -23,7 +23,6 @@ class masterCustomerService {
       } = data;
 
       console.log(data);
-      
 
       let hashedPassword = null;
 

@@ -1,17 +1,5 @@
 require("dotenv").config();
 const express = require("express");
-// const sequelize = require("./config/db");
-const locationsRoute = require("./routes/locationRoute");
-const companyRoutes = require("./routes/companyRoute");
-const userRoutes = require("./routes/userRoute");
-const roleRoutes = require("./routes/roleRoute");
-const imageLocationRoutes = require("./routes/imageLocationRoute");
-const subServiceCategoryRoutes = require("./routes/subCategoryServiceRoute");
-const mainServiceCategoryRoutes = require("./routes/mainCategoryServiceRoute");
-const serviceTypeRoutes = require("./routes/serviceTypeRoute");
-const serviceRoutes = require("./routes/serviceRoute");
-const consultationRoutes = require("./routes/consultationRoute");
-const consultationCategoryRoutes = require("./routes/consultationCategoryRoute");
 
 //revamp
 const authUserRoute = require("./routes/authUserRoute");
@@ -22,8 +10,9 @@ const companyVerificationRoute = require("./routes/verification/companyVerificat
 const locationRoute = require("./routes/master/masterLocation.route");
 const locationVerificationRoute = require("./routes/verification/locationVerificationRoutes");
 const customerRoute = require("./routes/master/masterCustomer.route");
+const serviceRoute = require("./routes/master/service");
+const consultationRoute = require("./routes/consultation/consultation");
 
-const userCustomerRoutes = require("./routes/userCustomerRoute");
 const path = require("path");
 const cors = require("cors");
 
@@ -53,19 +42,6 @@ app.use(
 );
 
 app.use(bodyParser.json());
-app.use("/api/location", locationsRoute);
-app.use("/api/company", companyRoutes);
-app.use("/api/role", roleRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/subCategoryService", subServiceCategoryRoutes);
-app.use("/api/mainCategoryService", mainServiceCategoryRoutes);
-app.use("/api/image-location", imageLocationRoutes);
-app.use("/api/userCustomer", userCustomerRoutes);
-app.use("/api/consultation", consultationRoutes);
-app.use("/api/consultation-category", consultationCategoryRoutes);
-app.use("/api/service", serviceRoutes);
-app.use("/api/servicetype", serviceTypeRoutes);
-
 //revamp
 app.use("/api/v2/auth", authUserRoute);
 app.use("/api/v2/category", categoryRoute);
@@ -75,6 +51,8 @@ app.use("/api/v2/verification/company", companyVerificationRoute);
 app.use("/api/v2/verification/location", locationVerificationRoute);
 app.use("/api/v2/location", locationRoute);
 app.use("/api/v2/auth-customer", customerRoute);
+app.use("/api/v2/service", serviceRoute);
+app.use("/api/v2/consultation", consultationRoute);
 
 app.listen(process.env.PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running on port ${process.env.PORT}`)
