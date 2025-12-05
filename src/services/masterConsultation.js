@@ -140,10 +140,10 @@ module.exports = {
       });
 
       if (files || files.length > 0) {
-        const imageRecords = req.files.map((file) => ({
+        const imageRecords = files.map((file) => ({
           messageId: newMessage.id,
           roomId: roomId,
-          imageUrl: file.filename,
+          imageUrl: file.path,
         }));
 
         await masterConsultationImage.bulkCreate(imageRecords);
