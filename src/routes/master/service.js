@@ -33,7 +33,7 @@ router.get("/", service.getAll);
 router.get("/:id", service.getById);
 router.post("/", serviceProduct.single("photo"), service.create);
 router.put("/:id", serviceProduct.single("photo"), service.update);
-
+router.get("/location/:locationId", service.getByLocationId);
 
 // router.put(
 //   "/:id",
