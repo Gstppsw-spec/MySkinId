@@ -15,20 +15,35 @@ module.exports = {
 
       const favorites = await customerFavorites.findAll({
         where: { customerId },
+
+        attributes: [], // ❗JANGAN tampilkan data dr customer_favorites
+
         include: [
           {
             model: masterProduct,
             as: "product",
-            include: [{ model: masterProductImage, as: "images" }],
+            include: [
+              {
+                model: masterProductImage,
+                as: "images",
+                attributes: ["imageUrl"], // ambil image aja
+              },
+            ],
           },
           {
             model: masterLocation,
             as: "location",
-            include: [{ model: masterLocationImage, as: "images" }],
+            include: [
+              {
+                model: masterLocationImage,
+                as: "images",
+                attributes: ["imageUrl"],
+              },
+            ],
           },
           {
             model: masterService,
-            as: "service",
+            as: "service"
           },
         ],
       });
@@ -40,14 +55,9 @@ module.exports = {
       };
 
       favorites.forEach((fav) => {
-        if (fav.favoriteType === "product" && fav.product)
-          result.product.push(fav);
-
-        if (fav.favoriteType === "service" && fav.service)
-          result.service.push(fav);
-
-        if (fav.favoriteType === "location" && fav.location)
-          result.location.push(fav);
+        if (fav.product) result.product.push(fav.product);
+        if (fav.service) result.service.push(fav.service);
+        if (fav.location) result.location.push(fav.location);
       });
 
       return { status: true, message: "Berhasil", data: result };
@@ -55,6 +65,7 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
   async updateCustomerFavorites(data) {
     try {
       const { customerId, refferenceId, favoriteType } = data;
