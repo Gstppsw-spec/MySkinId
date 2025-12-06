@@ -74,6 +74,17 @@ module.exports = (sequelize, DataTypes) => {
       profileImageUrl: {
         type: DataTypes.STRING(255),
         allowNull: true,
+        get() {
+          const rawValue = this.getDataValue("profileImageUrl");
+          if (!rawValue) return null;
+          const BASE_URL =
+            process.env.BASE_URL ||
+            `${process.env.APP_PROTOCOL || "http"}://${
+              process.env.APP_HOST || "localhost"
+            }:${process.env.APP_PORT || 3000}`;
+
+          return `${BASE_URL}/${rawValue}`;
+        },
       },
 
       // ===== STATUS =====
