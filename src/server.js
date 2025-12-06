@@ -12,6 +12,10 @@ const locationVerificationRoute = require("./routes/verification/locationVerific
 const customerRoute = require("./routes/master/masterCustomer.route");
 const serviceRoute = require("./routes/master/service");
 const consultationRoute = require("./routes/consultation/consultation");
+const orderCartRoute = require("./routes/transaction/orderCart");
+const favoritesRoute = require("./routes/favorites/favorites");
+
+
 
 const path = require("path");
 const cors = require("cors");
@@ -53,6 +57,9 @@ app.use("/api/v2/location", locationRoute);
 app.use("/api/v2/auth-customer", customerRoute);
 app.use("/api/v2/service", serviceRoute);
 app.use("/api/v2/consultation", consultationRoute);
+app.use("/api/v2/cart", orderCartRoute);
+app.use("/api/v2/favorite", favoritesRoute);
+
 
 app.listen(process.env.PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running on port ${process.env.PORT}`)

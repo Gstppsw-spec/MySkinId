@@ -68,13 +68,6 @@ module.exports = {
     try {
       const service = await masterService.findByPk(id, {
         include: [
-          // {
-          //   model: masterSubCategoryService,
-          //   as: "categories",
-          //   through: { attributes: [] },
-          //   where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
-          //   required: !!categoryIds,
-          // },
           {
             model: masterLocation,
             as: "location",
@@ -300,6 +293,22 @@ module.exports = {
       };
     } catch (error) {
       console.error("Update Service Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getByLocationId(locationId) {
+    try {
+      const service = await masterService.findAll({
+        where: { locationId }
+      });
+
+      if (!service) {
+        return { status: false, message: "Service not found", data: null };
+      }
+
+      return { status: true, message: "Success", data: service };
+    } catch (error) {
       return { status: false, message: error.message, data: null };
     }
   },

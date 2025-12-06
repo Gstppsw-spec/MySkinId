@@ -48,4 +48,16 @@ module.exports = {
     const result = await service.update(id, req.body, req.file);
     return res.status(result.status ? 200 : 400).json(result);
   },
+
+  async getByLocationId(req, res) {
+    try {
+      const { locationId } = req.params;
+      const result = await service.getByLocationId(locationId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };
