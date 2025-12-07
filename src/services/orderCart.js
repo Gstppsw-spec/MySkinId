@@ -4,6 +4,7 @@ const {
   masterProduct,
   masterProductImage,
   masterService,
+  masterLocation
 } = require("../models");
 
 module.exports = {
@@ -236,6 +237,10 @@ module.exports = {
           {
             model: masterService,
             as: "service",
+          },
+          {
+            model: masterLocation,
+            as: "location",
           },
         ],
       });
