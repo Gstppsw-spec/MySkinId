@@ -59,4 +59,37 @@ module.exports = {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   },
+
+  async getAllByCustomer(req, res) {
+    const { customerId } = req.params;
+    const { minPrice, maxPrice, categoryIds } = req.query;
+    const categoryIdsArray = categoryIds
+      ? Array.isArray(categoryIds)
+        ? categoryIds
+        : [categoryIds]
+      : undefined;
+
+    const result = await productService.getAllByCustomer(
+      {
+        minPrice: minPrice ? parseFloat(minPrice) : undefined,
+        maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
+        categoryIds: categoryIdsArray,
+      },
+      customerId
+    );
+
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async getByIdCustomer(req, res) {
+    const { id, customerId } = req.params;
+
+    const result = await productService.getByIdCustomer(id, customerId);
+
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
 };
