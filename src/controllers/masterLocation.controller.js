@@ -81,11 +81,28 @@ class MasterLocationController {
   async getLocationByUserId(req, res) {
     const { id } = req.params;
     const location = await MasterLocationService.getLocationByUserId(id);
-    if (!location) {
-      return response.error(res, "Location not found for this user", null);
-    }
+    return location.status
+      ? response.success(res, location.message, location.data)
+      : response.error(res, location.message, null);
+  }
 
-    return response.success(res, "Success", location);
+  async detailLocationByCustomer(req, res) {
+    const { id, customerId } = req.params;
+    const location = await MasterLocationService.detailLocationByCustomer(id, customerId);
+    
+    return location.status
+      ? response.success(res, location.message, location.data)
+      : response.error(res, location.message, null);
+  }
+
+  async listLocationByCustomer(req, res) {
+    const { customerId } = req.params;
+
+    const location = await MasterLocationService.listLocationByCustomer(customerId);
+    
+    return location.status
+      ? response.success(res, location.message, location.data)
+      : response.error(res, location.message, null);
   }
 }
 

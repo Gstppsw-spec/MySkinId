@@ -3,6 +3,7 @@ const {
   masterSubCategoryService,
   masterLocation,
   masterLocationImage,
+  customerFavorites
 } = require("../models");
 
 const { Op, Sequelize } = require("sequelize");
@@ -300,7 +301,7 @@ module.exports = {
   async getByLocationId(locationId) {
     try {
       const service = await masterService.findAll({
-        where: { locationId }
+        where: { locationId },
       });
 
       if (!service) {
@@ -308,6 +309,116 @@ module.exports = {
       }
 
       return { status: true, message: "Success", data: service };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getAllCustomer(filters = {}, customerId = null) {
+    try {
+      const { minPrice, maxPrice, categoryIds } = filters;
+      const where = { isActive: true };
+
+      if (minPrice !== undefined || maxPrice !== undefined) {
+        where[Op.and] = Sequelize.literal(
+          `finalPrice BETWEEN ${minPrice || 0} AND ${maxPrice || 9999999}`
+        );
+      }
+
+      const include = [
+        {
+          model: masterSubCategoryService,
+          as: "categories",
+          through: { attributes: [] },
+          where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
+          required: !!categoryIds,
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          include: [{ model: masterLocationImage, as: "images" }],
+        },
+      ];
+
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: {
+            customerId,
+            favoriteType: "service", // pastikan sesuai tabel kamu
+          },
+          required: false,
+        });
+      }
+
+      const service = await masterService.findAll({
+        where,
+        include,
+        order: [["name", "ASC"]],
+      });
+
+      // Tambahkan isFavorite ke setiap item
+      const data = service.map((s) => {
+        const plain = s.get({ plain: true });
+        return {
+          ...plain,
+          isFavorite: customerId
+            ? plain.favorites && plain.favorites.length > 0
+            : false,
+          favorites: undefined,
+        };
+      });
+
+      return { status: true, message: "Success", data };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+  async getByIdCustomer(id, customerId = null) {
+    console.log(id);
+    
+    try {
+      const include = [
+        {
+          model: masterLocation,
+          as: "location",
+          include: [{ model: masterLocationImage, as: "images" }],
+        },
+      ];
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: {
+            customerId,
+            favoriteType: "service",
+          },
+          required: false,
+        });
+      }
+
+      const service = await masterService.findByPk(id, { include });
+
+      if (!service) {
+        return { status: false, message: "Product not found", data: null };
+      }
+
+      const plain = service.get({ plain: true });
+
+      return {
+        status: true,
+        message: "Success",
+        data: {
+          ...plain,
+          isFavorite: plain.favorites?.length > 0 || false,
+          favorites: undefined,
+        },
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

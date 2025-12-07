@@ -5,6 +5,7 @@ const {
   masterLocationImage,
   relationshipUserLocation,
   LocationVerificationRequest,
+  customerFavorites,
 } = require("../models");
 
 const fs = require("fs");
@@ -132,7 +133,6 @@ class MasterLocationService {
 
       return { status: true, message: "Location found", data: location };
     } catch (error) {
-      console.error("Detail error:", error);
       return { status: false, message: error.message, data: null };
     }
   }
@@ -206,6 +206,84 @@ class MasterLocationService {
       ],
     });
     return data?.location || null;
+  }
+
+  async detailLocationByCustomer(id, customerId = null) {
+    try {
+      const include = [{ model: masterLocationImage, as: "images" }];
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: { customerId, favoriteType: "location" },
+          required: false,
+        });
+      }
+
+      const location = await masterLocation.findByPk(id, { include });
+
+      if (!location) {
+        return { status: false, message: "Location not found", data: null };
+      }
+
+      const plain = location.get({ plain: true });
+
+      return {
+        status: true,
+        message: "Location found",
+        data: {
+          ...plain,
+          isFavorite: plain.favorites?.length > 0 || false,
+          favorites: undefined,
+        },
+      };
+    } catch (error) {
+      console.error("Detail error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  }
+
+  async listLocationByCustomer(customerId = null) {
+    try {
+      const include = [{ model: masterLocationImage, as: "images" }];
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          where: { customerId, favoriteType: "location" },
+          required: false,
+        });
+      }
+
+      const locations = await masterLocation.findAll({
+        include,
+        order: [["createdAt", "DESC"]],
+      });
+
+      if (!locations) {
+        return { status: false, message: "Location not found", data: null };
+      }
+
+      const result = locations.map((loc) => {
+        const plain = loc.get({ plain: true });
+
+        return {
+          ...plain,
+          isFavorite: customerId
+            ? plain.favorites && plain.favorites.length > 0
+            : false,
+          favorites: undefined,
+        };
+      });
+
+      return { status: true, message: "Location list", data: result };
+    } catch (error) {
+      console.error("List error:", error);
+      return { status: false, message: error.message, data: null };
+    }
   }
 }
 

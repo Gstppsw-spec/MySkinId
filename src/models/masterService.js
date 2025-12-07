@@ -120,6 +120,11 @@ module.exports = (sequelize, DataTypes) => {
       otherKey: "subCategoryServiceId",
       as: "categories",
     });
+
+    masterService.hasMany(models.customerFavorites, {
+      foreignKey: "refferenceId",
+      as: "favorites",
+    });
   };
 
   return masterService;

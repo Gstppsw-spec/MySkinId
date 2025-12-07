@@ -29,18 +29,17 @@ const serviceProduct = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
 
-router.get("/", service.getAll);
-router.get("/:id", service.getById);
+router.get("/all-customer", service.getAllCustomer);
+router.get("/all-customer/:customerId", service.getAllCustomer);
+
+router.get("/:id/detail-customer/:customerId", service.getByIdCustomer);
+router.get("/:id/detail-customer", service.getByIdCustomer);
+
+
 router.post("/", serviceProduct.single("photo"), service.create);
 router.put("/:id", serviceProduct.single("photo"), service.update);
 router.get("/location/:locationId", service.getByLocationId);
-
-// router.put(
-//   "/:id",
-//   uploadProductImages.array("photos", 10),
-//   service.update
-// );
-
-// router.patch("/image/:id", service.deleteImage);
+router.get("/", service.getAll);
+router.get("/:id", service.getById);
 
 module.exports = router;

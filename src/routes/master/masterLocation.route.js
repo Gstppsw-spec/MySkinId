@@ -3,9 +3,28 @@ const router = express.Router();
 const MasterLocationController = require("../../controllers/masterLocation.controller");
 const uploadLocationImages = require("../../middlewares/uploadMultipleImageLocation");
 
-router.get("/", MasterLocationController.list);
-router.get("/:id", MasterLocationController.detail);
+// >>> STATIC ROUTES FIRST <<<
 router.get("/company/:companyId", MasterLocationController.getByCompanyId);
+router.get("/user/:id", MasterLocationController.getLocationByUserId);
+
+// CUSTOMER LIST
+router.get("/all-customer", MasterLocationController.listLocationByCustomer);
+router.get(
+  "/all-customer/:customerId",
+  MasterLocationController.listLocationByCustomer
+);
+
+// DETAIL CUSTOMER
+router.get(
+  "/:id/detail-customer/:customerId",
+  MasterLocationController.detailLocationByCustomer
+);
+router.get(
+  "/:id/detail-customer",
+  MasterLocationController.detailLocationByCustomer
+);
+
+// UPDATE & MANAGE
 router.post(
   "/",
   uploadLocationImages.array("photos", 10),
@@ -18,6 +37,9 @@ router.put(
 );
 router.patch("/:id/status", MasterLocationController.updateStatus);
 router.patch("/image/:id", MasterLocationController.deleteImage);
-router.get("/user/:id", MasterLocationController.getLocationByUserId);
+
+// >>> DYNAMIC ROUTES LAST <<<
+router.get("/", MasterLocationController.list);
+router.get("/:id", MasterLocationController.detail);
 
 module.exports = router;

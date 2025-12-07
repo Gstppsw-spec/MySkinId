@@ -6,6 +6,7 @@ const {
   relationshipProductConsultationCategory,
   masterGroupProduct,
   masterProductImage,
+  customerFavorites,
 } = require("../models");
 
 const fs = require("fs");
@@ -279,6 +280,142 @@ module.exports = {
       };
     } catch (error) {
       console.error("Delete Image Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getAllByCustomer(filters = {}, customerId = null) {
+    try {
+      const { minPrice, maxPrice, categoryIds } = filters;
+
+      const where = { isActive: true };
+
+      if (minPrice !== undefined || maxPrice !== undefined) {
+        where[Op.and] = Sequelize.literal(
+          `(price - (price * discountPercent / 100)) BETWEEN ${
+            minPrice || 0
+          } AND ${maxPrice || 9999999}`
+        );
+      }
+
+      const include = [
+        {
+          model: masterProductCategory,
+          as: "categories",
+          through: { attributes: [] },
+          where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
+          required: !!categoryIds,
+        },
+        {
+          model: masterConsultationCategory,
+          as: "consultationCategories",
+          through: { attributes: [] },
+        },
+        {
+          model: masterGroupProduct,
+          as: "groupProduct",
+          through: { attributes: [] },
+        },
+        {
+          model: masterProductImage,
+          as: "images",
+        },
+      ];
+
+      // ➕ Jika ada customerId → tambahkan relasi favorites
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: {
+            customerId,
+            favoriteType: "product",
+          },
+          required: false,
+        });
+      }
+
+      const products = await masterProduct.findAll({
+        where,
+        include,
+        order: [["name", "ASC"]],
+      });
+
+      const result = products.map((prod) => {
+        const plain = prod.get({ plain: true });
+
+        return {
+          ...plain,
+          isFavorite: customerId
+            ? plain.favorites && plain.favorites.length > 0
+            : false,
+          favorites: undefined,
+        };
+      });
+
+      return { status: true, message: "Success", data: result };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+  async getByIdCustomer(id, customerId = null) {
+    try {
+      const include = [
+        {
+          model: masterProductCategory,
+          as: "categories",
+          through: { attributes: [] },
+        },
+        {
+          model: masterConsultationCategory,
+          as: "consultationCategories",
+          through: { attributes: [] },
+        },
+        {
+          model: masterGroupProduct,
+          as: "groupProduct",
+          through: { attributes: [] },
+        },
+        {
+          model: masterProductImage,
+          as: "images",
+        },
+      ];
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: {
+            customerId,
+            favoriteType: "product",
+          },
+          required: false,
+        });
+      }
+
+      const product = await masterProduct.findByPk(id, {
+        include,
+      });
+
+      if (!product) {
+        return { status: false, message: "Product not found", data: null };
+      }
+
+      const plain = product.get({ plain: true });
+
+      return {
+        status: true,
+        message: "Success",
+        data: {
+          ...plain,
+          isFavorite: plain.favorites.length > 0 || false,
+          favorites: undefined,
+        },
+      };
+    } catch (error) {
       return { status: false, message: error.message, data: null };
     }
   },

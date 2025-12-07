@@ -98,9 +98,14 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     masterLocation.hasMany(models.LocationVerificationRequest, {
-        foreignKey: "locationId",
-        as: "verificationRequests",
-      });
+      foreignKey: "locationId",
+      as: "verificationRequests",
+    });
+
+    masterLocation.hasMany(models.customerFavorites, {
+      foreignKey: "refferenceId",
+      as: "favorites",
+    });
   };
 
   return masterLocation;
