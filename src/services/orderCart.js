@@ -4,7 +4,7 @@ const {
   masterProduct,
   masterProductImage,
   masterService,
-  masterLocation
+  masterLocation,
 } = require("../models");
 
 module.exports = {
@@ -183,7 +183,7 @@ module.exports = {
         await cartProduct.update({
           isSelected: false,
         });
-         return {
+        return {
           status: true,
           message: "Cart berhasil diupdate",
           data: cartProduct,
@@ -237,10 +237,12 @@ module.exports = {
           {
             model: masterService,
             as: "service",
-          },
-          {
-            model: masterLocation,
-            as: "location",
+            include: [
+              {
+                model: masterLocation,
+                as: "location"
+              },
+            ],
           },
         ],
       });
@@ -389,10 +391,10 @@ module.exports = {
           isSelected: true,
         });
         return {
-        status: true,
-        message: "Cart berhasil di update",
-        data: cartService,
-      };
+          status: true,
+          message: "Cart berhasil di update",
+          data: cartService,
+        };
       }
 
       if (cartService.isSelected == true) {
@@ -400,10 +402,10 @@ module.exports = {
           isSelected: false,
         });
         return {
-        status: true,
-        message: "Cart berhasil di update",
-        data: cartService,
-      };
+          status: true,
+          message: "Cart berhasil di update",
+          data: cartService,
+        };
       }
     } catch (error) {
       return { status: false, message: error.message };
