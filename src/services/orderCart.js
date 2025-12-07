@@ -171,19 +171,23 @@ module.exports = {
         await cartProduct.update({
           isSelected: true,
         });
+        return {
+          status: true,
+          message: "Cart berhasil diupdate",
+          data: cartProduct,
+        };
       }
 
       if (cartProduct.isSelected == true) {
         await cartProduct.update({
           isSelected: false,
         });
+         return {
+          status: true,
+          message: "Cart berhasil diupdate",
+          data: cartProduct,
+        };
       }
-
-      return {
-        status: true,
-        message: "Cart berhasil di hapus",
-        data: cartProduct,
-      };
     } catch (error) {
       return { status: false, message: error.message };
     }
@@ -379,19 +383,23 @@ module.exports = {
         await cartService.update({
           isSelected: true,
         });
+        return {
+        status: true,
+        message: "Cart berhasil di update",
+        data: cartService,
+      };
       }
 
       if (cartService.isSelected == true) {
         await cartService.update({
           isSelected: false,
         });
-      }
-
-      return {
+        return {
         status: true,
-        message: "Cart berhasil di hapus",
+        message: "Cart berhasil di update",
         data: cartService,
       };
+      }
     } catch (error) {
       return { status: false, message: error.message };
     }
