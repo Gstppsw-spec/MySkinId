@@ -43,7 +43,7 @@ module.exports = {
           },
           {
             model: masterService,
-            as: "service"
+            as: "service",
           },
         ],
       });
