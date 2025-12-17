@@ -102,7 +102,7 @@ module.exports = {
       const { customerId } = req.params;
       const result = await orderCart.getCartService(customerId);
       if (!result.status)
-        return response.error(res, result.message, result.data);
+        return response.error(res, result.message, null);
       return response.success(res, result.message, result.data);
     } catch (error) {
       return response.serverError(res, error);
