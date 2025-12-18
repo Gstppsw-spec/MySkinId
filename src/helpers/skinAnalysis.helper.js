@@ -1,29 +1,70 @@
 "use strict";
 
+function mapLevel(value = 0) {
+  switch (value) {
+    case 0: return { label: "none", score: 0 };
+    case 1: return { label: "low", score: 25 };
+    case 2: return { label: "mild", score: 50 };
+    case 3: return { label: "medium", score: 75 };
+    case 4: return { label: "severe", score: 100 };
+    default: return { label: "none", score: 0 };
+  }
+}
+
+function determineSkinType(skinTypeObj) {
+  // skin_type.skin_type (0–3)
+  switch (skinTypeObj?.skin_type) {
+    case 0: return "normal";
+    case 1: return "dry";
+    case 2: return "oily";
+    case 3: return "combination";
+    default: return "unknown";
+  }
+}
+
 module.exports = {
 
-  analyzeResult(ai) {
-    const acneScore = ai.acne ?? 0;
-    const wrinkleScore = ai.wrinkles ?? 0;
-    const oilScore = ai.oiliness ?? 0;
+  analyzeResult(result) {
+    const acne = mapLevel(result.acne?.value);
+    const blackhead = mapLevel(result.blackhead?.value);
+    const pores = mapLevel(result.pores?.value);
+    const wrinkle = mapLevel(
+      Math.max(
+        result.forehead_wrinkle?.value || 0,
+        result.crows_feet?.value || 0,
+        result.glabella_wrinkle?.value || 0,
+        result.nasolabial_fold?.value || 0
+      )
+    );
 
-    const skinType =
-      oilScore > 0.7 ? "oily" :
-      oilScore < 0.3 ? "dry" : "normal";
+    const skinType = determineSkinType(result.skin_type);
 
-    const severity =
-      acneScore > 0.6 || wrinkleScore > 0.6
-        ? "high"
-        : acneScore > 0.3 || wrinkleScore > 0.3
-        ? "medium"
-        : "low";
+    // OVERALL SEVERITY
+    const maxScore = Math.max(
+      acne.score,
+      wrinkle.score,
+      pores.score,
+      blackhead.score
+    );
+
+    let severity = "low";
+    if (maxScore >= 75) severity = "high";
+    else if (maxScore >= 50) severity = "medium";
 
     return {
-      acneScore,
-      wrinkleScore,
-      oilScore,
+      acneScore: acne.score / 100,
+      wrinkleScore: wrinkle.score / 100,
+      oilScore: skinType === "oily" ? 0.8 : skinType === "dry" ? 0.2 : 0.5,
       skinType,
-      severity
+      severity,
+
+      // DETAIL UNTUK UI
+      details: {
+        acne: acne.label,
+        wrinkle: wrinkle.label,
+        pores: pores.label,
+        blackhead: blackhead.label
+      }
     };
   }
 };

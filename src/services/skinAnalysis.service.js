@@ -8,7 +8,6 @@ const { analyzeResult } = require("../helpers/skinAnalysis.helper");
 
 module.exports = {
   async analyze({ customerId, imageFile }) {
-    // 🔒 CEGAH SPAM (7x / 24 jam)
     const last = await CustomerSkinAnalysisResult.findOne({
       where: {
         customerId,
@@ -44,7 +43,7 @@ module.exports = {
     );
 
     // 🧠 ANALYZE
-    const analyzed = analyzeResult(aiRes.data.data);
+    const analyzed = analyzeResult(aiRes.data.result);
 
     // 💾 SAVE DB
     const saved = await CustomerSkinAnalysisResult.create({
