@@ -19,6 +19,7 @@ module.exports = {
     });
 
     if (last) {
+      fs.unlinkSync(imageFile.path);
       return {
         status: false,
         message: "Kamu sudah melakukan analisis kulit dalam 168 jam terakhir",
@@ -26,7 +27,6 @@ module.exports = {
       };
     }
 
-    // 📡 CALL AI
     const form = new FormData();
     form.append("image", fs.createReadStream(imageFile.path));
 
@@ -42,10 +42,21 @@ module.exports = {
       }
     );
 
-    // 🧠 ANALYZE
+    if (
+      !aiRes.data ||
+      aiRes.data.error_code !== 0 ||
+      aiRes.data.error_detail?.status_code !== 200 ||
+      !aiRes.data.result
+    ) {
+      return {
+        status: false,
+        message: "Terjadi kesalahan saat melakukan analisa",
+        data: null,
+      };
+    }
+
     const analyzed = analyzeResult(aiRes.data.result);
 
-    // 💾 SAVE DB
     const saved = await CustomerSkinAnalysisResult.create({
       customerId,
       imageUrl: imageFile.filename,
@@ -56,8 +67,6 @@ module.exports = {
       skinType: analyzed.skinType,
       severity: analyzed.severity,
     });
-
-    fs.unlinkSync(imageFile.path);
 
     return {
       status: true,
