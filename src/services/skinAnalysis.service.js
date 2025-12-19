@@ -27,6 +27,21 @@ module.exports = {
       };
     }
 
+    const customer = await masterCustomer.findOne({
+      where: {
+        id: customerId,
+      },
+    });
+
+    if (!customer) {
+      fs.unlinkSync(imageFile.path);
+      return {
+        status: true,
+        message: "Customer tidak ditemukan",
+        data: null,
+      };
+    }
+
     const form = new FormData();
     form.append("image", fs.createReadStream(imageFile.path));
     const aiRes = await axios.post(
