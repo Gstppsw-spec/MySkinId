@@ -29,7 +29,6 @@ module.exports = {
 
     const form = new FormData();
     form.append("image", fs.createReadStream(imageFile.path));
-
     const aiRes = await axios.post(
       "https://www.ailabapi.com/api/portrait/analysis/skin-analysis",
       form,
