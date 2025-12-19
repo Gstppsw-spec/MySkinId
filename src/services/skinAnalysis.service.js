@@ -73,7 +73,7 @@ module.exports = {
 
     const saved = await CustomerSkinAnalysisResult.create({
       customerId,
-      imageUrl: imageFile.filename,
+      imageUrl: imageFile.path,
       rawResponse: aiRes.data,
       acneScore: analyzed.acneScore,
       wrinkleScore: analyzed.wrinkleScore,
