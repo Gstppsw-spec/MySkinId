@@ -21,7 +21,7 @@ module.exports = {
     if (last) {
       fs.unlinkSync(imageFile.path);
       return {
-        status: true,
+        status: false,
         message: "Kamu sudah melakukan analisis kulit dalam 168 jam terakhir",
         data: null,
       };
@@ -36,7 +36,7 @@ module.exports = {
     if (!customer) {
       fs.unlinkSync(imageFile.path);
       return {
-        status: true,
+        status: false,
         message: "Customer tidak ditemukan",
         data: null,
       };
