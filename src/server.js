@@ -1,7 +1,8 @@
 require("dotenv").config();
 const express = require("express");
+const swaggerUi = require("swagger-ui-express");
+const swaggerSpec = require("../swagger/swagger");
 
-//revamp
 const authUserRoute = require("./routes/authUserRoute");
 const categoryRoute = require("./routes/master/categoryRoute");
 const productRoute = require("./routes/master/product");
@@ -15,8 +16,7 @@ const consultationRoute = require("./routes/consultation/consultation");
 const orderCartRoute = require("./routes/transaction/orderCart");
 const favoritesRoute = require("./routes/favorites/favorites");
 const skinAnalysisRoute = require("./routes/skinAnalysis.route");
-
-
+const ratingRoute = require("./routes/ratingRoute");
 
 const path = require("path");
 const cors = require("cors");
@@ -47,7 +47,6 @@ app.use(
 );
 
 app.use(bodyParser.json());
-//revamp
 app.use("/api/v2/auth", authUserRoute);
 app.use("/api/v2/category", categoryRoute);
 app.use("/api/v2/product", productRoute);
@@ -61,7 +60,8 @@ app.use("/api/v2/consultation", consultationRoute);
 app.use("/api/v2/cart", orderCartRoute);
 app.use("/api/v2/favorite", favoritesRoute);
 app.use("/api/v2/skin-analysis", skinAnalysisRoute);
-
+app.use("/api/v2/rating", ratingRoute);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.listen(process.env.PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running on port ${process.env.PORT}`)

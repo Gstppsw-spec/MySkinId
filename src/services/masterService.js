@@ -3,23 +3,10 @@ const {
   masterSubCategoryService,
   masterLocation,
   masterLocationImage,
-  customerFavorites
+  customerFavorites,
 } = require("../models");
 
 const { Op, Sequelize } = require("sequelize");
-const fs = require("fs");
-const path = require("path");
-
-async function deleteOldFile(filePath) {
-  try {
-    if (filePath && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log("Old image deleted:", filePath);
-    }
-  } catch (err) {
-    console.error("Failed to delete old image:", err.message);
-  }
-}
 
 module.exports = {
   async getAll(filters = {}) {
@@ -29,7 +16,7 @@ module.exports = {
 
       if (minPrice !== undefined || maxPrice !== undefined) {
         where[Op.and] = Sequelize.literal(
-          `finalPrice BETWEEN ${minPrice || 0} AND ${maxPrice || 9999999}`
+          `price BETWEEN ${minPrice || 0} AND ${maxPrice || 9999999}`
         );
       }
 
@@ -40,14 +27,19 @@ module.exports = {
           through: { attributes: [] },
           where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
           required: !!categoryIds,
+          attributes: ["id", "name"],
         },
         {
           model: masterLocation,
           as: "location",
+          attributes: ["id", "name", "address"],
           include: [
             {
               model: masterLocationImage,
               as: "images",
+              attributes: ["id", "imageUrl"],
+              limit: 1,
+              separate: true,
             },
           ],
         },
@@ -56,6 +48,9 @@ module.exports = {
       const service = await masterService.findAll({
         where,
         include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
         order: [["name", "ASC"]],
       });
 
@@ -72,12 +67,22 @@ module.exports = {
           {
             model: masterLocation,
             as: "location",
+            attributes: ["id", "name", "address"],
             include: [
               {
                 model: masterLocationImage,
                 as: "images",
+                attributes: ["id", "imageUrl"],
+                limit: 1,
+                separate: true,
               },
             ],
+          },
+          {
+            model: masterSubCategoryService,
+            as: "categories",
+            through: { attributes: [] },
+            attributes: ["id", "name"],
           },
         ],
       });
@@ -92,7 +97,7 @@ module.exports = {
     }
   },
 
-  async create(data, file) {
+  async create(data) {
     try {
       const {
         name,
@@ -106,9 +111,8 @@ module.exports = {
         benefit,
         duration,
         locationId,
-        normalPrice,
+        price,
         discountPercent = 0,
-        discountValue = 0,
         isActive = true,
         categoryIds,
       } = data;
@@ -121,31 +125,13 @@ module.exports = {
         return { status: false, message: "Location is required", data: null };
       }
 
-      if (!normalPrice) {
+      if (!price) {
         return {
           status: false,
           message: "Normal price is required",
           data: null,
         };
       }
-
-      // Hitung final price
-      let finalPrice = Number(normalPrice);
-
-      if (discountPercent > 0) {
-        finalPrice = normalPrice - normalPrice * (discountPercent / 100);
-      }
-
-      if (discountValue > 0) {
-        finalPrice = normalPrice - discountValue;
-      }
-
-      // Handle single image
-      let imageUrl = null;
-      if (file) {
-        imageUrl = file.path; // <-- simpan path image
-      }
-
       const newService = await masterService.create({
         name,
         description,
@@ -158,25 +144,20 @@ module.exports = {
         benefit,
         duration,
         locationId,
-        normalPrice,
+        price: Number(price),
         discountPercent,
-        discountValue,
-        finalPrice,
-        imageUrl,
         isActive,
       });
 
       if (categoryIds && Array.isArray(categoryIds)) {
         await newService.setCategories(categoryIds);
       }
-
       return {
         status: true,
         message: "Service created successfully",
         data: newService,
       };
     } catch (error) {
-      console.error("Create Service Error:", error);
       return {
         status: false,
         message: error.message,
@@ -185,7 +166,7 @@ module.exports = {
     }
   },
 
-  async update(id, data, file) {
+  async update(id, data) {
     try {
       const {
         name,
@@ -199,9 +180,8 @@ module.exports = {
         benefit,
         duration,
         locationId,
-        normalPrice,
+        price,
         discountPercent = 0,
-        discountValue = 0,
         isActive = true,
         categoryIds,
       } = data;
@@ -229,29 +209,8 @@ module.exports = {
         return { status: false, message: "Name cannot be empty", data: null };
       }
 
-      // Hitung final price jika normalPrice / discount diupdate
-      let finalPrice = service.finalPrice;
-
-      const np = Number(normalPrice ?? service.normalPrice);
+      const np = Number(price ?? service.price);
       const dp = Number(discountPercent ?? service.discountPercent);
-      const dv = Number(discountValue ?? service.discountValue);
-
-      finalPrice = np;
-
-      if (dp > 0) {
-        finalPrice = np - np * (dp / 100);
-      }
-
-      if (dv > 0) {
-        finalPrice = np - dv;
-      }
-
-      // Handle update image
-      let imageUrl = service.imageUrl;
-      if (file) {
-        await deleteOldFile(service.imageUrl);
-        imageUrl = file.path; // replace gambar lama
-      }
 
       // Update record
       await service.update({
@@ -266,15 +225,11 @@ module.exports = {
         benefit,
         duration,
         locationId,
-        normalPrice: np,
+        price: np,
         discountPercent: dp,
-        discountValue: dv,
-        finalPrice,
-        imageUrl,
         isActive,
       });
 
-      // Update categories jika dikirim
       if (categoryIds) {
         if (Array.isArray(categoryIds)) {
           await service.setCategories(categoryIds);
@@ -302,12 +257,23 @@ module.exports = {
     try {
       const service = await masterService.findAll({
         where: { locationId },
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+        order: [["name", "ASC"]],
+        include: [
+          {
+            model: masterSubCategoryService,
+            as: "categories",
+            through: { attributes: [] },
+            attributes: ["id", "name"],
+          },
+        ],
       });
 
       if (!service) {
         return { status: false, message: "Service not found", data: null };
       }
-
       return { status: true, message: "Success", data: service };
     } catch (error) {
       return { status: false, message: error.message, data: null };
@@ -321,10 +287,9 @@ module.exports = {
 
       if (minPrice !== undefined || maxPrice !== undefined) {
         where[Op.and] = Sequelize.literal(
-          `finalPrice BETWEEN ${minPrice || 0} AND ${maxPrice || 9999999}`
+          `price BETWEEN ${minPrice || 0} AND ${maxPrice || 9999999}`
         );
       }
-
       const include = [
         {
           model: masterSubCategoryService,
@@ -332,60 +297,21 @@ module.exports = {
           through: { attributes: [] },
           where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
           required: !!categoryIds,
+          attributes: ["id", "name"],
         },
         {
           model: masterLocation,
           as: "location",
-          include: [{ model: masterLocationImage, as: "images" }],
-        },
-      ];
-
-
-      if (customerId) {
-        include.push({
-          model: customerFavorites,
-          as: "favorites",
-          attributes: ["id"],
-          where: {
-            customerId,
-            favoriteType: "service", // pastikan sesuai tabel kamu
-          },
-          required: false,
-        });
-      }
-
-      const service = await masterService.findAll({
-        where,
-        include,
-        order: [["name", "ASC"]],
-      });
-
-      // Tambahkan isFavorite ke setiap item
-      const data = service.map((s) => {
-        const plain = s.get({ plain: true });
-        return {
-          ...plain,
-          isFavorite: customerId
-            ? plain.favorites && plain.favorites.length > 0
-            : false,
-          favorites: undefined,
-        };
-      });
-
-      return { status: true, message: "Success", data };
-    } catch (error) {
-      return { status: false, message: error.message, data: null };
-    }
-  },
-  async getByIdCustomer(id, customerId = null) {
-    console.log(id);
-    
-    try {
-      const include = [
-        {
-          model: masterLocation,
-          as: "location",
-          include: [{ model: masterLocationImage, as: "images" }],
+          attributes: ["id", "name", "address"],
+          include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+              attributes: ["id", "imageUrl"],
+              limit: 1,
+              separate: true,
+            },
+          ],
         },
       ];
 
@@ -402,14 +328,85 @@ module.exports = {
         });
       }
 
-      const service = await masterService.findByPk(id, { include });
+      const service = await masterService.findAll({
+        where,
+        include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+        order: [["name", "ASC"]],
+      });
 
       if (!service) {
         return { status: false, message: "Product not found", data: null };
       }
 
-      const plain = service.get({ plain: true });
+      const data = service.map((s) => {
+        const plain = s.get({ plain: true });
+        return {
+          ...plain,
+          isFavorite: customerId
+            ? plain.favorites && plain.favorites.length > 0
+            : false,
+          favorites: undefined,
+        };
+      });
 
+      return { status: true, message: "Success", data };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getByIdCustomer(id, customerId = null) {
+    try {
+      const include = [
+        {
+          model: masterSubCategoryService,
+          as: "categories",
+          through: { attributes: [] },
+          attributes: ["id", "name"],
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: ["id", "name", "address"],
+          include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+              attributes: ["id", "imageUrl"],
+              limit: 1,
+              separate: true,
+            },
+          ],
+        },
+      ];
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: {
+            customerId,
+            favoriteType: "service",
+          },
+          required: false,
+        });
+      }
+
+      const service = await masterService.findByPk(id, {
+        include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+      });
+
+      if (!service) {
+        return { status: false, message: "Product not found", data: null };
+      }
+      const plain = service.get({ plain: true });
       return {
         status: true,
         message: "Success",
@@ -419,6 +416,60 @@ module.exports = {
           favorites: undefined,
         },
       };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getByLocationIdCustomer(locationId, customerId = null) {
+    try {
+      const include = [
+        {
+          model: masterSubCategoryService,
+          as: "categories",
+          through: { attributes: [] },
+          attributes: ["id", "name"],
+        },
+      ];
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: {
+            customerId,
+            favoriteType: "service",
+          },
+          required: false,
+        });
+      }
+
+      const service = await masterService.findAll({
+        where: { locationId },
+        include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+        order: [["name", "ASC"]],
+      });
+
+      if (!service) {
+        return { status: false, message: "Product not found", data: null };
+      }
+
+      const data = service.map((s) => {
+        const plain = s.get({ plain: true });
+        return {
+          ...plain,
+          isFavorite: customerId
+            ? plain.favorites && plain.favorites.length > 0
+            : false,
+          favorites: undefined,
+        };
+      });
+
+      return { status: true, message: "Success", data };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

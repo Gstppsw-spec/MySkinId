@@ -28,11 +28,11 @@ const uploadProductImages = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
 
-router.get("/all-customer", masterProduct.getAllByCustomer);
-router.get("/all-customer/:customerId", masterProduct.getAllByCustomer);
+// router.get("/all-customer", masterProduct.getAllByCustomer);
+// router.get("/all-customer/:customerId", masterProduct.getAllByCustomer);
 
-router.get("/:id/detail-customer/:customerId", masterProduct.getByIdCustomer);
-router.get("/:id/detail-customer", masterProduct.getByIdCustomer);
+// router.get("/:id/detail-customer/:customerId", masterProduct.getByIdCustomer);
+// router.get("/:id/detail-customer", masterProduct.getByIdCustomer);
 
 router.post("/", uploadProductImages.array("photos", 10), masterProduct.create);
 router.put(
@@ -42,7 +42,7 @@ router.put(
 );
 
 router.patch("/image/:id", masterProduct.deleteImage);
-
+router.get("/location/:locationId", masterProduct.getByLocationId);
 router.get("/", masterProduct.getAll);
 router.get("/:id", masterProduct.getById);
 

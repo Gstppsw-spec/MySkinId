@@ -6,7 +6,6 @@ const path = require("path");
 const fs = require("fs");
 const uploadPath = "uploads/consultation";
 
-// Cek jika folder belum ada → buat otomatis
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
 }

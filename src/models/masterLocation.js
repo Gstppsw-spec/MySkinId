@@ -56,6 +56,16 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: false,
       },
       verifiedDate: DataTypes.DATE,
+      ratingAvg: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      ratingCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
     },
     {
       tableName: "masterLocation",
