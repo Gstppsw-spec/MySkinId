@@ -1,7 +1,6 @@
 const sequelize = require("../models").sequelize;
-const { Rating, RatingImage } = require("../models");
-// const checkCustomerTransaction = require("../helpers/checkCustomerTransaction");
-
+const { Rating, RatingImage, masterCustomer } = require("../models");
+const fs = require("fs");
 const getRatingTargetModel = require("../helpers/getRatingTargetModel");
 const updateRatingAvg = require("../helpers/updateRatingAvg");
 
@@ -58,7 +57,7 @@ module.exports = {
 
         await saveRatingImages(existing.id, images, transaction);
 
-         await transaction.commit();
+        await transaction.commit();
 
         return {
           status: true,
@@ -98,6 +97,74 @@ module.exports = {
     } catch (error) {
       await transaction.rollback();
       return { status: false, message: error.message };
+    }
+  },
+
+  async deleteImage(imageId) {
+    try {
+      const image = await RatingImage.findByPk(imageId);
+
+      if (!image) {
+        return { status: false, message: "Image not found", data: null };
+      }
+
+      if (image.imageUrl && fs.existsSync(image.imageUrl)) {
+        fs.unlinkSync(image.imageUrl);
+      }
+
+      await image.destroy();
+
+      return {
+        status: true,
+        message: "Image deleted successfully",
+        data: { id: imageId },
+      };
+    } catch (error) {
+      console.error("Delete Image Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  },
+  async getByEntity(entityType, entityId) {
+    try {
+      if (!entityType || !entityId) {
+        return {
+          status: false,
+          message: "EntityType dan EntityId wajib diisi",
+          data: null,
+        };
+      }
+
+      const ratings = await Rating.findAll({
+        where: {
+          entityType,
+          entityId,
+        },
+        include: [
+          {
+            model: RatingImage,
+            as: "images",
+            attributes: ["imageUrl"],
+          },
+          {
+            model: masterCustomer,
+            as: "customer",
+            attributes: ["id", "name"],
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+      });
+
+      return {
+        status: true,
+        message: "Berhasil mengambil data rating",
+        data: ratings,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
     }
   },
 };

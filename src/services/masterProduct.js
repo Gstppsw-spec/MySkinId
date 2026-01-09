@@ -1,4 +1,3 @@
-const { log } = require("console");
 const {
   masterProduct,
   masterProductCategory,
@@ -8,10 +7,7 @@ const {
   customerFavorites,
   masterLocation,
 } = require("../models");
-
 const fs = require("fs");
-const path = require("path");
-
 const { Op, Sequelize } = require("sequelize");
 
 module.exports = {

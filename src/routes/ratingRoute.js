@@ -1,5 +1,5 @@
 const express = require("express");
-const  router = express.Router();
+const router = express.Router();
 const rating = require("../controllers/customerRating");
 const multer = require("multer");
 const path = require("path");
@@ -33,5 +33,9 @@ router.post(
   uploadImageReview.array("images", 10),
   rating.createOrUpdateRating
 );
+
+router.patch("/image/:id", rating.deleteImage);
+router.get("/:entityId", rating.getByEntity);
+
 
 module.exports = router;
