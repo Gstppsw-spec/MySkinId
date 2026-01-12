@@ -17,6 +17,9 @@ const orderCartRoute = require("./routes/transaction/orderCart");
 const favoritesRoute = require("./routes/favorites/favorites");
 const skinAnalysisRoute = require("./routes/skinAnalysis.route");
 const ratingRoute = require("./routes/ratingRoute");
+const packageRoute = require("./routes/master/package");
+
+const customerCartRoute = require("./routes/transaction/customerCart");
 
 const path = require("path");
 const cors = require("cors");
@@ -61,6 +64,9 @@ app.use("/api/v2/cart", orderCartRoute);
 app.use("/api/v2/favorite", favoritesRoute);
 app.use("/api/v2/skin-analysis", skinAnalysisRoute);
 app.use("/api/v2/rating", ratingRoute);
+app.use("/api/v2/package", packageRoute);
+
+app.use("/api/v2/customer-cart", customerCartRoute);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.listen(process.env.PORT, "0.0.0.0", () =>

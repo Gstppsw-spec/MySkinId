@@ -2,7 +2,7 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("order_cart_service", {
+    await queryInterface.createTable("customerCart", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
@@ -19,15 +19,13 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      serviceId: {
+      refferenceId: {
         type: Sequelize.UUID,
         allowNull: false,
-        references: {
-          model: "masterService",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "RESTRICT",
+      },
+      refferenceType: {
+        type: Sequelize.STRING(100),
+        allowNull: false,
       },
       qty: {
         type: Sequelize.INTEGER,
@@ -35,6 +33,14 @@ module.exports = {
         defaultValue: 1,
       },
       isSelected: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: true,
+      },
+      isDirect: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: true,
+      },
+      isOnPayment: {
         type: Sequelize.BOOLEAN,
         defaultValue: true,
       },
@@ -50,6 +56,6 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("order_cart_service");
+    await queryInterface.dropTable("customerCart");
   },
 };

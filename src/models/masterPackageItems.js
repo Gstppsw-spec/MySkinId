@@ -52,7 +52,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "masterPackageItems",
       tableName: "masterPackageItems",
       timestamps: true,
-      paranoid: true,
+      // paranoid: true,
     }
   );
 

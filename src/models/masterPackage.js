@@ -9,6 +9,13 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "packageId",
         as: "items",
       });
+
+      masterPackage.belongsTo(models.masterLocation, {
+        foreignKey: "locationId",
+        as: "location",
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
     }
   }
 
@@ -24,6 +31,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(150),
         allowNull: false,
       },
+      code: {
+        type: DataTypes.STRING(150),
+        allowNull: false,
+      },
+
 
       description: {
         type: DataTypes.TEXT,
@@ -31,7 +43,7 @@ module.exports = (sequelize, DataTypes) => {
       },
 
       price: {
-        type: DataTypes.INTEGER, // simpan dalam rupiah (tanpa decimal)
+        type: DataTypes.INTEGER,
         allowNull: false,
       },
 
@@ -46,23 +58,26 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: true,
       },
       ratingAvg: {
-  type: DataTypes.FLOAT,
-  allowNull: false,
-  defaultValue: 0,
-},
-ratingCount: {
-  type: DataTypes.INTEGER,
-  allowNull: false,
-  defaultValue: 0,
-},
-
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      ratingCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      locationId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
     },
     {
       sequelize,
       modelName: "masterPackage",
       tableName: "masterPackage",
       timestamps: true,
-      paranoid: true, // soft delete
+      // paranoid: true,
     }
   );
 
