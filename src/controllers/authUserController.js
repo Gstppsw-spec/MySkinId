@@ -30,4 +30,17 @@ module.exports = {
       return response.serverError(res, err);
     }
   },
+
+  async registerAdminOutlet(req, res) {
+    try {
+      const result = await authService.registerAdminOutlet(req.body);
+
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (err) {
+      return response.serverError(res, err);
+    }
+  },
 };

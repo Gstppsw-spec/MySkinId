@@ -64,10 +64,16 @@ class MasterLocationController {
   }
 
   async getByCompanyId(req, res) {
-    const data = await MasterLocationService.getByCompanyId(
-      req.params.companyId
-    );
-    return response.success(res, "Success", data);
+    try {
+      const result = await MasterLocationService.getByCompanyId(
+        req.params.companyId
+      );
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   }
 
   async deleteImage(req, res) {
@@ -88,8 +94,11 @@ class MasterLocationController {
 
   async detailLocationByCustomer(req, res) {
     const { id, customerId } = req.params;
-    const location = await MasterLocationService.detailLocationByCustomer(id, customerId);
-    
+    const location = await MasterLocationService.detailLocationByCustomer(
+      id,
+      customerId
+    );
+
     return location.status
       ? response.success(res, location.message, location.data)
       : response.error(res, location.message, null);
@@ -98,8 +107,10 @@ class MasterLocationController {
   async listLocationByCustomer(req, res) {
     const { customerId } = req.params;
 
-    const location = await MasterLocationService.listLocationByCustomer(customerId);
-    
+    const location = await MasterLocationService.listLocationByCustomer(
+      customerId
+    );
+
     return location.status
       ? response.success(res, location.message, location.data)
       : response.error(res, location.message, null);

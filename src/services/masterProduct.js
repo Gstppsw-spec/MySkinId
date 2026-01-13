@@ -148,6 +148,10 @@ module.exports = {
         },
       });
 
+      if (!products) {
+        return { status: false, message: "Product not found", data: null };
+      }
+
       const result = products.map((prod) => {
         const plain = prod.get({ plain: true });
         return {

@@ -164,11 +164,34 @@ class MasterLocationService {
   }
 
   async getByCompanyId(companyId) {
-    const locations = await masterLocation.findAll({
-      where: { companyId },
-      order: [["createdAt", "DESC"]],
-    });
-    return locations;
+    try {
+      if (!companyId) return { status: false, message: "Data tidak lengkap" };
+
+      const locations = await masterLocation.findAll({
+        where: { companyId },
+        order: [["createdAt", "DESC"]],
+      });
+
+      if (!locations) {
+        return {
+          status: false,
+          message: "Data outlet tidak ditemukan",
+          data: null,
+        };
+      }
+
+      return {
+        status: true,
+        message: "Success",
+        data: locations,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
+    }
   }
 
   async deleteImage(imageId) {

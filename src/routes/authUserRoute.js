@@ -57,7 +57,8 @@ const authController = require("../controllers/authUserController");
  *       500:
  *         description: Server error
  */
-router.post("/register", authController.register);
+router.post("/register-company", authController.register);
+router.post("/register-outlet", authController.registerAdminOutlet);
 
 /**
  * @swagger
