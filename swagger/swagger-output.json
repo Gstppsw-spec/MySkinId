@@ -1293,6 +1293,16 @@
         }
       }
     },
+    "/api/v2/consultation/room/readyToAssign": {
+      "get": {
+        "description": "",
+        "responses": {
+          "default": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/v2/consultation/room/{id}/message": {
       "post": {
         "description": "",

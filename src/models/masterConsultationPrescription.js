@@ -46,6 +46,12 @@ module.exports = (sequelize, DataTypes) => {
       refferenceType: {
         type: DataTypes.STRING,
         allowNull: false,
+        validate: {
+          isIn: {
+            args: [["product", "service", "package"]],
+            msg: "Invalid favorite type",
+          },
+        },
       },
       notes: {
         type: DataTypes.TEXT,

@@ -27,6 +27,7 @@ const uploadImageConsultation = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
+router.get("/room/readyToAssign", consultation.readyToAssign);
 router.post("/room", consultation.createRoom);
 router.get("/room/:id", consultation.getByRoomId);
 router.get("/room/user/:id", consultation.getRoomByUser);
