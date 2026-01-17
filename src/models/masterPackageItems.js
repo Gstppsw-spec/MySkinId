@@ -15,10 +15,10 @@ module.exports = (sequelize, DataTypes) => {
         as: "service",
       });
 
-      masterPackageItems.belongsTo(models.masterLocation, {
-        foreignKey: "locationId",
-        as: "location",
-      });
+      // masterPackageItems.belongsTo(models.masterLocation, {
+      //   foreignKey: "locationId",
+      //   as: "location",
+      // });
     }
   }
 
@@ -37,10 +37,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      locationId: {
-        type: DataTypes.UUID,
-        allowNull: false,
-      },
+      // locationId: {
+      //   type: DataTypes.UUID,
+      //   allowNull: false,
+      // },
       qty: {
         type: DataTypes.INTEGER,
         allowNull: false,

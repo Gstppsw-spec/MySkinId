@@ -31,15 +31,27 @@ module.exports = {
     }
   },
 
-  async registerAdminOutlet(req, res) {
+  async createUser(req, res) {
     try {
-      const result = await authService.registerAdminOutlet(req.body);
-
+      const result = await authService.createUser(req.body);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
       return response.success(res, result.message, result.data);
     } catch (err) {
+      return response.serverError(res, err);
+    }
+  },
+
+  async getUserByCompanyId(req, res) {
+    try {
+      const { companyId } = req.params;
+      const result = await authService.getUserByCompanyId(companyId);
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
       return response.serverError(res, err);
     }
   },

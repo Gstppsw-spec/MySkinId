@@ -9,6 +9,18 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "roleId",
         as: "role",
       });
+
+      this.belongsToMany(models.masterLocation, {
+        through: models.relationshipUserLocation,
+        foreignKey: "userId",
+        otherKey: "locationId",
+        as: "locations",
+      });
+
+      this.hasMany(models.relationshipUserLocation, {
+        foreignKey: "userId",
+        as: "userLocations",
+      });
     }
   }
 
