@@ -7,7 +7,7 @@ module.exports = {
       const {
         minPrice,
         maxPrice,
-        // categoryIds,
+        categoryIds,
         lat,
         lng,
         maxDistance,
@@ -16,11 +16,11 @@ module.exports = {
         isCustomer,
       } = req.query;
 
-      //   const categoryIdsArray = categoryIds
-      //     ? Array.isArray(categoryIds)
-      //       ? categoryIds
-      //       : [categoryIds]
-      //     : undefined;
+      const categoryIdsArray = categoryIds
+        ? Array.isArray(categoryIds)
+          ? categoryIds
+          : [categoryIds]
+        : undefined;
 
       const result = await packageService.getAllPackage({
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
@@ -31,6 +31,7 @@ module.exports = {
         sort: sort || undefined,
         customerId: customerId || undefined,
         isCustomer: isCustomer,
+        categoryIds: categoryIdsArray,
       });
 
       if (!result.status) {
@@ -58,7 +59,7 @@ module.exports = {
         id,
         customerId,
         userLat,
-        userLng
+        userLng,
       );
       if (!result.status)
         return response.error(res, result.message, result.data);
@@ -86,7 +87,6 @@ module.exports = {
       const { id } = req.params;
       const data = req.body;
       const result = await packageService.update(id, data);
-
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -95,22 +95,76 @@ module.exports = {
     }
   },
 
-    async getByLocationId(req, res) {
-      try {
+  async getByLocationId(req, res) {
+    try {
+      const { locationId } = req.params;
+      const { customerId, isCustomer } = req.query;
 
-        const { locationId } = req.params;
-        const { customerId, isCustomer } = req.query;
+      const result = await packageService.getByLocationId(
+        customerId,
+        locationId,
+        isCustomer,
+      );
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 
-        const result = await packageService.getByLocationId(
-          customerId,
-          locationId,
-          isCustomer
-        );
-        if (!result.status)
-          return response.error(res, result.message, result.data);
-        return response.success(res, result.message, result.data);
-      } catch (error) {
-        return response.serverError(res, error);
-      }
-    },
+  async createItemPackage(req, res) {
+    try {
+      const data = req.body;
+      console.log(req.user);
+      console.log(data);
+
+      const result = await packageService.createItemPackage(data);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async updateItemPackage(req, res) {
+    try {
+      const { packageItemId } = req.params;
+      const data = req.body;
+      const result = await packageService.updateItemPackage(
+        packageItemId,
+        data,
+      );
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async deletePackage(req, res) {
+    try {
+      const { packageId } = req.params;
+      const result = await packageService.deletePackage(packageId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async deletePackageItem(req, res) {
+    try {
+      const { packageItemId } = req.params;
+      const result = await packageService.deletePackageItem(packageItemId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

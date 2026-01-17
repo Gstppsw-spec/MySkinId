@@ -5,6 +5,7 @@ const {
   masterLocationImage,
   masterPackageItems,
   masterService,
+  masterSubCategoryService,
 } = require("../models");
 const sequelize = require("../models").sequelize;
 
@@ -22,6 +23,7 @@ module.exports = {
         sort,
         customerId,
         isCustomer,
+        categoryIds,
       } = filters;
 
       const where = {};
@@ -81,6 +83,12 @@ module.exports = {
               model: masterService,
               as: "service",
               attributes: ["id", "name"],
+              include: {
+                model: masterSubCategoryService,
+                as: "categories",
+                through: { attributes: [] },
+                attributes: ["id", "name"],
+              },
             },
           ],
         },
@@ -204,27 +212,25 @@ module.exports = {
           code,
           description: data.description || null,
           price: data.price ?? 0,
-          discountPercent: data.discount ?? 0,
+          discountPercent: data.discountPercent ?? 0,
           isActive: data.isActive ?? true,
           locationId: data.locationId,
         },
-        { transaction }
+        { transaction },
       );
 
-      if (Array.isArray(data.items) && data.items.length > 0) {
-        const itemsPayload = data.items.map((item) => ({
-          packageId: newPackage.id,
-          serviceId: item.serviceId,
-          qty: item.qty ?? 1,
-        }));
+      // if (Array.isArray(data.items) && data.items.length > 0) {
+      //   const itemsPayload = data.items.map((item) => ({
+      //     packageId: newPackage.id,
+      //     serviceId: item.serviceId,
+      //     qty: item.qty ?? 1,
+      //   }));
 
-        await masterPackageItems.bulkCreate(itemsPayload, {
-          transaction,
-        });
-      }
-
+      //   await masterPackageItems.bulkCreate(itemsPayload, {
+      //     transaction,
+      //   });
+      // }
       await transaction.commit();
-
       return {
         status: true,
         message: "Package & items created successfully",
@@ -250,61 +256,60 @@ module.exports = {
         };
       }
 
-      if (!Array.isArray(data.items) || data.items.length === 0) {
-        await transaction.rollback();
-        return {
-          status: false,
-          message: "Package must have at least one item",
-          data: null,
-        };
-      }
+      // if (!Array.isArray(data.items) || data.items.length === 0) {
+      //   await transaction.rollback();
+      //   return {
+      //     status: false,
+      //     message: "Package must have at least one item",
+      //     data: null,
+      //   };
+      // }
 
-      for (const item of data.items) {
-        if (!item.serviceId) {
-          await transaction.rollback();
-          return {
-            status: false,
-            message: "Each item must have serviceId",
-            data: null,
-          };
-        }
-
-        if (item.qty !== undefined && item.qty < 1) {
-          await transaction.rollback();
-          return {
-            status: false,
-            message: "Item qty must be at least 1",
-            data: null,
-          };
-        }
-      }
+      // for (const item of data.items) {
+      //   if (!item.serviceId) {
+      //     await transaction.rollback();
+      //     return {
+      //       status: false,
+      //       message: "Each item must have serviceId",
+      //       data: null,
+      //     };
+      //   }
+      //   if (item.qty !== undefined && item.qty < 1) {
+      //     await transaction.rollback();
+      //     return {
+      //       status: false,
+      //       message: "Item qty must be at least 1",
+      //       data: null,
+      //     };
+      //   }
+      // }
 
       await pkg.update(
         {
           name: data.name ?? pkg.name,
           description: data.description ?? pkg.description,
           price: data.price ?? pkg.price,
-          discountPercent: data.discount ?? pkg.discountPercent,
+          discountPercent: data.discountPercent ?? pkg.discountPercent,
           isActive: data.isActive ?? pkg.isActive,
           locationId: data.locationId ?? pkg.locationId,
         },
-        { transaction }
+        { transaction },
       );
 
-      await masterPackageItems.destroy({
-        where: { packageId: id },
-        transaction,
-      });
+      // await masterPackageItems.destroy({
+      //   where: { packageId: id },
+      //   transaction,
+      // });
 
-      const itemsPayload = data.items.map((item) => ({
-        packageId: id,
-        serviceId: item.serviceId,
-        qty: item.qty ?? 1,
-      }));
+      // const itemsPayload = data.items.map((item) => ({
+      //   packageId: id,
+      //   serviceId: item.serviceId,
+      //   qty: item.qty ?? 1,
+      // }));
 
-      await masterPackageItems.bulkCreate(itemsPayload, {
-        transaction,
-      });
+      // await masterPackageItems.bulkCreate(itemsPayload, {
+      //   transaction,
+      // });
 
       await transaction.commit();
 
@@ -486,6 +491,175 @@ module.exports = {
       };
     } catch (error) {
       return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async createItemPackage(data) {
+    const transaction = await sequelize.transaction();
+    try {
+      if (!data.serviceId || !data.packageId || !data.qty) {
+        await transaction.rollback();
+        return { status: false, message: "Data tidak lengkap", data: null };
+      }
+      const existing = await masterPackageItems.findOne({
+        where: { serviceId: data.serviceId, packageId: data.packageId },
+        transaction,
+      });
+
+      if (existing) {
+        await transaction.rollback();
+        return {
+          status: false,
+          message: "Layanan ini sudah ada",
+          data: null,
+        };
+      }
+
+      const newPackageItem = await masterPackageItems.create(
+        {
+          serviceId: data.serviceId,
+          qty: data.qty ?? 1,
+          packageId: data.packageId,
+        },
+        { transaction },
+      );
+      await transaction.commit();
+      return {
+        status: true,
+        message: "Package & items created successfully",
+        data: newPackageItem,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async updateItemPackage(packageItemId, data) {
+    const transaction = await sequelize.transaction();
+
+    try {
+      if (!data.serviceId || !packageItemId || !data.qty) {
+        await transaction.rollback();
+        return {
+          status: false,
+          message: "Data tidak lengkap",
+          data: null,
+        };
+      }
+
+      // 1️⃣ Ambil item yang mau di-update
+      const existing = await masterPackageItems.findOne({
+        where: { id: packageItemId },
+        transaction,
+      });
+
+      if (!existing) {
+        await transaction.rollback();
+        return {
+          status: false,
+          message: "Item paket tidak ditemukan",
+          data: null,
+        };
+      }
+
+      const duplicate = await masterPackageItems.findOne({
+        where: {
+          serviceId: data.serviceId,
+          packageId: data.packageId,
+          id: {
+            [Op.ne]: packageItemId,
+          },
+        },
+        transaction,
+      });
+
+      if (duplicate) {
+        await transaction.rollback();
+        return {
+          status: false,
+          message: "Service sudah ada di item paket ini",
+          data: null,
+        };
+      }
+
+      const dataUpdate = await existing.update(
+        {
+          serviceId: data.serviceId,
+          qty: data.qty ?? 1,
+          packageId: data.packageId,
+        },
+        { transaction },
+      );
+
+      await transaction.commit();
+
+      return {
+        status: true,
+        message: "Package item update successfully",
+        data: dataUpdate,
+      };
+    } catch (error) {
+      await transaction.rollback();
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
+    }
+  },
+
+  async deletePackage(id) {
+    try {
+      if (!id) {
+        return { status: false, message: "Data tidak lengkap", data: null };
+      }
+      const package = await masterPackage.findByPk(id);
+
+      if (!package) {
+        return {
+          status: false,
+          message: "Package tidak ditemukan",
+          data: null,
+        };
+      }
+
+      await package.destroy();
+
+      return {
+        status: true,
+        message: "Package berhasil di hapus",
+        data: package,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async deletePackageItem(id) {
+    try {
+      if (!id) {
+        return { status: false, message: "Data tidak lengkap", data: null };
+      }
+      const packageItem = await masterPackageItems.findByPk(id);
+
+      if (!packageItem) {
+        return {
+          status: false,
+          message: "Package tidak ditemukan",
+          data: null,
+        };
+      }
+
+      await packageItem.destroy();
+
+      return {
+        status: true,
+        message: "Package berhasil di hapus",
+        data: packageItem,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
     }
   },
 };
