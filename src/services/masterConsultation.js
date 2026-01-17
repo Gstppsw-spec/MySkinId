@@ -194,7 +194,6 @@ module.exports = {
 
   async getAllReadyToAssign(userId, role) {
     try {
-      let locationIds = [];
       let locationIncludeOptions = {
         model: masterLocation,
         as: "location",
@@ -202,13 +201,13 @@ module.exports = {
         required: false, // Default LEFT JOIN
       };
 
-      if (role === "outlet_doctor") {
+      if (role === "Outlet_Doctor") {
         const userLocations = await relationshipUserLocation.findAll({
           where: { userId: userId, isactive: true },
           attributes: ["locationId"],
         });
 
-        locationIds = userLocations.map((ul) => ul.locationId);
+        const locationIds = userLocations.map((ul) => ul.locationId);
 
         if (locationIds.length === 0) {
           // If doctor has no location assigned, return empty
@@ -218,6 +217,13 @@ module.exports = {
         // For outlet_doctor: INNER JOIN and filter by location
         locationIncludeOptions.required = true;
         locationIncludeOptions.where = { id: { [Op.in]: locationIds } };
+      } else if (role === "Doctor_General") {
+        // Doctor General logic:
+        // LEFT JOIN (already set as default)
+        // No location filtering
+      } else {
+        // Any other role returns empty
+        return { status: true, message: "Success", data: [] };
       }
 
       // Filter rooms that have >= 3 images
@@ -231,11 +237,7 @@ module.exports = {
           "roomCode",
           "customerId",
           "status",
-          // locationId is already in masterRoomConsultation but user wanted it from joined table or explicitly. 
-          // However, the join already returns it in 'location' object.
-          // User asked for specific top level columns in select, but Sequelize returns objects.
-          // We will stick to standard Sequelize return structure which returns nested objects for joins.
-          // Yet, I will try to match the attributes requested in the main table.
+          // The result will be nested objects for includes
         ],
         where: {
           status: "pending",
@@ -251,13 +253,7 @@ module.exports = {
         ],
       });
 
-      // Formatting the output to match the requested flat structure if needed, 
-      // but usually standard API response prefers nesting. 
-      // The user provided SQL "select mrc.id ... ml.id locationId". 
-      // I will return the Sequelize data which is cleaner.
-
       return { status: true, message: "Success", data: rooms };
-      // return { status: true, message: "Success", data: "testing" };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

@@ -35,9 +35,8 @@ module.exports = {
   },
 
   async readyToAssign(req, res) {
-    const { userId, role } = req.query;
-    console.log(userId, role);
-    const result = await consultation.getAllReadyToAssign(userId, role);
+    const user = req.user;
+    const result = await consultation.getAllReadyToAssign(user.id, user.roleCode);
 
     return result.status
       ? response.success(res, result.message, result.data)
