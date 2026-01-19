@@ -5,6 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const uploadPath = "uploads/consultation";
+const { verifyToken } = require("../../middlewares/authMiddleware");
 
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
@@ -27,6 +28,7 @@ const uploadImageConsultation = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
+router.get("/room/readyToAssign", verifyToken, consultation.readyToAssign);
 router.post("/room", consultation.createRoom);
 router.get("/room/:id", consultation.getByRoomId);
 router.get("/room/user/:id", consultation.getRoomByUser);

@@ -4,6 +4,9 @@ const {
   masterConsultationCategory,
   masterConsultationMessage,
   masterConsultationPrescription,
+  relationshipUserLocation,
+  masterProduct,
+  masterLocation,
 } = require("../models");
 
 const { Op, Sequelize, where } = require("sequelize");
@@ -34,7 +37,7 @@ module.exports = {
 
   async createRoom(data) {
     try {
-      const { customerId, consultationCategoryId } = data;
+      const { customerId, consultationCategoryId, locationId, latitude, longitude } = data;
 
       if (!customerId) {
         return { status: false, message: "Customer tidak boleh kosong" };
@@ -56,6 +59,9 @@ module.exports = {
         status: "pending",
         consultationCategoryId,
         expiredAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        locationId,
+        latitude,
+        longitude,
       });
 
       return { status: true, message: "Success", data: room };
@@ -106,6 +112,8 @@ module.exports = {
       return { status: false, message: error.message, data: null };
     }
   },
+
+
 
   async getByRoomId(roomId) {
     try {
@@ -184,9 +192,76 @@ module.exports = {
     }
   },
 
+  async getAllReadyToAssign(userId, role) {
+    try {
+      let locationIncludeOptions = {
+        model: masterLocation,
+        as: "location",
+        attributes: ["id", ["name", "namaOutlet"]],
+        required: false, // Default LEFT JOIN
+      };
+
+      if (role === "Outlet_Doctor") {
+        const userLocations = await relationshipUserLocation.findAll({
+          where: { userId: userId, isactive: true },
+          attributes: ["locationId"],
+        });
+
+        const locationIds = userLocations.map((ul) => ul.locationId);
+
+        if (locationIds.length === 0) {
+          // If doctor has no location assigned, return empty
+          return { status: true, message: "Success", data: [] };
+        }
+
+        // For outlet_doctor: INNER JOIN and filter by location
+        locationIncludeOptions.required = true;
+        locationIncludeOptions.where = { id: { [Op.in]: locationIds } };
+      } else if (role === "Doctor_General") {
+        // Doctor General logic:
+        // LEFT JOIN (already set as default)
+        // No location filtering
+      } else {
+        // Any other role returns empty
+        return { status: true, message: "Success", data: [] };
+      }
+
+      // Filter rooms that have >= 3 images
+      const havingThreeImagesLiteral = Sequelize.literal(
+        `(SELECT COUNT(1) FROM masterConsultationImage AS mci WHERE mci.roomId = masterRoomConsultation.id) >= 3`
+      );
+
+      const rooms = await masterRoomConsultation.findAll({
+        attributes: [
+          "id",
+          "roomCode",
+          "customerId",
+          "status",
+          // The result will be nested objects for includes
+        ],
+        where: {
+          status: "pending",
+          [Op.and]: [havingThreeImagesLiteral],
+        },
+        include: [
+          {
+            model: masterConsultationCategory,
+            as: "consultationCategory",
+            attributes: ["name"],
+          },
+          locationIncludeOptions,
+        ],
+      });
+
+      return { status: true, message: "Success", data: rooms };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
   async addPrescription(data) {
     try {
-      const { roomId, doctorId, customerId, productId, notes } = data;
+      const { roomId, refferenceId, refferenceType, notes } = data;
 
       if (!roomId || !notes) {
         return {
@@ -198,10 +273,9 @@ module.exports = {
 
       const prescription = await masterConsultationPrescription.create({
         roomId,
-        productId,
         notes,
-        customerId,
-        doctorId,
+        refferenceId,
+        refferenceType,
       });
 
       return { status: true, message: "Berhasil", data: prescription };

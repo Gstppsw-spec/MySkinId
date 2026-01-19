@@ -34,6 +34,15 @@ module.exports = {
       : response.error(res, result.message, null);
   },
 
+  async readyToAssign(req, res) {
+    const user = req.user;
+    const result = await consultation.getAllReadyToAssign(user.id, user.roleCode);
+
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
   async getByRoomId(req, res) {
     const { id } = req.params;
     const result = await consultation.getByRoomId(id);

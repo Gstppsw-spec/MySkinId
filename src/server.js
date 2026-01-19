@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
-const swaggerSpec = require("../swagger/swagger");
+const swaggerSpec = require("../swagger/swagger-output.json");
 
 const authUserRoute = require("./routes/authUserRoute");
 const categoryRoute = require("./routes/master/categoryRoute");
