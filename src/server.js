@@ -22,6 +22,13 @@ const packageRoute = require("./routes/master/package");
 const customerCartRoute = require("./routes/transaction/customerCart");
 const userRoute = require("./routes/userRoute");
 
+// Social media routes
+const postRoute = require("./routes/social/post.route");
+const likeRoute = require("./routes/social/like.route");
+const commentRoute = require("./routes/social/comment.route");
+const followRoute = require("./routes/social/follow.route");
+
+
 const path = require("path");
 const cors = require("cors");
 
@@ -50,6 +57,12 @@ app.use(
   express.static(path.join(__dirname, "../uploads/location"))
 );
 
+app.use(
+  "/uploads/posts",
+  express.static(path.join(__dirname, "../uploads/posts"))
+);
+
+
 app.use(bodyParser.json());
 app.use("/api/v2/auth", authUserRoute);
 app.use("/api/v2/category", categoryRoute);
@@ -69,6 +82,13 @@ app.use("/api/v2/package", packageRoute);
 app.use("/api/v2/user", userRoute);
 
 app.use("/api/v2/customer-cart", customerCartRoute);
+
+// Social media routes
+app.use("/api/v2/posts", postRoute);
+app.use("/api/v2/posts", likeRoute);
+app.use("/api/v2/posts", commentRoute);
+app.use("/api/v2/users", followRoute);
+
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.listen(process.env.PORT, "0.0.0.0", () =>

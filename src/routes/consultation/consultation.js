@@ -30,8 +30,8 @@ const uploadImageConsultation = multer({
 });
 router.get("/room/readyToAssign", verifyToken, consultation.readyToAssign);
 router.post("/room", consultation.createRoom);
+router.get("/room/user", verifyToken, consultation.getRoomByUser);
 router.get("/room/:id", consultation.getByRoomId);
-router.get("/room/user/:id", consultation.getRoomByUser);
 router.put("/room/:id/join", consultation.assignDoctor); // join = assign doctor
 router.put("/room/:id/close", consultation.closeRoom); // harus dibuat
 

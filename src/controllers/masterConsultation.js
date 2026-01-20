@@ -3,8 +3,8 @@ const consultation = require("../services/masterConsultation");
 
 module.exports = {
   async getRoomByUser(req, res) {
-    const { id } = req.params;
-    const result = await consultation.getRoomByUser(id);
+    const user = req.user;
+    const result = await consultation.getRoomByUser(user.id);
 
     return result.status
       ? response.success(res, result.message, result.data)
