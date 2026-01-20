@@ -37,7 +37,13 @@ module.exports = {
 
   async createRoom(data) {
     try {
-      const { customerId, consultationCategoryId, locationId, latitude, longitude } = data;
+      const {
+        customerId,
+        consultationCategoryId,
+        locationId,
+        latitude,
+        longitude,
+      } = data;
 
       if (!customerId) {
         return { status: false, message: "Customer tidak boleh kosong" };
@@ -113,8 +119,6 @@ module.exports = {
     }
   },
 
-
-
   async getByRoomId(roomId) {
     try {
       const room = await masterRoomConsultation.findByPk(roomId, {
@@ -123,10 +127,33 @@ module.exports = {
             model: masterConsultationCategory,
             as: "consultationCategory",
           },
+          {
+            model: masterConsultationImage,
+            as: "consultationImage",
+            attributes: ["id"],
+          },
         ],
       });
 
-      return { status: true, message: "Success", data: room };
+      if (!room) {
+        return { status: false, message: "Room tidak ditemukan", data: null };
+      }
+
+      const imageCount = room.consultationImage
+        ? room.consultationImage.length
+        : 0;
+
+      const isScanning = room.doctorId === null && imageCount >= 3;
+
+      return {
+        status: true,
+        message: "Success",
+        data: {
+          ...room.toJSON(),
+          imageCount,
+          isScanning,
+        },
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
@@ -166,17 +193,36 @@ module.exports = {
     }
   },
 
-  async getMessagesByRoomId(roomId) {
+  async getMessagesByRoomId({ roomId, cursor, limit }) {
     try {
-      const message = await masterConsultationMessage.findAll({
-        where: { roomId: roomId },
-        include: [{ model: masterConsultationImage, as: "consultationImage" }],
-        order: [["createdAt", "ASC"]],
+      const where = { roomId };
+      if (cursor) {
+        where.createdAt = {
+          [Op.lt]: new Date(cursor),
+        };
+      }
+      const messages = await masterConsultationMessage.findAll({
+        where,
+        include: [
+          {
+            model: masterConsultationImage,
+            as: "consultationImage",
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+        limit,
       });
-
-      return { status: true, message: "Berhasil", data: message };
+      return {
+        status: true,
+        message: "Berhasil",
+        data: messages,
+      };
     } catch (error) {
-      return { status: false, message: error.message, data: null };
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
     }
   },
 
@@ -228,7 +274,7 @@ module.exports = {
 
       // Filter rooms that have >= 3 images
       const havingThreeImagesLiteral = Sequelize.literal(
-        `(SELECT COUNT(1) FROM masterConsultationImage AS mci WHERE mci.roomId = masterRoomConsultation.id) >= 3`
+        `(SELECT COUNT(1) FROM masterConsultationImage AS mci WHERE mci.roomId = masterRoomConsultation.id) >= 3`,
       );
 
       const rooms = await masterRoomConsultation.findAll({

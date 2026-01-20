@@ -6,6 +6,7 @@ const {
   masterPackageItems,
   masterService,
   masterSubCategoryService,
+  relationshipUserLocation,
 } = require("../models");
 const sequelize = require("../models").sequelize;
 
@@ -291,7 +292,7 @@ module.exports = {
           price: data.price ?? pkg.price,
           discountPercent: data.discountPercent ?? pkg.discountPercent,
           isActive: data.isActive ?? pkg.isActive,
-          locationId: data.locationId ?? pkg.locationId,
+          // locationId: data.locationId ?? pkg.locationId,
         },
         { transaction },
       );
@@ -587,7 +588,6 @@ module.exports = {
         {
           serviceId: data.serviceId,
           qty: data.qty ?? 1,
-          packageId: data.packageId,
         },
         { transaction },
       );
@@ -658,6 +658,65 @@ module.exports = {
         message: "Package berhasil di hapus",
         data: packageItem,
       };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async getPackageByUser({ id: userId, roleCode, locationIds }) {
+    const include = [
+      {
+        model: masterLocation,
+        as: "location",
+        attributes: ["id", "name"],
+      },
+      {
+        model: masterPackageItems,
+        as: "items",
+        attributes: ["packageId", "qty", "serviceId", "id"],
+        include: [
+          {
+            model: masterService,
+            as: "service",
+            attributes: ["id", "name"],
+            include: {
+              model: masterSubCategoryService,
+              as: "categories",
+              through: { attributes: [] },
+              attributes: ["id", "name"],
+            },
+          },
+        ],
+      },
+    ];
+    try {
+      if (roleCode === "SUPER_ADMIN") {
+        return await masterPackage.findAll({
+          include,
+          attributes: {
+            exclude: ["createdAt", "updatedAt"],
+          },
+        });
+      }
+
+      const packages = await masterPackage.findAll({
+        where: {
+          locationId: {
+            [Op.in]: locationIds,
+          },
+        },
+        include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+      });
+
+      return {
+        status: true,
+        message: "Success",
+        data: packages,
+      };
+
     } catch (error) {
       return { status: false, message: error.message };
     }

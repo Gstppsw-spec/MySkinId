@@ -10,6 +10,7 @@ const {
 
 const fs = require("fs");
 const path = require("path");
+const { Op, Sequelize } = require("sequelize");
 
 class MasterLocationService {
   async create(data, files, userId) {
@@ -218,17 +219,48 @@ class MasterLocationService {
     }
   }
 
-  async getLocationByUserId(userId) {
-    const data = await relationshipUserLocation.findOne({
-      where: { userId },
-      include: [
-        {
-          model: masterLocation,
-          as: "location",
+  async getLocationByUser({ id: userId, roleCode, locationIds }) {
+    console.log(locationIds);
+
+    try {
+      if (roleCode === "SUPER_ADMIN") {
+        const data = await masterLocation.findAll({
+          include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+            },
+          ],
+        });
+        return {
+          status: true,
+          message: "Location fetched successfully",
+          data: data,
+        };
+      }
+
+      const data = await masterLocation.findAll({
+        where: {
+          id: {
+            [Op.in]: locationIds,
+          },
         },
-      ],
-    });
-    return data?.location || null;
+        include: [
+          {
+            model: masterLocationImage,
+            as: "images",
+          },
+        ],
+      });
+
+      return {
+        status: true,
+        message: "Location fetched successfully",
+        data: data,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
   }
 
   async detailLocationByCustomer(id, customerId = null) {

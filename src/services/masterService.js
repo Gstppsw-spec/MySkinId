@@ -66,6 +66,7 @@ module.exports = {
             "name",
             "latitude",
             "longitude",
+            "district",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
           required: !!(userLat && userLng),
@@ -177,37 +178,36 @@ module.exports = {
           `)
           : null;
 
-      const service = await masterService.findByPk(id, {
-        include: [
-          {
-            model: masterLocation,
-            as: "location",
-            attributes: [
-              "id",
-              "name",
-              "latitude",
-              "longitude",
-              "address",
-              ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
-            ],
-            include: [
-              {
-                model: masterLocationImage,
-                as: "images",
-                attributes: ["id", "imageUrl"],
-                limit: 1,
-                separate: true,
-              },
-            ],
-          },
-          {
-            model: masterSubCategoryService,
-            as: "categories",
-            through: { attributes: [] },
-            attributes: ["id", "name"],
-          },
-        ],
-      });
+      const include = [
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: [
+            "id",
+            "name",
+            "latitude",
+            "longitude",
+            "address",
+            "district",
+            ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
+          ],
+          include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+              attributes: ["id", "imageUrl"],
+              limit: 1,
+              separate: true,
+            },
+          ],
+        },
+        {
+          model: masterSubCategoryService,
+          as: "categories",
+          through: { attributes: [] },
+          attributes: ["id", "name"],
+        },
+      ];
 
       if (customerId) {
         include.push({
@@ -221,6 +221,10 @@ module.exports = {
           required: false,
         });
       }
+
+      const service = await masterService.findByPk(id, {
+        include,
+      });
 
       if (!service) {
         return { status: false, message: "Product not found", data: null };
@@ -263,17 +267,25 @@ module.exports = {
       } = data;
 
       if (!name || name.trim() === "") {
-        return { status: false, message: "Name is required", data: null };
+        return {
+          status: false,
+          message: "Nama tidak boleh kosong",
+          data: null,
+        };
       }
 
       if (!locationId) {
-        return { status: false, message: "Location is required", data: null };
+        return {
+          status: false,
+          message: "Lokasi tidak boleh kosong",
+          data: null,
+        };
       }
 
       if (!price) {
         return {
           status: false,
-          message: "Normal price is required",
+          message: "Harga tidak boleh kosong",
           data: null,
         };
       }
@@ -440,6 +452,68 @@ module.exports = {
       return { status: true, message: "Success", data: result };
     } catch (error) {
       return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getServiceByUser({ locationIds, roleCode }) {
+    try {
+      const include = [
+        {
+          model: masterSubCategoryService,
+          as: "categories",
+          through: { attributes: [] },
+          attributes: ["id", "name"],
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: ["id", "name", "latitude", "longitude"],
+          include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+              attributes: ["id", "imageUrl"],
+              limit: 1,
+              separate: true,
+            },
+          ],
+        },
+      ];
+
+      if (roleCode === "SUPER_ADMIN") {
+        const service = await masterService.findAll({
+          include,
+          attributes: {
+            exclude: ["createdAt", "updatedAt"],
+          },
+        });
+
+        return {
+          status: true,
+          message: "Success",
+          data: service,
+        };
+      }
+
+      const service = await masterService.findAll({
+        include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+        where: {
+          locationId: {
+            [Op.in]: locationIds,
+          },
+        },
+      });
+
+      return {
+        status: true,
+        message: "Success",
+        data: service,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
     }
   },
 };

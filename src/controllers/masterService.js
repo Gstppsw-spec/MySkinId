@@ -91,8 +91,21 @@ module.exports = {
       const result = await service.getByLocationId(
         locationId,
         customerId,
-        isCustomer
+        isCustomer,
       );
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getServiceByUser(req, res) {
+    try {
+      const user = req.user;
+      const { customerId, isCustomer } = req.query;
+      const result = await service.getServiceByUser(user);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);

@@ -113,12 +113,21 @@ module.exports = {
     }
   },
 
+  async getPackageByUser(req, res) {
+    try {
+      const user = req.user;
+      const result = await packageService.getPackageByUser(user);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async createItemPackage(req, res) {
     try {
       const data = req.body;
-      console.log(req.user);
-      console.log(data);
-
       const result = await packageService.createItemPackage(data);
       if (!result.status)
         return response.error(res, result.message, result.data);

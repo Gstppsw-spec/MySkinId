@@ -21,6 +21,18 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "userId",
         as: "userLocations",
       });
+
+      this.belongsToMany(models.masterCompany, {
+        through: models.relationshipUserCompany,
+        foreignKey: "userId",
+        otherKey: "companyId",
+        as: "companies",
+      });
+
+      this.hasMany(models.relationshipUserCompany, {
+        foreignKey: "userId",
+        as: "userCompanies",
+      });
     }
   }
 
@@ -48,7 +60,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "masterUser",
       tableName: "masterUser",
       timestamps: true,
-    }
+    },
   );
 
   return masterUser;

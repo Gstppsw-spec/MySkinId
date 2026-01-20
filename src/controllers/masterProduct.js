@@ -51,7 +51,6 @@ module.exports = {
     try {
       const { id } = req.params;
       const { customerId, lat, lng } = req.query;
-
       const userLat = lat ? parseFloat(lat) : undefined;
       const userLng = lng ? parseFloat(lng) : undefined;
 
@@ -59,7 +58,7 @@ module.exports = {
         id,
         customerId,
         userLat,
-        userLng
+        userLng,
       );
       if (!result.status)
         return response.error(res, result.message, result.data);
@@ -70,71 +69,58 @@ module.exports = {
   },
 
   async create(req, res) {
-    const data = req.body;
-    const result = await productService.create(data, req.files);
-    return res.status(result.status ? 201 : 400).json(result);
+    try {
+      const data = req.body;
+      const result = await productService.create(data, req.files);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   },
 
   async update(req, res) {
-    const { id } = req.params;
-    const data = req.body;
-    const result = await productService.update(id, data, req.files);
-    return res.status(result.status ? 200 : 400).json(result);
+    try {
+      const { id } = req.params;
+      const data = req.body;
+      const result = await productService.update(id, data, req.files);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   },
 
   async deleteImage(req, res) {
     const { id } = req.params;
-
     const result = await productService.deleteImage(id);
-
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   },
 
-  // async getAllByCustomer(req, res) {
-  //   const { customerId } = req.params;
-  //   const { minPrice, maxPrice, categoryIds } = req.query;
-  //   const categoryIdsArray = categoryIds
-  //     ? Array.isArray(categoryIds)
-  //       ? categoryIds
-  //       : [categoryIds]
-  //     : undefined;
-
-  //   const result = await productService.getAllByCustomer(
-  //     {
-  //       minPrice: minPrice ? parseFloat(minPrice) : undefined,
-  //       maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
-  //       categoryIds: categoryIdsArray,
-  //     },
-  //     customerId
-  //   );
-
-  //   return result.status
-  //     ? response.success(res, result.message, result.data)
-  //     : response.error(res, result.message, null);
-  // },
-
-  // async getByIdCustomer(req, res) {
-  //   const { id, customerId } = req.params;
-  //   const result = await productService.getByIdCustomer(id, customerId);
-
-  //   return result.status
-  //     ? response.success(res, result.message, result.data)
-  //     : response.error(res, result.message, null);
-  // },
-
   async getByLocationId(req, res) {
     try {
-
       const { locationId } = req.params;
       const { customerId, isCustomer } = req.query;
-
       const result = await productService.getByLocationId(
         customerId,
         locationId,
-        isCustomer
+        isCustomer,
       );
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+  async getProductByUser(req, res) {
+    try {
+      const user = req.user;
+      const result = await productService.getProductByUser(user);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);

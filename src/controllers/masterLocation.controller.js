@@ -1,10 +1,10 @@
-const MasterLocationService = require("../services/masterLocation.service");
+const masterLocationService = require("../services/masterLocation.service");
 const response = require("../helpers/response");
 
-class MasterLocationController {
+class masterLocationController {
   async create(req, res) {
     const userId = req.user?.id || null;
-    const result = await MasterLocationService.create(
+    const result = await masterLocationService.create(
       req.body,
       req.files,
       userId
@@ -19,7 +19,7 @@ class MasterLocationController {
     const { id } = req.params;
     const userId = req.user?.id || null;
 
-    const result = await MasterLocationService.update(
+    const result = await masterLocationService.update(
       id,
       req.body,
       req.files, // <=== tambah ini
@@ -36,7 +36,7 @@ class MasterLocationController {
     const { isactive } = req.body;
     const userId = req.user?.id || null;
 
-    const result = await MasterLocationService.updateStatus(
+    const result = await masterLocationService.updateStatus(
       id,
       isactive,
       userId
@@ -49,7 +49,7 @@ class MasterLocationController {
 
   async detail(req, res) {
     const { id } = req.params;
-    const result = await MasterLocationService.detail(id);
+    const result = await masterLocationService.detail(id);
 
     return result.status
       ? response.success(res, result.message, result.data)
@@ -57,7 +57,7 @@ class MasterLocationController {
   }
 
   async list(req, res) {
-    const result = await MasterLocationService.list();
+    const result = await masterLocationService.list();
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
@@ -65,7 +65,7 @@ class MasterLocationController {
 
   async getByCompanyId(req, res) {
     try {
-      const result = await MasterLocationService.getByCompanyId(
+      const result = await masterLocationService.getByCompanyId(
         req.params.companyId
       );
       if (!result.status)
@@ -78,15 +78,17 @@ class MasterLocationController {
 
   async deleteImage(req, res) {
     const { id } = req.params;
-    const result = await MasterLocationService.deleteImage(id);
+    const result = await masterLocationService.deleteImage(id);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   }
 
-  async getLocationByUserId(req, res) {
-    const { id } = req.params;
-    const location = await MasterLocationService.getLocationByUserId(id);
+  async getLocationByUser(req, res) {
+    const user = req.user;
+    console.log(user);
+    
+    const location = await masterLocationService.getLocationByUser(user);
     return location.status
       ? response.success(res, location.message, location.data)
       : response.error(res, location.message, null);
@@ -94,7 +96,7 @@ class MasterLocationController {
 
   async detailLocationByCustomer(req, res) {
     const { id, customerId } = req.params;
-    const location = await MasterLocationService.detailLocationByCustomer(
+    const location = await masterLocationService.detailLocationByCustomer(
       id,
       customerId
     );
@@ -107,7 +109,7 @@ class MasterLocationController {
   async listLocationByCustomer(req, res) {
     const { customerId } = req.params;
 
-    const location = await MasterLocationService.listLocationByCustomer(
+    const location = await masterLocationService.listLocationByCustomer(
       customerId
     );
 
@@ -117,4 +119,4 @@ class MasterLocationController {
   }
 }
 
-module.exports = new MasterLocationController();
+module.exports = new masterLocationController();

@@ -10,10 +10,9 @@ module.exports.allowRoles = (...allowedRoles) => {
     if (!allowedRoles.includes(req.user.roleCode)) {
       return res.status(403).json({
         status: false,
-        message: "Role tidak memiliki akses",
+        message: "Akses anda tidak memililiki izin untuk melakukan aksi ini",
       });
     }
-
     next();
   };
 };

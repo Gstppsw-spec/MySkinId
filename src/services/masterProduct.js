@@ -1,3 +1,4 @@
+const { log } = require("console");
 const {
   masterProduct,
   masterProductCategory,
@@ -6,6 +7,7 @@ const {
   masterProductImage,
   customerFavorites,
   masterLocation,
+  masterLocationImage
 } = require("../models");
 const fs = require("fs");
 const { Op, Sequelize } = require("sequelize");
@@ -223,8 +225,18 @@ module.exports = {
             "id",
             "name",
             "latitude",
+            "district",
             "longitude",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
+          ],
+           include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+              attributes: ["id", "imageUrl"],
+              limit: 1,
+              separate: true,
+            },
           ],
           required: !!(userLat && userLng),
         },
@@ -340,7 +352,7 @@ module.exports = {
         Array.isArray(data.consultationCategoryIds)
       ) {
         await newProduct.setConsultationCategories(
-          data.consultationCategoryIds
+          data.consultationCategoryIds,
         );
       }
 
@@ -399,16 +411,18 @@ module.exports = {
         data.locationId !== undefined ? data.locationId : product.locationId;
 
       product.weightGram =
-        data.weightGram !== undefined ? data.weightGram : product.weightGram;
+        data.weightGram !== undefined
+          ? Number(data.weightGram)
+          : product.weightGram;
 
       product.lengthCm =
-        data.lengthCm !== undefined ? data.lengthCm : product.lengthCm;
+        data.lengthCm !== undefined ? Number(data.lengthCm) : product.lengthCm;
 
       product.widthCm =
-        data.widthCm !== undefined ? data.widthCm : product.widthCm;
+        data.widthCm !== undefined ? Number(data.widthCm) : product.widthCm;
 
       product.heightCm =
-        data.heightCm !== undefined ? data.heightCm : product.heightCm;
+        data.heightCm !== undefined ? Number(data.heightCm) : product.heightCm;
 
       await product.save();
 
@@ -549,6 +563,76 @@ module.exports = {
       };
     } catch (error) {
       return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getProductByUser({ roleCode, locationIds }) {
+    try {
+      const include = [
+        {
+          model: masterProductCategory,
+          as: "categories",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterConsultationCategory,
+          as: "consultationCategories",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterGroupProduct,
+          as: "groupProduct",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterProductImage,
+          as: "images",
+          attributes: ["id", "imageUrl"],
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: ["id", "name"],
+        },
+      ];
+
+      if (roleCode === "SUPER_ADMIN") {
+        const product = await masterProduct.findAll({
+          include,
+          attributes: {
+            exclude: ["createdAt", "updatedAt"],
+          },
+        });
+
+        return {
+          status: true,
+          message: "Success",
+          data: product,
+        };
+      }
+
+      const product = await masterProduct.findAll({
+        include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+        where: {
+          locationId: {
+            [Op.in]: locationIds,
+          },
+        },
+      });
+
+      return {
+        status: true,
+        message: "Success",
+        data: product,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
     }
   },
 };

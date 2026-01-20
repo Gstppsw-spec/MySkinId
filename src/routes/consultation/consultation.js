@@ -17,7 +17,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueName = `${Date.now()}-${Math.round(
-      Math.random() * 1e9
+      Math.random() * 1e9,
     )}${path.extname(file.originalname)}`;
 
     cb(null, uniqueName);
@@ -39,7 +39,7 @@ router.post("/room/:id/message", consultation.addMessage);
 router.post(
   "/room/:id/message/image",
   uploadImageConsultation.array("images", 10),
-  consultation.addMessage
+  consultation.addMessage,
 );
 router.get("/room/:id/messages", consultation.getMessagesByRoomId);
 router.get("/room/:id/media", consultation.getMediaByRoomId);

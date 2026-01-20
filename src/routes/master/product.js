@@ -6,6 +6,8 @@ const path = require("path");
 
 const fs = require("fs");
 const uploadPath = "uploads/product";
+const { verifyToken } = require("../../middlewares/authMiddleware");
+const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
@@ -17,7 +19,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueName = `${Date.now()}-${Math.round(
-      Math.random() * 1e9
+      Math.random() * 1e9,
     )}${path.extname(file.originalname)}`;
     cb(null, uniqueName);
   },
@@ -28,15 +30,29 @@ const uploadProductImages = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
 
-router.post("/", uploadProductImages.array("photos", 10), masterProduct.create);
+router.post(
+  "/",
+  verifyToken,
+  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
+  uploadProductImages.array("photos", 10),
+  masterProduct.create,
+);
 router.put(
   "/:id",
+  verifyToken,
+  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadProductImages.array("photos", 10),
-  masterProduct.update
+  masterProduct.update,
 );
 
-router.patch("/image/:id", masterProduct.deleteImage);
+router.patch(
+  "/image/:id",
+  verifyToken,
+  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
+  masterProduct.deleteImage,
+);
 router.get("/location/:locationId", masterProduct.getByLocationId);
+router.get("/user", verifyToken, masterProduct.getProductByUser);
 router.get("/", masterProduct.getAll);
 router.get("/:id", masterProduct.getById);
 
