@@ -51,7 +51,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "masterRoomConsultation",
       timestamps: true,
-    }
+    },
   );
 
   // ============================
@@ -73,9 +73,13 @@ module.exports = (sequelize, DataTypes) => {
       as: "location",
     });
 
-     masterRoomConsultation.hasMany(models.masterConsultationImage, {
+    masterRoomConsultation.hasMany(models.masterConsultationImage, {
       foreignKey: "roomId",
       as: "consultationImage",
+    });
+    masterRoomConsultation.hasMany(models.masterConsultationMessage, {
+      foreignKey: "roomId",
+      as: "consultationMessage",
     });
   };
 

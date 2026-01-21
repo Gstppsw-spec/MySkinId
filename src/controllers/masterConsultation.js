@@ -5,7 +5,6 @@ module.exports = {
   async getRoomByUser(req, res) {
     const user = req.user;
     const result = await consultation.getRoomByUser(user.id);
-
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
@@ -20,7 +19,8 @@ module.exports = {
 
   async assignDoctor(req, res) {
     const { id } = req.params;
-    const result = await consultation.assignDoctor(req.body, id);
+    const user = req.user;
+    const result = await consultation.assignDoctor(user, id);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
@@ -36,11 +36,12 @@ module.exports = {
 
   async readyToAssign(req, res) {
     const user = req.user;
+    console.log(user);
+
     const result = await consultation.getAllReadyToAssign(
       user.id,
       user.roleCode,
     );
-
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

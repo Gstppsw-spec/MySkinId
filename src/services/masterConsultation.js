@@ -7,6 +7,7 @@ const {
   relationshipUserLocation,
   masterProduct,
   masterLocation,
+  masterCustomer,
 } = require("../models");
 
 const { Op, Sequelize, where } = require("sequelize");
@@ -26,6 +27,19 @@ module.exports = {
             model: masterConsultationCategory,
             as: "consultationCategory",
           },
+          {
+            model: masterConsultationMessage,
+            as: "consultationMessage",
+            separate: true,
+            limit: 1,
+            order: [["createdAt", "DESC"]],
+            attributes: ["message", "createdAt"],
+          },
+          {
+            model: masterCustomer,
+            as: 'customer',
+            attributes: ['id', 'name']
+          }
         ],
       });
 
@@ -76,20 +90,15 @@ module.exports = {
     }
   },
 
-  async assignDoctor(data, roomId) {
+  async assignDoctor({ id: doctorId }, roomId) {
     try {
-      const { doctorId } = data;
       const room = await masterRoomConsultation.findByPk(roomId);
-
       if (!room) {
         return { status: false, message: "Tidak ada room ditemukan" };
       }
-
       room.doctorId = doctorId;
       room.status = "open";
-
-      await room.save;
-
+      await room.save();
       return {
         status: true,
         message: "Berhasil masuk ke room chat",
@@ -142,9 +151,7 @@ module.exports = {
       const imageCount = room.consultationImage
         ? room.consultationImage.length
         : 0;
-
       const isScanning = room.doctorId === null && imageCount >= 3;
-
       return {
         status: true,
         message: "Success",
@@ -243,51 +250,46 @@ module.exports = {
       let locationIncludeOptions = {
         model: masterLocation,
         as: "location",
-        attributes: ["id", ["name", "namaOutlet"]],
-        required: false, // Default LEFT JOIN
+        attributes: ["id", "name"],
+        required: false,
       };
 
-      if (role === "Outlet_Doctor") {
+      if (role === "OUTLET_DOCTORR") {
         const userLocations = await relationshipUserLocation.findAll({
-          where: { userId: userId, isactive: true },
+          where: {
+            userId: userId,
+            isactive: true,
+          },
           attributes: ["locationId"],
         });
 
         const locationIds = userLocations.map((ul) => ul.locationId);
-
         if (locationIds.length === 0) {
-          // If doctor has no location assigned, return empty
           return { status: true, message: "Success", data: [] };
         }
 
-        // For outlet_doctor: INNER JOIN and filter by location
-        locationIncludeOptions.required = true;
-        locationIncludeOptions.where = { id: { [Op.in]: locationIds } };
-      } else if (role === "Doctor_General") {
-        // Doctor General logic:
-        // LEFT JOIN (already set as default)
-        // No location filtering
-      } else {
-        // Any other role returns empty
-        return { status: true, message: "Success", data: [] };
+        locationIncludeOptions = {
+          ...locationIncludeOptions,
+          required: true,
+          where: {
+            id: { [Op.in]: locationIds },
+          },
+        };
       }
-
-      // Filter rooms that have >= 3 images
-      const havingThreeImagesLiteral = Sequelize.literal(
-        `(SELECT COUNT(1) FROM masterConsultationImage AS mci WHERE mci.roomId = masterRoomConsultation.id) >= 3`,
-      );
-
+      const hasMinThreeImages = Sequelize.literal(`
+      EXISTS (
+        SELECT 1
+        FROM masterConsultationImage mci
+        WHERE mci.roomId = masterRoomConsultation.id
+        GROUP BY mci.roomId
+        HAVING COUNT(1) >= 3
+      )
+    `);
       const rooms = await masterRoomConsultation.findAll({
-        attributes: [
-          "id",
-          "roomCode",
-          "customerId",
-          "status",
-          // The result will be nested objects for includes
-        ],
+        attributes: ["id", "roomCode", "customerId", "status", "createdAt"],
         where: {
           status: "pending",
-          [Op.and]: [havingThreeImagesLiteral],
+          [Op.and]: [hasMinThreeImages],
         },
         include: [
           {
@@ -296,15 +298,29 @@ module.exports = {
             attributes: ["name"],
           },
           locationIncludeOptions,
+          {
+            model: masterCustomer,
+            as: "customer",
+            attributes: ["name"],
+          },
+          {
+            model: masterConsultationImage,
+            as: "consultationImage",
+            attributes: ["imageUrl"],
+          },
         ],
+        order: [["createdAt", "ASC"]],
       });
 
       return { status: true, message: "Success", data: rooms };
     } catch (error) {
-      return { status: false, message: error.message, data: null };
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
     }
   },
-
   async addPrescription(data) {
     try {
       const { roomId, refferenceId, refferenceType, notes } = data;
