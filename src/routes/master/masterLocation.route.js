@@ -8,7 +8,7 @@ const { allowRoles } = require("../../middlewares/roleMiddleware");
 // >>> STATIC ROUTES FIRST <<<
 router.get("/company/:companyId", masterLocationController.getByCompanyId);
 
-router.get("/user",verifyToken, masterLocationController.getLocationByUser);
+router.get("/user", verifyToken, masterLocationController.getLocationByUser);
 
 // CUSTOMER LIST
 router.get("/all-customer", masterLocationController.listLocationByCustomer);
@@ -56,7 +56,18 @@ router.patch(
 );
 
 // >>> DYNAMIC ROUTES LAST <<<
+router.post("/inject-region", masterLocationController.injectDataRegion);
+router.get(
+  "/get-city-by-latitude-longitude",
+  masterLocationController.getCityByLatitudeLongitude
+);
+router.get(
+  "/get-district-by-latitude-longitude",
+  masterLocationController.getDistrictByLatitudeLongitude
+);
 router.get("/", masterLocationController.list);
 router.get("/:id", masterLocationController.detail);
+
+
 
 module.exports = router;

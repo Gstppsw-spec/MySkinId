@@ -1,3 +1,4 @@
+const axios = require("axios");
 const {
   masterLocation,
   masterCompany,
@@ -6,11 +7,20 @@ const {
   relationshipUserLocation,
   LocationVerificationRequest,
   customerFavorites,
+  masterProvince,
+  masterCity,
+  masterDistrict
 } = require("../models");
 
 const fs = require("fs");
 const path = require("path");
 const { Op, Sequelize } = require("sequelize");
+const {
+  fetchProvinces,
+  fetchCities,
+  fetchDistricts,
+} = require("./rajaongkir.service");
+const { sleep, retryRequest } = require("../helpers/request.helper");
 
 class MasterLocationService {
   async create(data, files, userId) {
@@ -339,6 +349,179 @@ class MasterLocationService {
       console.error("List error:", error);
       return { status: false, message: error.message, data: null };
     }
+  }
+
+  async getCityByLatitudeLongitude(latitude, longitude) {
+    try {
+      if (latitude == null || longitude == null) {
+        return { status: false, message: "Latitude and Longitude are required" };
+      }
+
+      // pastikan angka (menghindari SQL injection + error query)
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+
+      const distanceLiteral = Sequelize.literal(`
+        6371 * acos(
+          cos(radians(${lat})) *
+          cos(radians(CAST(masterCity.latitude AS FLOAT))) *
+          cos(radians(CAST(masterCity.longitude AS FLOAT)) - radians(${lng})) +
+          sin(radians(${lat})) *
+          sin(radians(CAST(masterCity.latitude AS FLOAT)))
+        )
+      `);
+
+      const city = await masterCity.findOne({
+        attributes: {
+          include: [[distanceLiteral, "distance"]],
+        },
+        include: [{ model: masterProvince, as: "province" }],
+        order: [[distanceLiteral, "ASC"]],
+        limit: 1,
+      });
+
+      if (!city) {
+        return { status: false, message: "City not found in database" };
+      }
+
+      return {
+        status: true,
+        message: "City found",
+        data: city,
+      };
+    } catch (error) {
+      console.error("Get City By Coords Error:", error);
+      return { status: false, message: error.message };
+    }
+  }
+
+
+  async getDistrictByLatitudeLongitude(latitude, longitude) {
+    try {
+      // validasi: jangan pakai !latitude karena 0 dianggap false
+      if (latitude == null || longitude == null) {
+        return { status: false, message: "Latitude and Longitude are required" };
+      }
+
+      // pastikan angka (lebih aman)
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+
+      const distanceLiteral = Sequelize.literal(`
+        6371 * acos(
+          cos(radians(${lat})) *
+          cos(radians(CAST(masterDistrict.latitude AS FLOAT))) *
+          cos(radians(CAST(masterDistrict.longitude AS FLOAT)) - radians(${lng})) +
+          sin(radians(${lat})) *
+          sin(radians(CAST(masterDistrict.latitude AS FLOAT)))
+        )
+      `);
+
+      const district = await masterDistrict.findOne({
+        attributes: {
+          include: [[distanceLiteral, "distance"]],
+        },
+        include: [{ model: masterCity, as: "city" }],
+        order: [[distanceLiteral, "ASC"]],
+        limit: 1,
+      });
+
+      if (!district) {
+        return {
+          status: false,
+          message: "District not found in database",
+        };
+      }
+
+      return {
+        status: true,
+        message: "District found",
+        data: district,
+      };
+    } catch (error) {
+      console.error("Get District By Coords Error:", error);
+      return { status: false, message: error.message };
+    }
+  }
+
+
+
+  async upsertProvince(data) {
+    try {
+      await masterProvince.upsert({
+        id: data.id,
+        name: data.name,
+      });
+    } catch (error) {
+      console.error("Error upserting province:", error);
+      throw error;
+    }
+  }
+
+  async upsertCity(data, provinceId) {
+    try {
+      await masterCity.upsert({
+        id: data.id,
+        provinceId: provinceId,
+        name: data.name,
+      });
+    } catch (error) {
+      console.error("Error upserting city:", error);
+      throw error;
+    }
+  }
+
+  async upsertDistrict(data, cityId) {
+    try {
+      await masterDistrict.upsert({
+        id: data.id,
+        cityId: cityId,
+        name: data.name,
+      });
+    } catch (error) {
+      console.error("Error upserting district:", error);
+      throw error;
+    }
+  }
+
+  async syncRajaOngkir() {
+    try {
+      const provinces = await retryRequest(() => fetchProvinces());
+
+      for (const p of provinces) {
+        console.log("Sync province:", p.name);
+        await this.upsertProvince(p);
+        await sleep(5000);
+
+        const cities = await retryRequest(() => fetchCities(p.id));
+        for (const c of cities) {
+          console.log("  Sync city:", c.name);
+          await this.upsertCity(c, p.id);
+          await sleep(5000);
+
+          const districts = await retryRequest(() => fetchDistricts(c.id));
+          for (const d of districts) {
+            console.log("    Sync district:", d.name);
+            await this.upsertDistrict(d, c.id);
+          }
+
+          await sleep(5000); // Respect rate limit
+        }
+      }
+
+      return {
+        status: true,
+        message: "Sync province, city, district berhasil",
+        data: null,
+      };
+    } catch (error) {
+      console.error("Sync RajaOngkir Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  }
+
+  async injectDataRegion() {
+    return await this.syncRajaOngkir();
   }
 }
 
