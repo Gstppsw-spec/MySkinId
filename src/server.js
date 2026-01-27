@@ -1,7 +1,12 @@
 require("dotenv").config();
 const express = require("express");
+const { Server } = require("socket.io");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("../swagger/swagger-output.json");
+const http = require("http");
+const initSocket = require("./socket/socket");
+
+
 
 const authUserRoute = require("./routes/authUserRoute");
 const categoryRoute = require("./routes/master/categoryRoute");
@@ -28,7 +33,6 @@ const likeRoute = require("./routes/social/like.route");
 const commentRoute = require("./routes/social/comment.route");
 const followRoute = require("./routes/social/follow.route");
 
-
 const path = require("path");
 const cors = require("cors");
 
@@ -43,25 +47,22 @@ app.use(
     origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "userid"],
-  })
+  }),
 );
 
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 app.use(
   "/uploads/consultation",
-  express.static(path.join(__dirname, "../uploads/consultation"))
+  express.static(path.join(__dirname, "../uploads/consultation")),
 );
-
 app.use(
   "/uploads/location",
-  express.static(path.join(__dirname, "../uploads/location"))
+  express.static(path.join(__dirname, "../uploads/location")),
 );
-
 app.use(
   "/uploads/posts",
-  express.static(path.join(__dirname, "../uploads/posts"))
+  express.static(path.join(__dirname, "../uploads/posts")),
 );
-
 
 app.use(bodyParser.json());
 app.use("/api/v2/auth", authUserRoute);
@@ -89,8 +90,14 @@ app.use("/api/v2/posts", likeRoute);
 app.use("/api/v2/posts", commentRoute);
 app.use("/api/v2/users", followRoute);
 
+const server = http.createServer(app);
+
+initSocket(server);
+
+// const io = new Server(server, { cors: { origin: "*" } });
+
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-app.listen(process.env.PORT, "0.0.0.0", () =>
-  console.log(`🚀 Server running on port ${process.env.PORT}`)
+server.listen(process.env.PORT, "0.0.0.0", () =>
+  console.log(`🚀 Server running on port ${process.env.PORT}`),
 );

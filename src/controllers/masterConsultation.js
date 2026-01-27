@@ -2,9 +2,19 @@ const response = require("../helpers/response");
 const consultation = require("../services/masterConsultation");
 
 module.exports = {
-  async getRoomByUser(req, res) {
+  async getRoomByUserDoctor(req, res) {
     const user = req.user;
+    // const { id } = req.params;
     const result = await consultation.getRoomByUser(user.id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async getRoomByUser(req, res) {
+    // const user = req.user;
+    const { id } = req.params;
+    const result = await consultation.getRoomByUser(id);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

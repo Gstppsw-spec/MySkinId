@@ -141,6 +141,11 @@ module.exports = {
             as: "consultationImage",
             attributes: ["id"],
           },
+          {
+            model: masterCustomer,
+            as: 'customer',
+            attributes: ['id', 'name']
+          }
         ],
       });
 
