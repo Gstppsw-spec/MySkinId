@@ -29,10 +29,12 @@ const uploadImageConsultation = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-router.use(verifyToken);
+// router.use(verifyToken);
 
 router.get("/room/readyToAssign", consultation.readyToAssign);
+
 router.post("/room", consultation.createRoom);
+
 router.get("/room/user", verifyToken, consultation.getRoomByUserDoctor);
 router.get("/room/user/:id", consultation.getRoomByUser);
 router.get("/room/:id", consultation.getByRoomId);
