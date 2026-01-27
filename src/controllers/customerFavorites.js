@@ -16,6 +16,8 @@ module.exports = {
 
   async updateCustomerFavorites(req, res) {
     try {
+      console.log(req.body);
+      
       const result = await favorites.updateCustomerFavorites(req.body);
       if (!result.status)
         return response.error(res, result.message, result.data);

@@ -4,7 +4,18 @@ const service = require("../services/masterService");
 module.exports = {
   async getAll(req, res) {
     try {
-      const { minPrice, maxPrice, categoryIds } = req.query;
+      const {
+        minPrice,
+        maxPrice,
+        categoryIds,
+        lat,
+        lng,
+        maxDistance,
+        sort,
+        customerId,
+        isCustomer,
+      } = req.query;
+
       const categoryIdsArray = categoryIds
         ? Array.isArray(categoryIds)
           ? categoryIds
@@ -15,20 +26,32 @@ module.exports = {
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
         maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
         categoryIds: categoryIdsArray,
+        userLat: lat ? parseFloat(lat) : undefined,
+        userLng: lng ? parseFloat(lng) : undefined,
+        maxDistance: maxDistance ? parseFloat(maxDistance) : undefined,
+        sort: sort || undefined,
+        customerId: customerId || undefined,
+        isCustomer: isCustomer,
       });
 
-      res.json(result);
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
     } catch (error) {
-      res
-        .status(500)
-        .json({ status: false, message: error.message, data: null });
+      return response.serverError(res, error);
     }
   },
 
   async getById(req, res) {
     try {
       const { id } = req.params;
-      const result = await service.getById(id);
+      const { customerId, lat, lng } = req.query;
+
+      const userLat = lat ? parseFloat(lat) : undefined;
+      const userLng = lng ? parseFloat(lng) : undefined;
+
+      const result = await service.getById(id, customerId, userLat, userLng);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -38,21 +61,9 @@ module.exports = {
   },
 
   async create(req, res) {
-    const data = req.body;
-    const result = await service.create(data, req.file);
-    return res.status(result.status ? 201 : 400).json(result);
-  },
-
-  async update(req, res) {
-    const { id } = req.params;
-    const result = await service.update(id, req.body, req.file);
-    return res.status(result.status ? 200 : 400).json(result);
-  },
-
-  async getByLocationId(req, res) {
     try {
-      const { locationId } = req.params;
-      const result = await service.getByLocationId(locationId);
+      const data = req.body;
+      const result = await service.create(data, req.file);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -61,38 +72,40 @@ module.exports = {
     }
   },
 
-  async getAllCustomer(req, res) {
+  async update(req, res) {
     try {
-      const { minPrice, maxPrice, categoryIds } = req.query;
-      const categoryIdsArray = categoryIds
-        ? Array.isArray(categoryIds)
-          ? categoryIds
-          : [categoryIds]
-        : undefined;
-
-      const { customerId } = req.params;
-
-      const result = await service.getAllCustomer(
-        {
-          minPrice: minPrice ? parseFloat(minPrice) : undefined,
-          maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
-          categoryIds: categoryIdsArray,
-        },
-        customerId
-      );
-
-      res.json(result);
+      const { id } = req.params;
+      const result = await service.update(id, req.body, req.file);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
     } catch (error) {
-      res
-        .status(500)
-        .json({ status: false, message: error.message, data: null });
+      return response.serverError(res, error);
     }
   },
 
-  async getByIdCustomer(req, res) {
+  async getByLocationId(req, res) {
     try {
-      const { id, customerId } = req.params;
-      const result = await service.getByIdCustomer(id, customerId);
+      const { locationId } = req.params;
+      const { customerId, isCustomer } = req.query;
+      const result = await service.getByLocationId(
+        locationId,
+        customerId,
+        isCustomer,
+      );
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getServiceByUser(req, res) {
+    try {
+      const user = req.user;
+      const { customerId, isCustomer } = req.query;
+      const result = await service.getServiceByUser(user);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);

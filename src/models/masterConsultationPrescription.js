@@ -11,24 +11,19 @@ module.exports = (sequelize, DataTypes) => {
         as: "room",
       });
 
-      // Relasi ke customer
-      masterConsultationPrescription.belongsTo(models.masterCustomer, {
-        foreignKey: "customerId",
-        as: "customer",
+      // Relasi ke masterService
+      masterConsultationPrescription.belongsTo(models.masterService, {
+        foreignKey: "refferenceId",
+        constraints: false, // Penting karna refferenceId bisa mengacu ke table lain
+        as: "service",
       });
 
-      // Relasi ke product
-      masterConsultationPrescription.belongsTo(models.masterProduct, {
-        foreignKey: "productId",
-        as: "product",
+      // Relasi ke masterPackage
+      masterConsultationPrescription.belongsTo(models.masterPackage, {
+        foreignKey: "refferenceId",
+        constraints: false, // Penting karna refferenceId bisa mengacu ke table lain
+        as: "package",
       });
-
-      // Jika dokter berasal dari tabel doctor lain,
-      // tambahkan relasinya di sini jika sudah ada model doctor.
-      // masterConsultationPrescription.belongsTo(models.masterDoctor, {
-      //   foreignKey: "doctorId",
-      //   as: "doctor",
-      // });
     }
   }
 
@@ -44,17 +39,19 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      doctorId: {
+      refferenceId: {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      customerId: {
-        type: DataTypes.UUID,
+      refferenceType: {
+        type: DataTypes.STRING,
         allowNull: false,
-      },
-      productId: {
-        type: DataTypes.UUID,
-        allowNull: false,
+        validate: {
+          isIn: {
+            args: [["product", "service", "package"]],
+            msg: "Invalid favorite type",
+          },
+        },
       },
       notes: {
         type: DataTypes.TEXT,

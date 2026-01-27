@@ -26,6 +26,12 @@ module.exports = (sequelize, DataTypes) => {
         as: "location",
         constraints: false,
       });
+
+      customerFavorites.belongsTo(models.masterPackage, {
+        foreignKey: "refferenceId",
+        as: "package",
+        constraints: false,
+      });
     }
   }
 
@@ -49,7 +55,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         validate: {
           isIn: {
-            args: [["product", "service", "location"]],
+            args: [["product", "service", "location", "package"]],
             msg: "Invalid favorite type",
           },
         },

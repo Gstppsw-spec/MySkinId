@@ -42,6 +42,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("text", "image"),
         allowNull: false,
       },
+      isRead: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
+      },
     },
     {
       sequelize,

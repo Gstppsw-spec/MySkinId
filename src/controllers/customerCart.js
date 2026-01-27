@@ -1,0 +1,102 @@
+const response = require("../helpers/response");
+const customerCart = require("../services/customerCart");
+
+module.exports = {
+  async getCustomerCart(req, res) {
+    try {
+      const { customerId } = req.params;
+      const result = await customerCart.getCustomerCart(customerId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async createCustomerCart(req, res) {
+    try {
+      const result = await customerCart.createCustomerCart(req.body);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async deleteCustomerCart(req, res) {
+    try {
+      const { cartId } = req.params;
+      const result = await customerCart.deleteCustomerCart(cartId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async clearCartByRefferenceType(req, res) {
+    try {
+      const { customerId } = req.params;
+      const { refferenceType } = req.body;
+      const result = await customerCart.clearCartByRefferenceType(
+        customerId,
+        refferenceType
+      );
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+    async addQtyCustomerCart(req, res) {
+      try {
+        const result = await customerCart.addQtyCustomerCart(req.body);
+        if (!result.status)
+          return response.error(res, result.message, result.data);
+        return response.success(res, result.message, result.data);
+      } catch (error) {
+        return response.serverError(res, error);
+      }
+    },
+
+    async reduceQtyCustomerCart(req, res) {
+      try {
+        const result = await customerCart.reduceQtyCustomerCart(req.body);
+        if (!result.status)
+          return response.error(res, result.message, result.data);
+        return response.success(res, result.message, result.data);
+      } catch (error) {
+        return response.serverError(res, error);
+      }
+    },
+
+    async selectCustomerCart(req, res) {
+      try {
+        const { cartId } = req.params;
+        const result = await customerCart.selectCustomerCart(cartId);
+        if (!result.status)
+          return response.error(res, result.message, result.data);
+        return response.success(res, result.message, result.data);
+      } catch (error) {
+        return response.serverError(res, error);
+      }
+    },
+
+    async selectAllCustomerCartByRefferenceType(req, res) {
+      try {
+        const { customerId } = req.params;
+        const { refferenceType } = req.body;
+        const result = await customerCart.selectAllCustomerCartByRefferenceType(customerId, refferenceType);
+        if (!result.status)
+          return response.error(res, result.message, result.data);
+        return response.success(res, result.message, result.data);
+      } catch (error) {
+        return response.serverError(res, error);
+      }
+    },
+};
