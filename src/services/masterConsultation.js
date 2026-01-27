@@ -205,6 +205,23 @@ module.exports = {
     }
   },
 
+  async setMessageRead(roomId) {
+    try {
+      await masterConsultationMessage.update(
+        { isRead: true },
+        {
+          where: {
+            roomId: roomId,
+            isRead: false,
+          },
+        }
+      );
+      return { status: true, message: "Success", data: null };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
   async getMessagesByRoomId({ roomId, cursor, limit }) {
     try {
       const where = { roomId };

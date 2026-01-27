@@ -87,7 +87,7 @@ class masterLocationController {
   async getLocationByUser(req, res) {
     const user = req.user;
     console.log(user);
-    
+
     const location = await masterLocationService.getLocationByUser(user);
     return location.status
       ? response.success(res, location.message, location.data)
@@ -116,6 +116,38 @@ class masterLocationController {
     return location.status
       ? response.success(res, location.message, location.data)
       : response.error(res, location.message, null);
+  }
+
+  async getCityByLatitudeLongitude(req, res) {
+    const { latitude, longitude } = req.query;
+    const result = await masterLocationService.getCityByLatitudeLongitude(
+      latitude,
+      longitude
+    );
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async getDistrictByLatitudeLongitude(req, res) {
+    const { latitude, longitude } = req.query;
+    const result = await masterLocationService.getDistrictByLatitudeLongitude(
+      latitude,
+      longitude
+    );
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async injectDataRegion(req, res) {
+    // Note: Usually we would have some auth check or API key here, but user asked for public endpoint usage logic.
+    // Assuming this is an admin feature, but strict requirement "endpoint that uses axios to inject".
+    const result = await masterLocationService.injectDataRegion();
+
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
   }
 }
 

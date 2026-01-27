@@ -28,12 +28,15 @@ const uploadImageConsultation = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
 });
-router.get("/room/readyToAssign", verifyToken, consultation.readyToAssign);
+
+router.use(verifyToken);
+
+router.get("/room/readyToAssign", consultation.readyToAssign);
 router.post("/room", consultation.createRoom);
 router.get("/room/user", verifyToken, consultation.getRoomByUserDoctor);
 router.get("/room/user/:id", consultation.getRoomByUser);
 router.get("/room/:id", consultation.getByRoomId);
-router.put("/room/:id/join", verifyToken, consultation.assignDoctor);
+router.put("/room/:id/join", consultation.assignDoctor);
 router.put("/room/:id/close", consultation.closeRoom);
 
 router.post("/room/:id/message", consultation.addMessage);
@@ -42,6 +45,7 @@ router.post(
   uploadImageConsultation.array("images", 10),
   consultation.addMessage,
 );
+router.put("/room/:id/message/read", consultation.readMessage);
 router.get("/room/:id/messages", consultation.getMessagesByRoomId);
 router.get("/room/:id/media", consultation.getMediaByRoomId);
 

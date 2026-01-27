@@ -74,6 +74,14 @@ module.exports = {
       : response.error(res, result.message, null);
   },
 
+  async readMessage(req, res) {
+    const { id } = req.params;
+    const result = await consultation.setMessageRead(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
   async getMessagesByRoomId(req, res) {
     try {
       const { id } = req.params;
