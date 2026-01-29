@@ -33,8 +33,8 @@ router.use(verifyToken);
 
 router.get("/room/readyToAssign", consultation.readyToAssign);
 router.post("/room", consultation.createRoom);
-router.get("/room/user", consultation.getRoomByUser);
-// router.get("/room/user/:id", consultation.getRoomByUser);
+router.get("/room/user", verifyToken, consultation.getRoomByUserDoctor);
+router.get("/room/user/:id", consultation.getRoomByUser);
 router.get("/room/:id", consultation.getByRoomId);
 router.put("/room/:id/join", consultation.assignDoctor);
 router.put("/room/:id/close", consultation.closeRoom);
