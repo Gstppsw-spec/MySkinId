@@ -10,8 +10,75 @@ const {
 class RequestVerificationService {
     async create(data) {
         try {
-            console.log(data);
             const { refferenceId, refferenceType, note } = data;
+
+            const allowedTypes = ["location", "company", "product", "service", "package"];
+
+            if (!allowedTypes.includes(refferenceType)) {
+                return {
+                    status: false,
+                    message: "Reference type tidak valid",
+                    data: null,
+                };
+            }
+
+            if (refferenceType === "location") {
+                const location = await masterLocation.findByPk(refferenceId);
+                if (!location)
+                    return {
+                        status: false,
+                        message: "Location tidak ditemukan",
+                        data: null,
+                    };
+            } else if (refferenceType === "company") {
+                const company = await masterCompany.findByPk(refferenceId);
+                if (!company)
+                    return {
+                        status: false,
+                        message: "Company tidak ditemukan",
+                        data: null,
+                    };
+            } else if (refferenceType === "product") {
+                const product = await masterProduct.findByPk(refferenceId);
+                if (!product)
+                    return {
+                        status: false,
+                        message: "Product tidak ditemukan",
+                        data: null,
+                    };
+            } else if (refferenceType === "service") {
+                const service = await masterService.findByPk(refferenceId);
+                if (!service)
+                    return {
+                        status: false,
+                        message: "Service tidak ditemukan",
+                        data: null,
+                    };
+            } else if (refferenceType === "package") {
+                const paket = await masterPackage.findByPk(refferenceId);
+                if (!paket)
+                    return {
+                        status: false,
+                        message: "Package tidak ditemukan",
+                        data: null,
+                    };
+            }
+
+            const checkRequest = await requestVerification.findOne({
+                where: {
+                    refferenceId,
+                    refferenceType,
+                    status: ["pending", "approved"],
+                },
+            });
+
+            if (checkRequest)
+                return {
+                    status: false,
+                    message: "Request sudah ada",
+                    data: null,
+                };
+
             const result = await requestVerification.create({
                 refferenceId,
                 refferenceType,
@@ -101,6 +168,12 @@ class RequestVerificationService {
                     paket.isVerified = true;
                     paket.verifiedDate = new Date();
                     await paket.save();
+                } else {
+                    return {
+                        status: false,
+                        message: "Refference type tidak valid",
+                        data: null,
+                    };
                 }
             } else if (data.status === "rejected") {
                 if (request.refferenceType === "location") {
@@ -128,6 +201,12 @@ class RequestVerificationService {
                     paket.isVerified = false;
                     paket.verifiedDate = null;
                     await paket.save();
+                } else {
+                    return {
+                        status: false,
+                        message: "Refference type tidak valid",
+                        data: null,
+                    };
                 }
             }
 
