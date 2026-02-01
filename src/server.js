@@ -75,6 +75,7 @@ app.use("/api/v2/verification/company", companyVerificationRoute);
 app.use("/api/v2/verification/location", locationVerificationRoute);
 app.use("/api/v2/location", locationRoute);
 app.use("/api/v2/auth-customer", customerRoute);
+app.use("/api/v2/customer", customerRoute);
 app.use("/api/v2/service", serviceRoute);
 app.use("/api/v2/consultation", consultationRoute);
 app.use("/api/v2/cart", orderCartRoute);

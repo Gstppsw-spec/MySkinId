@@ -12,6 +12,9 @@ router.post("/", postController.upload, postController.createPost);
 // Get personalized feed
 router.get("/feed", postController.getFeed);
 
+// Get blocked posts
+router.get("/blocked", postController.getBlockedPosts);
+
 // Get a single post
 router.get("/:postId", postController.getPost);
 
@@ -20,5 +23,14 @@ router.delete("/:postId", postController.deletePost);
 
 // Get posts by a specific user
 router.get("/user/:userId", postController.getUserPosts);
+
+// Block a post
+router.post("/:postId/block", postController.blockPost);
+
+// Unblock a post
+router.delete("/:postId/unblock", postController.unblockPost);
+
+// Report a post
+router.post("/:postId/report", postController.reportPost);
 
 module.exports = router;
