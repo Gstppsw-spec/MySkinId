@@ -244,6 +244,17 @@ class masterCustomerService {
     const customerData = customer.toJSON();
     customerData.jwtToken = jwtToken;
 
+    // Remove sensitive fields
+    delete customerData.googleId;
+    delete customerData.loginMethod;
+    delete customerData.password;
+    delete customerData.emailVerified;
+    delete customerData.phoneVerified;
+    delete customerData.otpCode;
+    delete customerData.otpType;
+    delete customerData.otpExpiredAt;
+    delete customerData.lastLoginAt;
+
     return {
       status: true,
       message: "Verifikasi berhasil",
@@ -365,7 +376,22 @@ class masterCustomerService {
 
   async getCustomerByUsername(username) {
     try {
-      const customers = await masterCustomer.findAll({ where: { username: { [Op.like]: `%${username}%` } } });
+      const customers = await masterCustomer.findAll({
+        where: { username: { [Op.like]: `%${username}%` } },
+        attributes: {
+          exclude: [
+            "googleId",
+            "loginMethod",
+            "password",
+            "emailVerified",
+            "phoneVerified",
+            "otpCode",
+            "otpType",
+            "otpExpiredAt",
+            "lastLoginAt"
+          ],
+        },
+      });
 
       return {
         status: true,
@@ -393,10 +419,26 @@ class masterCustomerService {
 
       await customer.update({ name, email, phoneNumber, username });
 
+      const updatedCustomer = await masterCustomer.findByPk(customerId, {
+        attributes: {
+          exclude: [
+            "googleId",
+            "loginMethod",
+            "password",
+            "emailVerified",
+            "phoneVerified",
+            "otpCode",
+            "otpType",
+            "otpExpiredAt",
+            "lastLoginAt"
+          ],
+        },
+      });
+
       return {
         status: true,
         message: "Profile berhasil diperbarui",
-        data: customer,
+        data: updatedCustomer,
       };
     } catch (error) {
       return {
@@ -408,7 +450,21 @@ class masterCustomerService {
 
   async getProfile(customerId) {
     try {
-      const customer = await masterCustomer.findByPk(customerId);
+      const customer = await masterCustomer.findByPk(customerId, {
+        attributes: {
+          exclude: [
+            "googleId",
+            "loginMethod",
+            "password",
+            "emailVerified",
+            "phoneVerified",
+            "otpCode",
+            "otpType",
+            "otpExpiredAt",
+            "lastLoginAt"
+          ],
+        },
+      });
       if (!customer)
         return { status: false, message: "Customer tidak ditemukan" };
 
