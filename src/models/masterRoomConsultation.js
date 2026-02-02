@@ -26,6 +26,18 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
+      locationId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      latitude: {
+        type: DataTypes.DECIMAL(10, 7),
+        allowNull: true,
+      },
+      longitude: {
+        type: DataTypes.DECIMAL(10, 7),
+        allowNull: true,
+      },
       status: {
         type: DataTypes.STRING(20),
         allowNull: false,
@@ -39,7 +51,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "masterRoomConsultation",
       timestamps: true,
-    }
+    },
   );
 
   // ============================
@@ -54,6 +66,20 @@ module.exports = (sequelize, DataTypes) => {
     masterRoomConsultation.belongsTo(models.masterCustomer, {
       foreignKey: "customerId",
       as: "customer",
+    });
+
+    masterRoomConsultation.belongsTo(models.masterLocation, {
+      foreignKey: "locationId",
+      as: "location",
+    });
+
+    masterRoomConsultation.hasMany(models.masterConsultationImage, {
+      foreignKey: "roomId",
+      as: "consultationImage",
+    });
+    masterRoomConsultation.hasMany(models.masterConsultationMessage, {
+      foreignKey: "roomId",
+      as: "consultationMessage",
     });
   };
 

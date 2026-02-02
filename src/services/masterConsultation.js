@@ -4,6 +4,10 @@ const {
   masterConsultationCategory,
   masterConsultationMessage,
   masterConsultationPrescription,
+  relationshipUserLocation,
+  masterProduct,
+  masterLocation,
+  masterCustomer,
 } = require("../models");
 
 const { Op, Sequelize, where } = require("sequelize");
@@ -23,6 +27,19 @@ module.exports = {
             model: masterConsultationCategory,
             as: "consultationCategory",
           },
+          {
+            model: masterConsultationMessage,
+            as: "consultationMessage",
+            separate: true,
+            limit: 1,
+            order: [["createdAt", "DESC"]],
+            attributes: ["message", "createdAt"],
+          },
+          {
+            model: masterCustomer,
+            as: 'customer',
+            attributes: ['id', 'name']
+          }
         ],
       });
 
@@ -34,7 +51,13 @@ module.exports = {
 
   async createRoom(data) {
     try {
-      const { customerId, consultationCategoryId } = data;
+      const {
+        customerId,
+        consultationCategoryId,
+        locationId,
+        latitude,
+        longitude,
+      } = data;
 
       if (!customerId) {
         return { status: false, message: "Customer tidak boleh kosong" };
@@ -56,6 +79,9 @@ module.exports = {
         status: "pending",
         consultationCategoryId,
         expiredAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        locationId,
+        latitude,
+        longitude,
       });
 
       return { status: true, message: "Success", data: room };
@@ -64,20 +90,15 @@ module.exports = {
     }
   },
 
-  async assignDoctor(data, roomId) {
+  async assignDoctor({ id: doctorId }, roomId) {
     try {
-      const { doctorId } = data;
       const room = await masterRoomConsultation.findByPk(roomId);
-
       if (!room) {
         return { status: false, message: "Tidak ada room ditemukan" };
       }
-
       room.doctorId = doctorId;
       room.status = "open";
-
-      await room.save;
-
+      await room.save();
       return {
         status: true,
         message: "Berhasil masuk ke room chat",
@@ -115,10 +136,36 @@ module.exports = {
             model: masterConsultationCategory,
             as: "consultationCategory",
           },
+          {
+            model: masterConsultationImage,
+            as: "consultationImage",
+            attributes: ["id"],
+          },
+          {
+            model: masterCustomer,
+            as: 'customer',
+            attributes: ['id', 'name']
+          }
         ],
       });
 
-      return { status: true, message: "Success", data: room };
+      if (!room) {
+        return { status: false, message: "Room tidak ditemukan", data: null };
+      }
+
+      const imageCount = room.consultationImage
+        ? room.consultationImage.length
+        : 0;
+      const isScanning = room.doctorId === null && imageCount >= 3;
+      return {
+        status: true,
+        message: "Success",
+        data: {
+          ...room.toJSON(),
+          imageCount,
+          isScanning,
+        },
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
@@ -158,17 +205,53 @@ module.exports = {
     }
   },
 
-  async getMessagesByRoomId(roomId) {
+  async setMessageRead(roomId) {
     try {
-      const message = await masterConsultationMessage.findAll({
-        where: { roomId: roomId },
-        include: [{ model: masterConsultationImage, as: "consultationImage" }],
-        order: [["createdAt", "ASC"]],
-      });
-
-      return { status: true, message: "Berhasil", data: message };
+      await masterConsultationMessage.update(
+        { isRead: true },
+        {
+          where: {
+            roomId: roomId,
+            isRead: false,
+          },
+        }
+      );
+      return { status: true, message: "Success", data: null };
     } catch (error) {
       return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getMessagesByRoomId({ roomId, cursor, limit }) {
+    try {
+      const where = { roomId };
+      if (cursor) {
+        where.createdAt = {
+          [Op.lt]: new Date(cursor),
+        };
+      }
+      const messages = await masterConsultationMessage.findAll({
+        where,
+        include: [
+          {
+            model: masterConsultationImage,
+            as: "consultationImage",
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+        limit,
+      });
+      return {
+        status: true,
+        message: "Berhasil",
+        data: messages,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
     }
   },
 
@@ -184,9 +267,85 @@ module.exports = {
     }
   },
 
+  async getAllReadyToAssign(userId, role) {
+    try {
+      let locationIncludeOptions = {
+        model: masterLocation,
+        as: "location",
+        attributes: ["id", "name"],
+        required: false,
+      };
+
+      if (role === "OUTLET_DOCTORR") {
+        const userLocations = await relationshipUserLocation.findAll({
+          where: {
+            userId: userId,
+            isactive: true,
+          },
+          attributes: ["locationId"],
+        });
+
+        const locationIds = userLocations.map((ul) => ul.locationId);
+        if (locationIds.length === 0) {
+          return { status: true, message: "Success", data: [] };
+        }
+
+        locationIncludeOptions = {
+          ...locationIncludeOptions,
+          required: true,
+          where: {
+            id: { [Op.in]: locationIds },
+          },
+        };
+      }
+      const hasMinThreeImages = Sequelize.literal(`
+      EXISTS (
+        SELECT 1
+        FROM masterConsultationImage mci
+        WHERE mci.roomId = masterRoomConsultation.id
+        GROUP BY mci.roomId
+        HAVING COUNT(1) >= 3
+      )
+    `);
+      const rooms = await masterRoomConsultation.findAll({
+        attributes: ["id", "roomCode", "customerId", "status", "createdAt"],
+        where: {
+          status: "pending",
+          [Op.and]: [hasMinThreeImages],
+        },
+        include: [
+          {
+            model: masterConsultationCategory,
+            as: "consultationCategory",
+            attributes: ["name"],
+          },
+          locationIncludeOptions,
+          {
+            model: masterCustomer,
+            as: "customer",
+            attributes: ["name"],
+          },
+          {
+            model: masterConsultationImage,
+            as: "consultationImage",
+            attributes: ["imageUrl"],
+          },
+        ],
+        order: [["createdAt", "ASC"]],
+      });
+
+      return { status: true, message: "Success", data: rooms };
+    } catch (error) {
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
+    }
+  },
   async addPrescription(data) {
     try {
-      const { roomId, doctorId, customerId, productId, notes } = data;
+      const { roomId, refferenceId, refferenceType, notes } = data;
 
       if (!roomId || !notes) {
         return {
@@ -198,10 +357,9 @@ module.exports = {
 
       const prescription = await masterConsultationPrescription.create({
         roomId,
-        productId,
         notes,
-        customerId,
-        doctorId,
+        refferenceId,
+        refferenceType,
       });
 
       return { status: true, message: "Berhasil", data: prescription };

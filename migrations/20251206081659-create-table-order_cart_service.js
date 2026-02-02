@@ -19,7 +19,6 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-
       serviceId: {
         type: Sequelize.UUID,
         allowNull: false,

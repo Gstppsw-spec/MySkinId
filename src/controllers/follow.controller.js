@@ -1,0 +1,148 @@
+const followService = require("../services/follow.service");
+
+class FollowController {
+    /**
+     * Follow a user
+     * POST /users/:userId/follow
+     */
+    async followUser(req, res) {
+        try {
+            const followerId = req.user.id;
+            const { userId: followingId } = req.params;
+
+            const result = await followService.followUser(followerId, followingId);
+
+            res.status(200).json({
+                success: true,
+                message: result.message,
+                data: {
+                    alreadyFollowing: result.alreadyFollowing,
+                },
+            });
+        } catch (error) {
+            console.error("Follow user error:", error);
+            const statusCode =
+                error.message === "User not found"
+                    ? 404
+                    : error.message === "You cannot follow yourself"
+                        ? 400
+                        : 500;
+            res.status(statusCode).json({
+                success: false,
+                message: error.message || "Failed to follow user",
+            });
+        }
+    }
+
+    /**
+     * Unfollow a user
+     * DELETE /users/:userId/follow
+     */
+    async unfollowUser(req, res) {
+        try {
+            const followerId = req.user.id;
+            const { userId: followingId } = req.params;
+
+            const result = await followService.unfollowUser(followerId, followingId);
+
+            res.status(200).json({
+                success: true,
+                message: result.message,
+                data: {
+                    wasFollowing: result.wasFollowing,
+                },
+            });
+        } catch (error) {
+            console.error("Unfollow user error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to unfollow user",
+            });
+        }
+    }
+
+    /**
+     * Get followers of a user
+     * GET /users/:userId/followers
+     */
+    async getFollowers(req, res) {
+        try {
+            const { userId } = req.params;
+            const limit = parseInt(req.query.limit) || 20;
+            const offset = parseInt(req.query.offset) || 0;
+
+            const followers = await followService.getFollowers(userId, limit, offset);
+
+            res.status(200).json({
+                success: true,
+                data: followers,
+                pagination: {
+                    limit,
+                    offset,
+                    count: followers.length,
+                },
+            });
+        } catch (error) {
+            console.error("Get followers error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to fetch followers",
+            });
+        }
+    }
+
+    /**
+     * Get users that a user is following
+     * GET /users/:userId/following
+     */
+    async getFollowing(req, res) {
+        try {
+            const { userId } = req.params;
+            const limit = parseInt(req.query.limit) || 20;
+            const offset = parseInt(req.query.offset) || 0;
+
+            const following = await followService.getFollowing(userId, limit, offset);
+
+            res.status(200).json({
+                success: true,
+                data: following,
+                pagination: {
+                    limit,
+                    offset,
+                    count: following.length,
+                },
+            });
+        } catch (error) {
+            console.error("Get following error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to fetch following",
+            });
+        }
+    }
+
+    /**
+     * Get follow statistics
+     * GET /users/:userId/stats
+     */
+    async getFollowStats(req, res) {
+        try {
+            const { userId } = req.params;
+
+            const stats = await followService.getFollowStats(userId);
+
+            res.status(200).json({
+                success: true,
+                data: stats,
+            });
+        } catch (error) {
+            console.error("Get follow stats error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to fetch follow stats",
+            });
+        }
+    }
+}
+
+module.exports = new FollowController();

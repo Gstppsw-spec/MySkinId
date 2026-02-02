@@ -4,6 +4,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const axios = require("axios");
 const nodemailer = require("nodemailer");
+const { Op } = require("sequelize");
+
 
 const JWT_SECRET = process.env.JWT_SECRET || "yourSecretKey";
 const API_KEY_WHATSAPP = process.env.API_KEY_WHATSAPP;
@@ -232,11 +234,11 @@ class masterCustomerService {
     customer.otpType = null;
     customer.otpExpiresAt = null;
 
-    const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    // const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
+    //   expiresIn: "7d",
+    // });
 
-    customer.jwtToken = jwtToken;
+    // customer.jwtToken = jwtToken;
     await customer.save();
 
     return {
@@ -349,6 +351,68 @@ class masterCustomerService {
         data: {
           customerId: customer.id,
         },
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error,
+      };
+    }
+  }
+
+  async getCustomerByUsername(username) {
+    try {
+      const customers = await masterCustomer.findAll({ where: { username: { [Op.like]: `%${username}%` } } });
+
+      return {
+        status: true,
+        message: "Customer ditemukan",
+        data: customers,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error,
+      };
+    }
+  }
+
+  async updateProfile(customerId, data) {
+    try {
+      const { name, email, phoneNumber, username } = data;
+      const customer = await masterCustomer.findByPk(customerId);
+      if (!customer)
+        return { status: false, message: "Customer tidak ditemukan" };
+
+      const usernameExists = await masterCustomer.findOne({ where: { username } });
+      if (usernameExists && usernameExists.id !== customerId)
+        return { status: false, message: "Username sudah digunakan" };
+
+      await customer.update({ name, email, phoneNumber, username });
+
+      return {
+        status: true,
+        message: "Profile berhasil diperbarui",
+        data: customer,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error,
+      };
+    }
+  }
+
+  async getProfile(customerId) {
+    try {
+      const customer = await masterCustomer.findByPk(customerId);
+      if (!customer)
+        return { status: false, message: "Customer tidak ditemukan" };
+
+      return {
+        status: true,
+        message: "Profile berhasil ditemukan",
+        data: customer,
       };
     } catch (error) {
       return {

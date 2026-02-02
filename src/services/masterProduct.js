@@ -1,32 +1,57 @@
+const { log } = require("console");
 const {
   masterProduct,
   masterProductCategory,
   masterConsultationCategory,
-  relationshipProductCategory,
-  relationshipProductConsultationCategory,
   masterGroupProduct,
   masterProductImage,
   customerFavorites,
+  masterLocation,
+  masterLocationImage
 } = require("../models");
-
 const fs = require("fs");
-const path = require("path");
-
 const { Op, Sequelize } = require("sequelize");
 
 module.exports = {
   async getAll(filters = {}) {
     try {
-      const { minPrice, maxPrice, categoryIds } = filters;
-      const where = { isActive: true };
+      const {
+        minPrice,
+        maxPrice,
+        categoryIds,
+        userLat,
+        userLng,
+        maxDistance,
+        sort,
+        customerId,
+        isCustomer,
+      } = filters;
+
+      const where = {};
+
+      if (isCustomer == 1 || isCustomer == "1") {
+        where.isActive = true;
+      }
 
       if (minPrice !== undefined || maxPrice !== undefined) {
-        where[Op.and] = Sequelize.literal(
-          `(price - (price * discountPercent / 100)) BETWEEN ${
-            minPrice || 0
-          } AND ${maxPrice || 9999999}`
-        );
+        where[Op.and] = Sequelize.literal(`
+        (price - (price * discountPercent / 100))
+        BETWEEN ${minPrice || 0} AND ${maxPrice || 9999999}
+      `);
       }
+
+      const distanceLiteral =
+        userLat && userLng
+          ? Sequelize.literal(`
+            6371 * acos(
+              cos(radians(${userLat})) *
+              cos(radians(CAST(location.latitude AS FLOAT))) *
+              cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+              sin(radians(${userLat})) *
+              sin(radians(CAST(location.latitude AS FLOAT)))
+            )
+          `)
+          : null;
 
       const include = [
         {
@@ -35,66 +60,220 @@ module.exports = {
           through: { attributes: [] },
           where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
           required: !!categoryIds,
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterConsultationCategory,
           as: "consultationCategories",
           through: { attributes: [] },
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterGroupProduct,
           as: "groupProduct",
           through: { attributes: [] },
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterProductImage,
           as: "images",
+          attributes: ["id", "imageUrl"],
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: [
+            "id",
+            "name",
+            "latitude",
+            "longitude",
+            ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
+          ],
+          required: !!(userLat && userLng),
+          ...(distanceLiteral && maxDistance
+            ? {
+                where: Sequelize.where(distanceLiteral, {
+                  [Op.lte]: maxDistance,
+                }),
+              }
+            : {}),
         },
       ];
+
+      let order = [["name", "ASC"]];
+
+      if (sort === "distance" && distanceLiteral) {
+        order = [[distanceLiteral, "ASC"]];
+      }
+
+      if (sort === "price") {
+        order = [
+          [
+            Sequelize.literal("(price - (price * discountPercent / 100))"),
+            "ASC",
+          ],
+        ];
+      }
+
+      if (sort === "rating") {
+        order = [["ratingAvg", "DESC"]];
+      }
+
+      if (!sort || sort === "recommendation") {
+        order = [];
+        if (distanceLiteral) {
+          order.push([distanceLiteral, "ASC"]);
+        }
+        order.push(["ratingAvg", "DESC"]);
+        order.push(["name", "ASC"]);
+      }
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: {
+            customerId,
+            favoriteType: "product",
+          },
+          required: false,
+        });
+      }
 
       const products = await masterProduct.findAll({
         where,
         include,
-        order: [["name", "ASC"]],
+        order,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
       });
 
-      return { status: true, message: "Success", data: products };
+      if (!products) {
+        return { status: false, message: "Product not found", data: null };
+      }
+
+      const result = products.map((prod) => {
+        const plain = prod.get({ plain: true });
+        return {
+          ...plain,
+          isFavorite: customerId
+            ? plain.favorites && plain.favorites.length > 0
+            : false,
+          favorites: undefined,
+        };
+      });
+
+      return {
+        status: true,
+        message: "Success",
+        data: result,
+      };
     } catch (error) {
-      return { status: false, message: error.message, data: null };
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
     }
   },
 
-  async getById(id) {
+  async getById(id, customerId, userLat, userLng) {
     try {
+      const distanceLiteral =
+        userLat && userLng
+          ? Sequelize.literal(`
+            6371 * acos(
+              cos(radians(${userLat})) *
+              cos(radians(CAST(location.latitude AS FLOAT))) *
+              cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+              sin(radians(${userLat})) *
+              sin(radians(CAST(location.latitude AS FLOAT)))
+            )
+          `)
+          : null;
+
+      const include = [
+        {
+          model: masterProductCategory,
+          as: "categories",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterConsultationCategory,
+          as: "consultationCategories",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterGroupProduct,
+          as: "groupProduct",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterProductImage,
+          as: "images",
+          attributes: ["id", "imageUrl"],
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: [
+            "id",
+            "name",
+            "latitude",
+            "district",
+            "longitude",
+            ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
+          ],
+           include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+              attributes: ["id", "imageUrl"],
+              limit: 1,
+              separate: true,
+            },
+          ],
+          required: !!(userLat && userLng),
+        },
+      ];
+
+      if (customerId) {
+        include.push({
+          model: customerFavorites,
+          as: "favorites",
+          attributes: ["id"],
+          where: {
+            customerId,
+            favoriteType: "product",
+          },
+          required: false,
+        });
+      }
+
       const product = await masterProduct.findByPk(id, {
-        include: [
-          {
-            model: masterProductCategory,
-            as: "categories",
-            through: { attributes: [] },
-          },
-          {
-            model: masterConsultationCategory,
-            as: "consultationCategories",
-            through: { attributes: [] },
-          },
-          {
-            model: masterGroupProduct,
-            as: "groupProduct",
-            through: { attributes: [] },
-          },
-          {
-            model: masterProductImage,
-            as: "images",
-          },
-        ],
+        include,
       });
 
       if (!product) {
         return { status: false, message: "Product not found", data: null };
       }
 
-      return { status: true, message: "Success", data: product };
+      const plain = product.get({ plain: true });
+
+      return {
+        status: true,
+        message: "Success",
+        data: {
+          ...plain,
+          isFavorite: plain.favorites?.length > 0 || false,
+          favorites: undefined,
+        },
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
@@ -144,6 +323,11 @@ module.exports = {
         rulesOfUse: data.rulesOfUse || null,
         attention: data.attention || null,
         packaging: data.packaging || null,
+        locationId: data.locationId || null,
+        weightGram: data.weightGram || null,
+        lengthCm: data.lengthCm || null,
+        widthCm: data.widthCm || null,
+        heightCm: data.heightCm || null,
       });
 
       if (files && files.length > 0) {
@@ -168,7 +352,7 @@ module.exports = {
         Array.isArray(data.consultationCategoryIds)
       ) {
         await newProduct.setConsultationCategories(
-          data.consultationCategoryIds
+          data.consultationCategoryIds,
         );
       }
 
@@ -178,7 +362,6 @@ module.exports = {
         data: newProduct,
       };
     } catch (error) {
-      console.error("CREATE ERROR:", error.errors || error);
       return { status: false, message: error.message, data: null };
     }
   },
@@ -223,6 +406,23 @@ module.exports = {
 
       product.packaging =
         data.packaging !== undefined ? data.packaging : product.packaging;
+
+      product.locationId =
+        data.locationId !== undefined ? data.locationId : product.locationId;
+
+      product.weightGram =
+        data.weightGram !== undefined
+          ? Number(data.weightGram)
+          : product.weightGram;
+
+      product.lengthCm =
+        data.lengthCm !== undefined ? Number(data.lengthCm) : product.lengthCm;
+
+      product.widthCm =
+        data.widthCm !== undefined ? Number(data.widthCm) : product.widthCm;
+
+      product.heightCm =
+        data.heightCm !== undefined ? Number(data.heightCm) : product.heightCm;
 
       await product.save();
 
@@ -284,45 +484,42 @@ module.exports = {
     }
   },
 
-  async getAllByCustomer(filters = {}, customerId = null) {
+  async getByLocationId(customerId, locationId, isCustomer) {
     try {
-      const { minPrice, maxPrice, categoryIds } = filters;
+      const where = {};
 
-      const where = { isActive: true };
-
-      if (minPrice !== undefined || maxPrice !== undefined) {
-        where[Op.and] = Sequelize.literal(
-          `(price - (price * discountPercent / 100)) BETWEEN ${
-            minPrice || 0
-          } AND ${maxPrice || 9999999}`
-        );
+      if (isCustomer == 1 || isCustomer == "1") {
+        where.isActive = true;
       }
+
+      where.locationId = locationId;
 
       const include = [
         {
           model: masterProductCategory,
           as: "categories",
           through: { attributes: [] },
-          where: categoryIds ? { id: { [Op.in]: categoryIds } } : undefined,
-          required: !!categoryIds,
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterConsultationCategory,
           as: "consultationCategories",
           through: { attributes: [] },
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterGroupProduct,
           as: "groupProduct",
           through: { attributes: [] },
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterProductImage,
           as: "images",
+          attributes: ["id", "imageUrl"],
         },
       ];
 
-      // ➕ Jika ada customerId → tambahkan relasi favorites
       if (customerId) {
         include.push({
           model: customerFavorites,
@@ -335,16 +532,21 @@ module.exports = {
           required: false,
         });
       }
-
       const products = await masterProduct.findAll({
         where,
         include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
         order: [["name", "ASC"]],
       });
 
+      if (!products) {
+        return { status: false, message: "Product not found", data: null };
+      }
+
       const result = products.map((prod) => {
         const plain = prod.get({ plain: true });
-
         return {
           ...plain,
           isFavorite: customerId
@@ -354,69 +556,83 @@ module.exports = {
         };
       });
 
-      return { status: true, message: "Success", data: result };
+      return {
+        status: true,
+        message: "Success",
+        data: result,
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
   },
-  async getByIdCustomer(id, customerId = null) {
+
+  async getProductByUser({ roleCode, locationIds }) {
     try {
       const include = [
         {
           model: masterProductCategory,
           as: "categories",
           through: { attributes: [] },
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterConsultationCategory,
           as: "consultationCategories",
           through: { attributes: [] },
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterGroupProduct,
           as: "groupProduct",
           through: { attributes: [] },
+          attributes: ["id", "name", "description"],
         },
         {
           model: masterProductImage,
           as: "images",
+          attributes: ["id", "imageUrl"],
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: ["id", "name"],
         },
       ];
 
-      if (customerId) {
-        include.push({
-          model: customerFavorites,
-          as: "favorites",
-          attributes: ["id"],
-          where: {
-            customerId,
-            favoriteType: "product",
+      if (roleCode === "SUPER_ADMIN") {
+        const product = await masterProduct.findAll({
+          include,
+          attributes: {
+            exclude: ["createdAt", "updatedAt"],
           },
-          required: false,
         });
+
+        return {
+          status: true,
+          message: "Success",
+          data: product,
+        };
       }
 
-      const product = await masterProduct.findByPk(id, {
+      const product = await masterProduct.findAll({
         include,
+        attributes: {
+          exclude: ["createdAt", "updatedAt"],
+        },
+        where: {
+          locationId: {
+            [Op.in]: locationIds,
+          },
+        },
       });
-
-      if (!product) {
-        return { status: false, message: "Product not found", data: null };
-      }
-
-      const plain = product.get({ plain: true });
 
       return {
         status: true,
         message: "Success",
-        data: {
-          ...plain,
-          isFavorite: plain.favorites.length > 0 || false,
-          favorites: undefined,
-        },
+        data: product,
       };
     } catch (error) {
-      return { status: false, message: error.message, data: null };
+      return { status: false, message: error.message };
     }
   },
 };

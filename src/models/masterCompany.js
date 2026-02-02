@@ -104,7 +104,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
-      verifiedDate: DataTypes.DATE
+      verifiedDate: DataTypes.DATE,
     },
     {
       sequelize,
@@ -112,7 +112,7 @@ module.exports = (sequelize, DataTypes) => {
       tableName: "masterCompany",
       timestamps: true,
       paranoid: true, // aktifkan soft delete berdasarkan deletedAt
-    }
+    },
   );
 
   return masterCompany;

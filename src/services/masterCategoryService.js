@@ -8,8 +8,12 @@ module.exports = {
     try {
       const mainCategoryService = await masterMainCategoryService.findAll({
         order: [["name", "ASC"]],
+        include: {
+          model: masterSubCategoryService,
+          attribute: ['id', 'name', 'description'],
+          as: 'subServiceCategory'
+        }
       });
-
       return {
         status: true,
         message: "Berhasil fetch main category service",
@@ -37,7 +41,6 @@ module.exports = {
       if (!data.name || data.name.trim() === "") {
         return { status: false, message: "Name is required", data: null };
       }
-
       const existing = await masterMainCategoryService.findOne({
         where: { name: data.name },
       });
@@ -115,10 +118,9 @@ module.exports = {
       const subCategoryService = await masterSubCategoryService.findAll({
         order: [["name", "ASC"]],
       });
-
       return {
         status: true,
-        message: "Berhasil fetch sub category service",
+        message: "Success",
         data: subCategoryService,
       };
     } catch (error) {

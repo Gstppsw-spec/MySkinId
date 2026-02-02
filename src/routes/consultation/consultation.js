@@ -5,8 +5,8 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const uploadPath = "uploads/consultation";
+const { verifyToken } = require("../../middlewares/authMiddleware");
 
-// Cek jika folder belum ada → buat otomatis
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
 }
@@ -17,7 +17,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueName = `${Date.now()}-${Math.round(
-      Math.random() * 1e9
+      Math.random() * 1e9,
     )}${path.extname(file.originalname)}`;
 
     cb(null, uniqueName);
@@ -26,20 +26,26 @@ const storage = multer.diskStorage({
 
 const uploadImageConsultation = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
+
+router.use(verifyToken);
+
+router.get("/room/readyToAssign", consultation.readyToAssign);
 router.post("/room", consultation.createRoom);
-router.get("/room/:id", consultation.getByRoomId);
+router.get("/room/user", verifyToken, consultation.getRoomByUserDoctor);
 router.get("/room/user/:id", consultation.getRoomByUser);
-router.put("/room/:id/join", consultation.assignDoctor); // join = assign doctor
-router.put("/room/:id/close", consultation.closeRoom); // harus dibuat
+router.get("/room/:id", consultation.getByRoomId);
+router.put("/room/:id/join", consultation.assignDoctor);
+router.put("/room/:id/close", consultation.closeRoom);
 
 router.post("/room/:id/message", consultation.addMessage);
 router.post(
   "/room/:id/message/image",
   uploadImageConsultation.array("images", 10),
-  consultation.addMessage
+  consultation.addMessage,
 );
+router.put("/room/:id/message/read", consultation.readMessage);
 router.get("/room/:id/messages", consultation.getMessagesByRoomId);
 router.get("/room/:id/media", consultation.getMediaByRoomId);
 

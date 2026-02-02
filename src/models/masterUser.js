@@ -9,6 +9,30 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "roleId",
         as: "role",
       });
+
+      this.belongsToMany(models.masterLocation, {
+        through: models.relationshipUserLocation,
+        foreignKey: "userId",
+        otherKey: "locationId",
+        as: "locations",
+      });
+
+      this.hasMany(models.relationshipUserLocation, {
+        foreignKey: "userId",
+        as: "userLocations",
+      });
+
+      this.belongsToMany(models.masterCompany, {
+        through: models.relationshipUserCompany,
+        foreignKey: "userId",
+        otherKey: "companyId",
+        as: "companies",
+      });
+
+      this.hasMany(models.relationshipUserCompany, {
+        foreignKey: "userId",
+        as: "userCompanies",
+      });
     }
   }
 
@@ -29,14 +53,14 @@ module.exports = (sequelize, DataTypes) => {
       roleId: DataTypes.UUID,
       avatar: DataTypes.STRING,
       isactive: DataTypes.BOOLEAN,
-      jwtToken: DataTypes.STRING,
+
     },
     {
       sequelize,
       modelName: "masterUser",
       tableName: "masterUser",
       timestamps: true,
-    }
+    },
   );
 
   return masterUser;

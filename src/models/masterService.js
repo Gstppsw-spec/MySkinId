@@ -54,7 +54,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      normalPrice: {
+      price: {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: false,
         defaultValue: 0,
@@ -63,34 +63,30 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.FLOAT,
         defaultValue: 0,
       },
-      discountValue: {
-        type: DataTypes.DECIMAL(18, 2),
-        defaultValue: 0,
-      },
-      finalPrice: {
-        type: DataTypes.DECIMAL(18, 2),
-        allowNull: false,
-        defaultValue: 0,
-      },
-      imageUrl: {
-        type: DataTypes.STRING(255),
-        allowNull: false,
-        get() {
-          const rawValue = this.getDataValue("imageUrl");
-          if (!rawValue) return null;
-          const BASE_URL =
-            process.env.BASE_URL ||
-            `${process.env.APP_PROTOCOL || "http"}://${
-              process.env.APP_HOST || "localhost"
-            }:${process.env.APP_PORT || 3000}`;
-
-          return `${BASE_URL}/${rawValue}`;
-        },
-      },
       isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      ratingAvg: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      ratingCount: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      isVerified: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      verifiedDate: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+
       updatedAt: {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW,

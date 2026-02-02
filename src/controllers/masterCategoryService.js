@@ -37,11 +37,10 @@ module.exports = {
     const data = req.body;
     const result = await masterCategoryService.updateMainServiceCategory(
       id,
-      data
+      data,
     );
     return res.status(result.status ? 200 : 400).json(result);
   },
-
 
   //sub category
   async getAllSubServiceCategory(req, res) {
@@ -73,12 +72,12 @@ module.exports = {
     return res.status(result.status ? 201 : 400).json(result);
   },
 
-   async updateSubServiceCategory(req, res) {
+  async updateSubServiceCategory(req, res) {
     const { id } = req.params;
     const data = req.body;
     const result = await masterCategoryService.updateSubServiceCategory(
       id,
-      data
+      data,
     );
     return res.status(result.status ? 200 : 400).json(result);
   },

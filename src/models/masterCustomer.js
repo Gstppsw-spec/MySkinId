@@ -12,6 +12,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: false,
       },
+      username: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        unique: true,
+      },
 
       // ===== LOGIN IDENTIFIERS =====
       email: {
@@ -44,10 +49,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
-      jwtToken: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-      },
+
 
       // ===== VERIFICATION =====
       emailVerified: {
@@ -79,8 +81,7 @@ module.exports = (sequelize, DataTypes) => {
           if (!rawValue) return null;
           const BASE_URL =
             process.env.BASE_URL ||
-            `${process.env.APP_PROTOCOL || "http"}://${
-              process.env.APP_HOST || "localhost"
+            `${process.env.APP_PROTOCOL || "http"}://${process.env.APP_HOST || "localhost"
             }:${process.env.APP_PORT || 3000}`;
 
           return `${BASE_URL}/${rawValue}`;

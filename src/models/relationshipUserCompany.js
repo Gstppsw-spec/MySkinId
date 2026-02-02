@@ -33,7 +33,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "relationshipUserCompany",
       timestamps: true,
-    }
+    },
   );
 
   relationshipUserCompany.associate = (models) => {
