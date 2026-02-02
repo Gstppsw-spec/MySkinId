@@ -404,9 +404,9 @@ class PostService {
         };
     }
 
-    async getPostLikedbyUserId(userId, limit = 20, offset = 0) {
+    async getPostLikedbyUserId(targetUserId, currentUserId, limit = 20, offset = 0) {
         const likedPosts = await db.postLikes.findAll({
-            where: { userId },
+            where: { userId: targetUserId },
             include: [
                 {
                     model: db.posts,
@@ -444,12 +444,21 @@ class PostService {
                     where: { postId: post.id },
                 });
 
+                let isLiked = false;
+                if (currentUserId) {
+                    const likeCheck = await db.postLikes.findOne({
+                        where: { postId: post.id, userId: currentUserId },
+                    });
+                    isLiked = !!likeCheck;
+                }
+
                 return {
                     likedAt: likedPost.createdAt,
                     post: {
                         ...post.toJSON(),
                         likesCount,
                         commentsCount,
+                        isLiked,
                     },
                 };
             })
