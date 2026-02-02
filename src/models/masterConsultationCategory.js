@@ -33,6 +33,17 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(255),
         allowNull: true,
         comment: "URL atau path icon kategori",
+        get() {
+          const rawValue = this.getDataValue("iconUrl");
+          if (!rawValue) return null;
+          const BASE_URL =
+            process.env.BASE_URL ||
+            `${process.env.APP_PROTOCOL || "http"}://${
+              process.env.APP_HOST || "localhost"
+            }:${process.env.APP_PORT || 3000}`;
+
+          return `${BASE_URL}/${rawValue}`;
+        },
       },
       isActive: {
         type: DataTypes.BOOLEAN,
@@ -47,7 +58,7 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       createdAt: "createdAt",
       updatedAt: "updatedAt",
-    }
+    },
   );
 
   return masterConsultationCategory;
