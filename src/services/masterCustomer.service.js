@@ -468,8 +468,13 @@ class masterCustomerService {
         attributes.push([sequelize.literal("false"), "isFollowing"]);
       }
 
+      const whereCondition = { username: { [Op.like]: `%${username}%` } };
+      if (currentUserId) {
+        whereCondition.id = { [Op.ne]: currentUserId };
+      }
+
       const customers = await masterCustomer.findAll({
-        where: { username: { [Op.like]: `%${username}%` } },
+        where: whereCondition,
         attributes: attributes,
       });
 
