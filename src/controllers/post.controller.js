@@ -305,7 +305,7 @@ class PostController {
 
     async getPostLikedbyUserId(req, res) {
         try {
-            const userId = req.user.id;
+            const { userId } = req.params;
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 

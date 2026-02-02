@@ -16,7 +16,7 @@ router.get("/feed", postController.getFeed);
 router.get("/blocked", postController.getBlockedPosts);
 
 // getPostLikedbyUserId
-router.get("/liked", postController.getPostLikedbyUserId);
+router.get("/liked/:userId", postController.getPostLikedbyUserId);
 
 // Get a single post
 router.get("/:postId", postController.getPost);
