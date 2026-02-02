@@ -1,4 +1,4 @@
-const { masterCustomer } = require("../models");
+const { masterCustomer, sequelize } = require("../models");
 
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -374,23 +374,103 @@ class masterCustomerService {
     }
   }
 
-  async getCustomerByUsername(username) {
+  async getCustomerByUserId(targetUserId, currentUserId) {
     try {
+      const attributes = ["id", "name", "username", "profileImageUrl"];
+
+      // Stats
+      attributes.push([
+        sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM followers AS f
+            WHERE
+                f.followingId = masterCustomer.id
+        )`),
+        "followersCount",
+      ]);
+
+      attributes.push([
+        sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM followers AS f
+            WHERE
+                f.followerId = masterCustomer.id
+        )`),
+        "followingCount",
+      ]);
+
+      attributes.push([
+        sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM posts AS p
+            WHERE
+                p.userId = masterCustomer.id
+        )`),
+        "totalPost",
+      ]);
+
+      if (currentUserId) {
+        attributes.push([
+          sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM followers AS f
+            WHERE
+                f.followingId = masterCustomer.id
+                AND f.followerId = '${currentUserId}'
+        ) > 0`),
+          "isFollowing",
+        ]);
+      } else {
+        attributes.push([sequelize.literal("false"), "isFollowing"]);
+      }
+
+      const customer = await masterCustomer.findByPk(targetUserId, {
+        attributes: attributes,
+      });
+
+      if (!customer) {
+        return {
+          status: false,
+          message: "Customer tidak ditemukan",
+        };
+      }
+
+      return {
+        status: true,
+        message: "Customer ditemukan",
+        data: customer,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error,
+      };
+    }
+  }
+
+  async getCustomerByUsername(username, currentUserId = null) {
+    try {
+      const attributes = ["id", "name", "username", "profileImageUrl"];
+
+      if (currentUserId) {
+        console.log("currentUserId", currentUserId);
+        attributes.push([
+          sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM followers AS f
+            WHERE
+                f.followingId = masterCustomer.id
+                AND f.followerId = '${currentUserId}'
+        ) > 0`),
+          "isFollowing",
+        ]);
+      } else {
+        attributes.push([sequelize.literal("false"), "isFollowing"]);
+      }
+
       const customers = await masterCustomer.findAll({
         where: { username: { [Op.like]: `%${username}%` } },
-        attributes: {
-          exclude: [
-            "googleId",
-            "loginMethod",
-            "password",
-            "emailVerified",
-            "phoneVerified",
-            "otpCode",
-            "otpType",
-            "otpExpiredAt",
-            "lastLoginAt"
-          ],
-        },
+        attributes: attributes,
       });
 
       return {
@@ -406,7 +486,7 @@ class masterCustomerService {
     }
   }
 
-  async updateProfile(customerId, data) {
+  async updateProfile(customerId, data, file) {
     try {
       const { name, email, phoneNumber, username } = data;
       const customer = await masterCustomer.findByPk(customerId);
@@ -417,7 +497,19 @@ class masterCustomerService {
       if (usernameExists && usernameExists.id !== customerId)
         return { status: false, message: "Username sudah digunakan" };
 
-      await customer.update({ name, email, phoneNumber, username });
+      let updateData = { name, email, phoneNumber, username };
+
+      if (file) {
+        // If there is an old image, maybe delete it? (Optional, implementing overwrite logic)
+        // if (customer.profileImageUrl) {
+        //   const oldPath = customer.profileImageUrl;
+        //   if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        // }
+        // For now just update the path. The model getter prepends BASE_URL, so we store the relative path.
+        updateData.profileImageUrl = file.path.replace(/\\/g, "/");
+      }
+
+      await customer.update(updateData);
 
       const updatedCustomer = await masterCustomer.findByPk(customerId, {
         attributes: {
