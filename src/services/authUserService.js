@@ -117,7 +117,7 @@ module.exports = {
       { expiresIn: "7d" },
     );
 
-    await user.update({ jwtToken: token });
+    // await user.update({ jwtToken: token });
 
     return {
       status: true,

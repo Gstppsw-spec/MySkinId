@@ -234,11 +234,11 @@ class masterCustomerService {
     customer.otpType = null;
     customer.otpExpiresAt = null;
 
-    const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
-      expiresIn: "7d",
-    });
+    // const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
+    //   expiresIn: "7d",
+    // });
 
-    customer.jwtToken = jwtToken;
+    // customer.jwtToken = jwtToken;
     await customer.save();
 
     return {
