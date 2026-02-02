@@ -56,25 +56,39 @@ class PostService {
      * @returns {Array} Array of posts
      */
     async getFeed(userId, limit = 20, offset = 0) {
+        // Get blocked post IDs for this user
+        const blockedPosts = await db.blockedPosts.findAll({
+            where: { userId },
+            attributes: ["postId"],
+        });
+        const blockedPostIds = blockedPosts.map((bp) => bp.postId);
+
         // Using raw query for the UNION as specified
         const query = `
       SELECT p.*
       FROM posts p
       JOIN followers f ON p.userId = f.followingId
       WHERE f.followerId = :userId
+      ${blockedPostIds.length > 0 ? "AND p.id NOT IN (:blockedPostIds)" : ""}
 
       UNION
 
       SELECT *
       FROM posts
       WHERE userId = :userId
+      ${blockedPostIds.length > 0 ? "AND id NOT IN (:blockedPostIds)" : ""}
 
       ORDER BY createdAt DESC
       LIMIT :limit OFFSET :offset
     `;
 
+        const replacements = { userId, limit, offset };
+        if (blockedPostIds.length > 0) {
+            replacements.blockedPostIds = blockedPostIds;
+        }
+
         const posts = await db.sequelize.query(query, {
-            replacements: { userId, limit, offset },
+            replacements,
             type: db.Sequelize.QueryTypes.SELECT,
         });
 
@@ -236,6 +250,153 @@ class PostService {
         );
 
         return enrichedPosts;
+    }
+
+    /**
+     * Block a post for a user
+     * @param {string} userId - User ID blocking the post
+     * @param {string} postId - Post ID to block
+     * @returns {Object} Success message
+     */
+    async blockPost(userId, postId) {
+        // Check if post exists
+        const post = await db.posts.findByPk(postId);
+        if (!post) {
+            throw new Error("Post not found");
+        }
+
+        // Check if user is trying to block their own post
+        if (post.userId === userId) {
+            throw new Error("You cannot block your own post");
+        }
+
+        // Check if already blocked
+        const existingBlock = await db.blockedPosts.findOne({
+            where: { userId, postId },
+        });
+
+        if (existingBlock) {
+            throw new Error("Post is already blocked");
+        }
+
+        // Create block record
+        await db.blockedPosts.create({
+            id: uuidv4(),
+            userId,
+            postId,
+        });
+
+        return { message: "Post blocked successfully" };
+    }
+
+    /**
+     * Unblock a post for a user
+     * @param {string} userId - User ID unblocking the post
+     * @param {string} postId - Post ID to unblock
+     * @returns {Object} Success message
+     */
+    async unblockPost(userId, postId) {
+        const blockedPost = await db.blockedPosts.findOne({
+            where: { userId, postId },
+        });
+
+        if (!blockedPost) {
+            throw new Error("Post is not blocked");
+        }
+
+        await blockedPost.destroy();
+        return { message: "Post unblocked successfully" };
+    }
+
+    /**
+     * Get all blocked posts for a user
+     * @param {string} userId - User ID
+     * @param {number} limit - Number of posts
+     * @param {number} offset - Offset for pagination
+     * @returns {Array} Array of blocked posts
+     */
+    async getBlockedPosts(userId, limit = 20, offset = 0) {
+        const blockedPosts = await db.blockedPosts.findAll({
+            where: { userId },
+            include: [
+                {
+                    model: db.posts,
+                    as: "post",
+                    include: [
+                        {
+                            model: db.masterCustomer,
+                            as: "user",
+                            attributes: ["id", "name", "username", "profileImageUrl"],
+                        },
+                        {
+                            model: db.postMedia,
+                            as: "media",
+                            order: [["orderIndex", "ASC"]],
+                        },
+                    ],
+                },
+            ],
+            order: [["createdAt", "DESC"]],
+            limit,
+            offset,
+        });
+
+        // Enrich with counts
+        const enrichedPosts = await Promise.all(
+            blockedPosts.map(async (blockedPost) => {
+                const post = blockedPost.post;
+                if (!post) return null;
+
+                const likesCount = await db.postLikes.count({
+                    where: { postId: post.id },
+                });
+
+                const commentsCount = await db.postComments.count({
+                    where: { postId: post.id },
+                });
+
+                return {
+                    blockedAt: blockedPost.createdAt,
+                    post: {
+                        ...post.toJSON(),
+                        likesCount,
+                        commentsCount,
+                    },
+                };
+            })
+        );
+
+        // Filter out null values (in case post was deleted)
+        return enrichedPosts.filter((p) => p !== null);
+    }
+
+    /**
+     * Report a post
+     * @param {string} userId - User ID reporting the post
+     * @param {string} postId - Post ID to report
+     * @param {string} reason - Reason for reporting
+     * @returns {Object} Success message
+     */
+    async reportPost(userId, postId, reason) {
+        // Check if post exists
+        const post = await db.posts.findByPk(postId);
+        if (!post) {
+            throw new Error("Post not found");
+        }
+
+        // Create report record
+        const report = await db.reportedPosts.create({
+            id: uuidv4(),
+            userId,
+            postId,
+            reason: reason || null,
+            status: "pending",
+        });
+
+        return {
+            message: "Post reported successfully",
+            reportId: report.id,
+        };
     }
 }
 
