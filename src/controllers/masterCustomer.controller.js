@@ -37,7 +37,20 @@ class masterCustomerController {
   }
 
   async getCustomerByUsername(req, res) {
-    const result = await masterCustomerService.getCustomerByUsername(req.query.username);
+    const result = await masterCustomerService.getCustomerByUsername(
+      req.query.username,
+      req.user?.id
+    );
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async getCustomerByUserId(req, res) {
+    const result = await masterCustomerService.getCustomerByUserId(
+      req.params.userId,
+      req.user?.id
+    );
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
@@ -45,7 +58,11 @@ class masterCustomerController {
 
   async updateProfile(req, res) {
     const customerId = req.user.id;
-    const result = await masterCustomerService.updateProfile(customerId, req.body);
+    const result = await masterCustomerService.updateProfile(
+      customerId,
+      req.body,
+      req.file
+    );
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
