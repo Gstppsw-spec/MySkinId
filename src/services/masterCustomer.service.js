@@ -234,17 +234,20 @@ class masterCustomerService {
     customer.otpType = null;
     customer.otpExpiresAt = null;
 
-    // const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
-    //   expiresIn: "7d",
-    // });
+    const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
+      expiresIn: "7d",
+    });
 
     // customer.jwtToken = jwtToken;
     await customer.save();
 
+    const customerData = customer.toJSON();
+    customerData.jwtToken = jwtToken;
+
     return {
       status: true,
       message: "Verifikasi berhasil",
-      data: customer,
+      data: customerData,
     };
   }
 
