@@ -211,7 +211,7 @@ class PostService {
      * @param {number} offset - Offset for pagination
      * @returns {Array} Array of posts
      */
-    async getUserPosts(targetUserId, limit = 20, offset = 0) {
+    async getUserPosts(userId, targetUserId, limit = 20, offset = 0) {
         const posts = await db.posts.findAll({
             where: { userId: targetUserId },
             include: [
@@ -237,6 +237,10 @@ class PostService {
                     where: { postId: post.id },
                 });
 
+                const isLiked = await db.postLikes.findOne({
+                    where: { postId: post.id, userId },
+                });
+
                 const commentsCount = await db.postComments.count({
                     where: { postId: post.id },
                 });
@@ -244,6 +248,7 @@ class PostService {
                 return {
                     ...post.toJSON(),
                     likesCount,
+                    isLiked: !!isLiked,
                     commentsCount,
                 };
             })

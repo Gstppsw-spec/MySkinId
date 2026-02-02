@@ -22,7 +22,7 @@ router.get("/:postId", postController.getPost);
 router.delete("/:postId", postController.deletePost);
 
 // Get posts by a specific user
-router.get("/user/:userId", postController.getUserPosts);
+router.get("/user/:targetUserId", postController.getUserPosts);
 
 // Block a post
 router.post("/:postId/block", postController.blockPost);
