@@ -211,7 +211,7 @@ class PostService {
      * @param {number} offset - Offset for pagination
      * @returns {Array} Array of posts
      */
-    async getUserPosts(targetUserId, limit = 20, offset = 0) {
+    async getUserPosts(userId, targetUserId, limit = 20, offset = 0) {
         const posts = await db.posts.findAll({
             where: { userId: targetUserId },
             include: [
@@ -237,6 +237,10 @@ class PostService {
                     where: { postId: post.id },
                 });
 
+                const isLiked = await db.postLikes.findOne({
+                    where: { postId: post.id, userId },
+                });
+
                 const commentsCount = await db.postComments.count({
                     where: { postId: post.id },
                 });
@@ -244,6 +248,7 @@ class PostService {
                 return {
                     ...post.toJSON(),
                     likesCount,
+                    isLiked: !!isLiked,
                     commentsCount,
                 };
             })
@@ -397,6 +402,61 @@ class PostService {
             message: "Post reported successfully",
             reportId: report.id,
         };
+    }
+
+    async getPostLikedbyUserId(userId, limit = 20, offset = 0) {
+        const likedPosts = await db.postLikes.findAll({
+            where: { userId },
+            include: [
+                {
+                    model: db.posts,
+                    as: "post",
+                    include: [
+                        {
+                            model: db.masterCustomer,
+                            as: "user",
+                            attributes: ["id", "name", "username", "profileImageUrl"],
+                        },
+                        {
+                            model: db.postMedia,
+                            as: "media",
+                            order: [["orderIndex", "ASC"]],
+                        },
+                    ],
+                },
+            ],
+            order: [["createdAt", "DESC"]],
+            limit,
+            offset,
+        });
+
+        // Enrich with counts
+        const enrichedPosts = await Promise.all(
+            likedPosts.map(async (likedPost) => {
+                const post = likedPost.post;
+                if (!post) return null;
+
+                const likesCount = await db.postLikes.count({
+                    where: { postId: post.id },
+                });
+
+                const commentsCount = await db.postComments.count({
+                    where: { postId: post.id },
+                });
+
+                return {
+                    likedAt: likedPost.createdAt,
+                    post: {
+                        ...post.toJSON(),
+                        likesCount,
+                        commentsCount,
+                    },
+                };
+            })
+        );
+
+        // Filter out null values (in case post was deleted)
+        return enrichedPosts.filter((p) => p !== null);
     }
 }
 
