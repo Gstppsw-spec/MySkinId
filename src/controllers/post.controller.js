@@ -187,9 +187,122 @@ class PostController {
             });
         }
     }
+
+    /**
+     * Block a post
+     * POST /posts/:postId/block
+     */
+    async blockPost(req, res) {
+        try {
+            const { postId } = req.params;
+            const userId = req.user.id;
+
+            const result = await postService.blockPost(userId, postId);
+
+            res.status(200).json({
+                success: true,
+                message: result.message,
+            });
+        } catch (error) {
+            console.error("Block post error:", error);
+            const statusCode =
+                error.message === "Post not found"
+                    ? 404
+                    : error.message === "Post is already blocked"
+                        ? 400
+                        : error.message === "You cannot block your own post"
+                            ? 400
+                            : 500;
+            res.status(statusCode).json({
+                success: false,
+                message: error.message || "Failed to block post",
+            });
+        }
+    }
+
+    /**
+     * Unblock a post
+     * DELETE /posts/:postId/unblock
+     */
+    async unblockPost(req, res) {
+        try {
+            const { postId } = req.params;
+            const userId = req.user.id;
+
+            const result = await postService.unblockPost(userId, postId);
+
+            res.status(200).json({
+                success: true,
+                message: result.message,
+            });
+        } catch (error) {
+            console.error("Unblock post error:", error);
+            const statusCode = error.message === "Post is not blocked" ? 404 : 500;
+            res.status(statusCode).json({
+                success: false,
+                message: error.message || "Failed to unblock post",
+            });
+        }
+    }
+
+    /**
+     * Get blocked posts
+     * GET /posts/blocked
+     */
+    async getBlockedPosts(req, res) {
+        try {
+            const userId = req.user.id;
+            const limit = parseInt(req.query.limit) || 20;
+            const offset = parseInt(req.query.offset) || 0;
+
+            const posts = await postService.getBlockedPosts(userId, limit, offset);
+
+            res.status(200).json({
+                success: true,
+                data: posts,
+                pagination: {
+                    limit,
+                    offset,
+                    count: posts.length,
+                },
+            });
+        } catch (error) {
+            console.error("Get blocked posts error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to fetch blocked posts",
+            });
+        }
+    }
+
+    /**
+     * Report a post
+     * POST /posts/:postId/report
+     */
+    async reportPost(req, res) {
+        try {
+            const { postId } = req.params;
+            const userId = req.user.id;
+            const { reason } = req.body;
+
+            const result = await postService.reportPost(userId, postId, reason);
+
+            res.status(201).json({
+                success: true,
+                message: result.message,
+                reportId: result.reportId,
+            });
+        } catch (error) {
+            console.error("Report post error:", error);
+            const statusCode = error.message === "Post not found" ? 404 : 500;
+            res.status(statusCode).json({
+                success: false,
+                message: error.message || "Failed to report post",
+            });
+        }
+    }
 }
 
-// Export controller instance and upload middleware
 // Export controller instance and upload middleware
 const controller = new PostController();
 controller.upload = upload.array("media", 10); // Allow up to 10 files
