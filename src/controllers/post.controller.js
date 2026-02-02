@@ -164,11 +164,12 @@ class PostController {
      */
     async getUserPosts(req, res) {
         try {
-            const { userId } = req.params;
+            const { targetUserId } = req.params;
+            const userId = req.user.id;
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 
-            const posts = await postService.getUserPosts(userId, limit, offset);
+            const posts = await postService.getUserPosts(userId, targetUserId, limit, offset);
 
             res.status(200).json({
                 success: true,
@@ -298,6 +299,32 @@ class PostController {
             res.status(statusCode).json({
                 success: false,
                 message: error.message || "Failed to report post",
+            });
+        }
+    }
+
+    async getPostLikedbyUserId(req, res) {
+        try {
+            const userId = req.user.id;
+            const limit = parseInt(req.query.limit) || 20;
+            const offset = parseInt(req.query.offset) || 0;
+
+            const posts = await postService.getPostLikedbyUserId(userId, limit, offset);
+
+            res.status(200).json({
+                success: true,
+                data: posts,
+                pagination: {
+                    limit,
+                    offset,
+                    count: posts.length,
+                },
+            });
+        } catch (error) {
+            console.error("Get post liked by user error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to fetch post liked by user",
             });
         }
     }

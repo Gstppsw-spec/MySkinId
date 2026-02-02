@@ -15,6 +15,9 @@ router.get("/feed", postController.getFeed);
 // Get blocked posts
 router.get("/blocked", postController.getBlockedPosts);
 
+// getPostLikedbyUserId
+router.get("/liked", postController.getPostLikedbyUserId);
+
 // Get a single post
 router.get("/:postId", postController.getPost);
 
@@ -22,7 +25,7 @@ router.get("/:postId", postController.getPost);
 router.delete("/:postId", postController.deletePost);
 
 // Get posts by a specific user
-router.get("/user/:userId", postController.getUserPosts);
+router.get("/user/:targetUserId", postController.getUserPosts);
 
 // Block a post
 router.post("/:postId/block", postController.blockPost);
@@ -32,5 +35,6 @@ router.delete("/:postId/unblock", postController.unblockPost);
 
 // Report a post
 router.post("/:postId/report", postController.reportPost);
+
 
 module.exports = router;
