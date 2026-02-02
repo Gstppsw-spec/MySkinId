@@ -44,8 +44,16 @@ class masterCustomerController {
   }
 
   async updateProfile(req, res) {
-    const { customerId } = req.params;
+    const customerId = req.user.id;
     const result = await masterCustomerService.updateProfile(customerId, req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async getProfile(req, res) {
+    const customerId = req.user.id;
+    const result = await masterCustomerService.getProfile(customerId);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

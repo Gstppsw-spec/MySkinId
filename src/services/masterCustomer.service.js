@@ -403,6 +403,25 @@ class masterCustomerService {
     }
   }
 
+  async getProfile(customerId) {
+    try {
+      const customer = await masterCustomer.findByPk(customerId);
+      if (!customer)
+        return { status: false, message: "Customer tidak ditemukan" };
+
+      return {
+        status: true,
+        message: "Profile berhasil ditemukan",
+        data: customer,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error,
+      };
+    }
+  }
+
   static async sendEmailOtp(email, otp) {
     try {
       const transporter = nodemailer.createTransport({

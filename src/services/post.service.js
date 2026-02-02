@@ -403,6 +403,61 @@ class PostService {
             reportId: report.id,
         };
     }
+
+    async getPostLikedbyUserId(userId, limit = 20, offset = 0) {
+        const likedPosts = await db.postLikes.findAll({
+            where: { userId },
+            include: [
+                {
+                    model: db.posts,
+                    as: "post",
+                    include: [
+                        {
+                            model: db.masterCustomer,
+                            as: "user",
+                            attributes: ["id", "name", "username", "profileImageUrl"],
+                        },
+                        {
+                            model: db.postMedia,
+                            as: "media",
+                            order: [["orderIndex", "ASC"]],
+                        },
+                    ],
+                },
+            ],
+            order: [["createdAt", "DESC"]],
+            limit,
+            offset,
+        });
+
+        // Enrich with counts
+        const enrichedPosts = await Promise.all(
+            likedPosts.map(async (likedPost) => {
+                const post = likedPost.post;
+                if (!post) return null;
+
+                const likesCount = await db.postLikes.count({
+                    where: { postId: post.id },
+                });
+
+                const commentsCount = await db.postComments.count({
+                    where: { postId: post.id },
+                });
+
+                return {
+                    likedAt: likedPost.createdAt,
+                    post: {
+                        ...post.toJSON(),
+                        likesCount,
+                        commentsCount,
+                    },
+                };
+            })
+        );
+
+        // Filter out null values (in case post was deleted)
+        return enrichedPosts.filter((p) => p !== null);
+    }
 }
 
 module.exports = new PostService();
