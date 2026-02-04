@@ -1,4 +1,5 @@
 const likeService = require("../services/like.service");
+const { formatPagination } = require("../utils/pagination");
 
 class LikeController {
     /**
@@ -68,16 +69,14 @@ class LikeController {
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 
-            const likes = await likeService.getPostLikes(postId, limit, offset);
+            const { likes, totalCount } = await likeService.getPostLikes(postId, limit, offset);
+
+            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: likes,
-                pagination: {
-                    limit,
-                    offset,
-                    count: likes.length,
-                },
+                pagination: formatPagination(totalCount, pageNumber, limit),
             });
         } catch (error) {
             console.error("Get post likes error:", error);

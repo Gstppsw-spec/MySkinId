@@ -93,8 +93,9 @@ class LikeService {
      * @returns {Array} Array of users
      */
     async getPostLikes(postId, limit = 20, offset = 0) {
-        const likes = await db.postLikes.findAll({
+        const { count, rows: likes } = await db.postLikes.findAndCountAll({
             where: { postId },
+            distinct: true,
             include: [
                 {
                     model: db.masterCustomer,
@@ -107,10 +108,12 @@ class LikeService {
             offset,
         });
 
-        return likes.map((like) => ({
+        const data = likes.map((like) => ({
             ...like.user.toJSON(),
             likedAt: like.createdAt,
         }));
+
+        return { likes: data, totalCount: count };
     }
 }
 

@@ -78,9 +78,10 @@ class FollowService {
      * @param {number} offset - Offset for pagination
      * @returns {Array} Array of followers
      */
-    async getFollowers(userId, limit = 20, offset = 0) {
-        const followers = await db.followers.findAll({
+    async getFollowers(userId, currentUserId, limit = 20, offset = 0) {
+        const { count, rows: followers } = await db.followers.findAndCountAll({
             where: { followingId: userId },
+            distinct: true,
             include: [
                 {
                     model: db.masterCustomer,
@@ -93,10 +94,24 @@ class FollowService {
             offset,
         });
 
-        return followers.map((follow) => ({
-            ...follow.follower.toJSON(),
-            followedAt: follow.createdAt,
-        }));
+        const data = await Promise.all(
+            followers.map(async (follow) => {
+                const followerJson = follow.follower.toJSON();
+
+                let isFollowing = false;
+                if (currentUserId) {
+                    isFollowing = await this.isFollowing(currentUserId, followerJson.id);
+                }
+
+                return {
+                    ...followerJson,
+                    followedAt: follow.createdAt,
+                    isFollowing,
+                };
+            })
+        );
+
+        return { followers: data, totalCount: count };
     }
 
     /**
@@ -106,9 +121,10 @@ class FollowService {
      * @param {number} offset - Offset for pagination
      * @returns {Array} Array of users being followed
      */
-    async getFollowing(userId, limit = 20, offset = 0) {
-        const following = await db.followers.findAll({
+    async getFollowing(userId, currentUserId, limit = 20, offset = 0) {
+        const { count, rows: following } = await db.followers.findAndCountAll({
             where: { followerId: userId },
+            distinct: true,
             include: [
                 {
                     model: db.masterCustomer,
@@ -121,10 +137,24 @@ class FollowService {
             offset,
         });
 
-        return following.map((follow) => ({
-            ...follow.following.toJSON(),
-            followedAt: follow.createdAt,
-        }));
+        const data = await Promise.all(
+            following.map(async (follow) => {
+                const followingJson = follow.following.toJSON();
+
+                let isFollowing = false;
+                if (currentUserId) {
+                    isFollowing = await this.isFollowing(currentUserId, followingJson.id);
+                }
+
+                return {
+                    ...followingJson,
+                    followedAt: follow.createdAt,
+                    isFollowing,
+                };
+            })
+        );
+
+        return { following: data, totalCount: count };
     }
 
     /**
