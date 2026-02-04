@@ -1,4 +1,5 @@
 const followService = require("../services/follow.service");
+const { formatPagination } = require("../utils/pagination");
 
 class FollowController {
     /**
@@ -68,19 +69,18 @@ class FollowController {
     async getFollowers(req, res) {
         try {
             const { userId } = req.params;
+            const currentUserId = req.user?.id;
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 
-            const followers = await followService.getFollowers(userId, limit, offset);
+            const { followers, totalCount } = await followService.getFollowers(userId, currentUserId, limit, offset);
+
+            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: followers,
-                pagination: {
-                    limit,
-                    offset,
-                    count: followers.length,
-                },
+                pagination: formatPagination(totalCount, pageNumber, limit),
             });
         } catch (error) {
             console.error("Get followers error:", error);
@@ -98,19 +98,18 @@ class FollowController {
     async getFollowing(req, res) {
         try {
             const { userId } = req.params;
+            const currentUserId = req.user?.id;
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 
-            const following = await followService.getFollowing(userId, limit, offset);
+            const { following, totalCount } = await followService.getFollowing(userId, currentUserId, limit, offset);
+
+            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: following,
-                pagination: {
-                    limit,
-                    offset,
-                    count: following.length,
-                },
+                pagination: formatPagination(totalCount, pageNumber, limit),
             });
         } catch (error) {
             console.error("Get following error:", error);

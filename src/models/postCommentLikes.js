@@ -1,23 +1,19 @@
 "use strict";
 module.exports = (sequelize, DataTypes) => {
-    const PostComments = sequelize.define(
-        "postComments",
+    const PostCommentLikes = sequelize.define(
+        "postCommentLikes",
         {
             id: {
                 type: DataTypes.CHAR(36),
                 defaultValue: DataTypes.UUIDV4,
                 primaryKey: true,
             },
-            postId: {
+            commentId: {
                 type: DataTypes.CHAR(36),
                 allowNull: false,
             },
             userId: {
                 type: DataTypes.CHAR(36),
-                allowNull: false,
-            },
-            commentText: {
-                type: DataTypes.TEXT,
                 allowNull: false,
             },
             createdAt: {
@@ -26,30 +22,24 @@ module.exports = (sequelize, DataTypes) => {
             },
         },
         {
-            tableName: "postComments",
+            tableName: "postCommentLikes",
             timestamps: false,
         }
     );
 
-    PostComments.associate = (models) => {
-        // Comment belongs to a post
-        PostComments.belongsTo(models.posts, {
-            foreignKey: "postId",
-            as: "post",
+    PostCommentLikes.associate = (models) => {
+        // Like belongs to a comment
+        PostCommentLikes.belongsTo(models.postComments, {
+            foreignKey: "commentId",
+            as: "comment",
         });
 
-        // Comment belongs to a user
-        PostComments.belongsTo(models.masterCustomer, {
+        // Like belongs to a user
+        PostCommentLikes.belongsTo(models.masterCustomer, {
             foreignKey: "userId",
             as: "user",
         });
-
-        // Comment has many likes
-        PostComments.hasMany(models.postCommentLikes, {
-            foreignKey: "commentId",
-            as: "likes",
-        });
     };
 
-    return PostComments;
+    return PostCommentLikes;
 };

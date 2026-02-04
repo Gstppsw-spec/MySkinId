@@ -63,22 +63,26 @@ class PostService {
         });
         const blockedPostIds = blockedPosts.map((bp) => bp.postId);
 
-        // Using raw query for the UNION as specified
-        const query = `
-      SELECT p.*
+        // Count query for pagination (all non-blocked posts)
+        const countQuery = `
+      SELECT COUNT(*) as total
       FROM posts p
-      JOIN followers f ON p.userId = f.followingId
-      WHERE f.followerId = :userId
+      WHERE 1=1
       ${blockedPostIds.length > 0 ? "AND p.id NOT IN (:blockedPostIds)" : ""}
+    `;
 
-      UNION
-
-      SELECT *
-      FROM posts
-      WHERE userId = :userId
-      ${blockedPostIds.length > 0 ? "AND id NOT IN (:blockedPostIds)" : ""}
-
-      ORDER BY createdAt DESC
+        const query = `
+      SELECT p.*,
+        CASE 
+          WHEN p.userId = :userId THEN 1
+          WHEN f.followerId IS NOT NULL THEN 1
+          ELSE 0
+        END AS priority
+      FROM posts p
+      LEFT JOIN followers f ON p.userId = f.followingId AND f.followerId = :userId
+      WHERE 1=1
+      ${blockedPostIds.length > 0 ? "AND p.id NOT IN (:blockedPostIds)" : ""}
+      ORDER BY priority DESC, p.createdAt DESC
       LIMIT :limit OFFSET :offset
     `;
 
@@ -87,10 +91,18 @@ class PostService {
             replacements.blockedPostIds = blockedPostIds;
         }
 
-        const posts = await db.sequelize.query(query, {
-            replacements,
-            type: db.Sequelize.QueryTypes.SELECT,
-        });
+        const [posts, countResult] = await Promise.all([
+            db.sequelize.query(query, {
+                replacements,
+                type: db.Sequelize.QueryTypes.SELECT,
+            }),
+            db.sequelize.query(countQuery, {
+                replacements,
+                type: db.Sequelize.QueryTypes.SELECT,
+            })
+        ]);
+
+        const totalCount = countResult[0] ? parseInt(countResult[0].total) : 0;
 
         // Enrich posts with additional data
         const enrichedPosts = await Promise.all(
@@ -121,6 +133,45 @@ class PostService {
                     where: { postId: post.id },
                 });
 
+                // Get top 2 comments (priority to current user, then by likes)
+                const topComments = await db.postComments.findAll({
+                    where: { postId: post.id },
+                    distinct: true,
+                    attributes: {
+                        include: [
+                            [
+                                db.sequelize.literal(`(
+                                    SELECT COUNT(*)
+                                    FROM postCommentLikes AS likes
+                                    WHERE likes.commentId = postComments.id
+                                )`),
+                                "likesCount",
+                            ],
+                            [
+                                db.sequelize.literal(
+                                    userId
+                                        ? `CASE WHEN postComments.userId = '${userId}' THEN 1 ELSE 0 END`
+                                        : "0"
+                                ),
+                                "priority",
+                            ],
+                        ],
+                    },
+                    include: [
+                        {
+                            model: db.masterCustomer,
+                            as: "user",
+                            attributes: ["id", "name", "username", "profileImageUrl"],
+                        },
+                    ],
+                    order: [
+                        [db.sequelize.literal("priority"), "DESC"],
+                        [db.sequelize.literal("likesCount"), "DESC"],
+                        ["createdAt", "DESC"],
+                    ],
+                    limit: 2,
+                });
+
                 return {
                     ...post,
                     user: user ? user.toJSON() : null,
@@ -128,11 +179,19 @@ class PostService {
                     likesCount,
                     isLiked: !!isLiked,
                     commentsCount,
+                    topComments: topComments.map((comment) => {
+                        const json = comment.toJSON();
+                        return {
+                            ...json,
+                            likesCount: parseInt(json.likesCount) || 0,
+                            priority: undefined,
+                        };
+                    }),
                 };
             })
         );
 
-        return enrichedPosts;
+        return { posts: enrichedPosts, totalCount: totalCount };
     }
 
     /**
@@ -152,6 +211,7 @@ class PostService {
                 {
                     model: db.postMedia,
                     as: "media",
+                    separate: true,
                     order: [["orderIndex", "ASC"]],
                 },
             ],
@@ -212,8 +272,9 @@ class PostService {
      * @returns {Array} Array of posts
      */
     async getUserPosts(userId, targetUserId, limit = 20, offset = 0) {
-        const posts = await db.posts.findAll({
+        const { count, rows: posts } = await db.posts.findAndCountAll({
             where: { userId: targetUserId },
+            distinct: true,
             include: [
                 {
                     model: db.masterCustomer,
@@ -222,7 +283,9 @@ class PostService {
                 },
                 {
                     model: db.postMedia,
+                    separate: true,
                     as: "media",
+                    order: [["orderIndex", "ASC"]],
                 },
             ],
             order: [["createdAt", "DESC"]],
@@ -254,7 +317,7 @@ class PostService {
             })
         );
 
-        return enrichedPosts;
+        return { posts: enrichedPosts, totalCount: count };
     }
 
     /**
@@ -321,8 +384,9 @@ class PostService {
      * @returns {Array} Array of blocked posts
      */
     async getBlockedPosts(userId, limit = 20, offset = 0) {
-        const blockedPosts = await db.blockedPosts.findAll({
+        const { count, rows: blockedPosts } = await db.blockedPosts.findAndCountAll({
             where: { userId },
+            distinct: true,
             include: [
                 {
                     model: db.posts,
@@ -336,6 +400,7 @@ class PostService {
                         {
                             model: db.postMedia,
                             as: "media",
+                            separate: true,
                             order: [["orderIndex", "ASC"]],
                         },
                     ],
@@ -378,7 +443,8 @@ class PostService {
         );
 
         // Filter out null values (in case post was deleted)
-        return enrichedPosts.filter((p) => p !== null);
+        const finalPosts = enrichedPosts.filter((p) => p !== null);
+        return { posts: finalPosts, totalCount: count };
     }
 
     /**
@@ -411,8 +477,9 @@ class PostService {
     }
 
     async getPostLikedbyUserId(targetUserId, currentUserId, limit = 20, offset = 0) {
-        const likedPosts = await db.postLikes.findAll({
+        const { count, rows: likedPosts } = await db.postLikes.findAndCountAll({
             where: { userId: targetUserId },
+            distinct: true,
             include: [
                 {
                     model: db.posts,
@@ -426,6 +493,7 @@ class PostService {
                         {
                             model: db.postMedia,
                             as: "media",
+                            separate: true,
                             order: [["orderIndex", "ASC"]],
                         },
                     ],
@@ -471,7 +539,8 @@ class PostService {
         );
 
         // Filter out null values (in case post was deleted)
-        return enrichedPosts.filter((p) => p !== null);
+        const finalPosts = enrichedPosts.filter((p) => p !== null);
+        return { posts: finalPosts, totalCount: count };
     }
 }
 
