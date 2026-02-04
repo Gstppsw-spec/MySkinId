@@ -15,4 +15,13 @@ router.get("/:postId/comments", commentController.getComments);
 // Delete a comment
 router.delete("/comments/:commentId", commentController.deleteComment);
 
+// Like a comment
+router.post("/comments/:commentId/like", commentController.likeComment);
+
+// Unlike a comment
+router.delete("/comments/:commentId/like", commentController.unlikeComment);
+
+// Get users who liked a comment
+router.get("/comments/:commentId/likes", commentController.getCommentLikes);
+
 module.exports = router;

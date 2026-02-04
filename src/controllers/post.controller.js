@@ -1,4 +1,5 @@
 const postService = require("../services/post.service");
+const { formatPagination } = require("../utils/pagination");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
@@ -83,16 +84,14 @@ class PostController {
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 
-            const posts = await postService.getFeed(userId, limit, offset);
+            const { posts, totalCount } = await postService.getFeed(userId, limit, offset);
+
+            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: posts,
-                pagination: {
-                    limit,
-                    offset,
-                    count: posts.length,
-                },
+                pagination: formatPagination(totalCount, pageNumber, limit),
             });
         } catch (error) {
             console.error("Get feed error:", error);
@@ -169,16 +168,14 @@ class PostController {
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 
-            const posts = await postService.getUserPosts(userId, targetUserId, limit, offset);
+            const { posts, totalCount } = await postService.getUserPosts(userId, targetUserId, limit, offset);
+
+            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: posts,
-                pagination: {
-                    limit,
-                    offset,
-                    count: posts.length,
-                },
+                pagination: formatPagination(totalCount, pageNumber, limit),
             });
         } catch (error) {
             console.error("Get user posts error:", error);
@@ -256,16 +253,14 @@ class PostController {
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 
-            const posts = await postService.getBlockedPosts(userId, limit, offset);
+            const { posts, totalCount } = await postService.getBlockedPosts(userId, limit, offset);
+
+            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: posts,
-                pagination: {
-                    limit,
-                    offset,
-                    count: posts.length,
-                },
+                pagination: formatPagination(totalCount, pageNumber, limit),
             });
         } catch (error) {
             console.error("Get blocked posts error:", error);
@@ -309,21 +304,19 @@ class PostController {
             const limit = parseInt(req.query.limit) || 20;
             const offset = parseInt(req.query.offset) || 0;
 
-            const posts = await postService.getPostLikedbyUserId(
+            const { posts, totalCount } = await postService.getPostLikedbyUserId(
                 userId,
                 req.user?.id,
                 limit,
                 offset
             );
 
+            const pageNumber = Math.floor(offset / limit) + 1;
+
             res.status(200).json({
                 success: true,
                 data: posts,
-                pagination: {
-                    limit,
-                    offset,
-                    count: posts.length,
-                },
+                pagination: formatPagination(totalCount, pageNumber, limit),
             });
         } catch (error) {
             console.error("Get post liked by user error:", error);
