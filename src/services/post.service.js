@@ -360,12 +360,18 @@ class PostService {
                     where: { postId: post.id },
                 });
 
+                // Check if current user liked this post
+                const isLiked = await db.postLikes.findOne({
+                    where: { postId: post.id, userId },
+                });
+
                 return {
                     blockedAt: blockedPost.createdAt,
                     post: {
                         ...post.toJSON(),
                         likesCount,
                         commentsCount,
+                        isLiked: !!isLiked,
                     },
                 };
             })
