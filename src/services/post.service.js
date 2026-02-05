@@ -133,44 +133,8 @@ class PostService {
                     where: { postId: post.id },
                 });
 
-                // Get top 2 comments (priority to current user, then by likes)
-                const topComments = await db.postComments.findAll({
-                    where: { postId: post.id },
-                    distinct: true,
-                    attributes: {
-                        include: [
-                            [
-                                db.sequelize.literal(`(
-                                    SELECT COUNT(*)
-                                    FROM postCommentLikes AS likes
-                                    WHERE likes.commentId = postComments.id
-                                )`),
-                                "likesCount",
-                            ],
-                            [
-                                db.sequelize.literal(
-                                    userId
-                                        ? `CASE WHEN postComments.userId = '${userId}' THEN 1 ELSE 0 END`
-                                        : "0"
-                                ),
-                                "priority",
-                            ],
-                        ],
-                    },
-                    include: [
-                        {
-                            model: db.masterCustomer,
-                            as: "user",
-                            attributes: ["name", "username", "profileImageUrl"],
-                        },
-                    ],
-                    order: [
-                        [db.sequelize.literal("priority"), "DESC"],
-                        [db.sequelize.literal("likesCount"), "DESC"],
-                        ["createdAt", "DESC"],
-                    ],
-                    limit: 2,
-                });
+                // Get top 2 comments
+                const topComments = await this._getTopComments(post.id, userId);
 
                 return {
                     ...post,
@@ -182,15 +146,7 @@ class PostService {
                     likesCount,
                     isLiked: !!isLiked,
                     commentsCount,
-                    topComments: topComments.map((comment) => {
-                        const json = comment.toJSON();
-                        return {
-                            ...json,
-                            postId: undefined,
-                            likesCount: parseInt(json.likesCount) || 0,
-                            priority: undefined,
-                        };
-                    }),
+                    topComments,
                 };
             })
         );
@@ -240,6 +196,9 @@ class PostService {
             where: { postId },
         });
 
+        // Get top 2 comments
+        const topComments = await this._getTopComments(postId, userId);
+
         const postJson = post.toJSON();
         return {
             ...postJson,
@@ -247,6 +206,7 @@ class PostService {
             likesCount,
             isLiked: !!isLiked,
             commentsCount,
+            topComments,
         };
     }
 
@@ -314,6 +274,9 @@ class PostService {
                     where: { postId: post.id },
                 });
 
+                // Get top 2 comments
+                const topComments = await this._getTopComments(post.id, userId);
+
                 const postJson = post.toJSON();
                 return {
                     ...postJson,
@@ -321,6 +284,7 @@ class PostService {
                     likesCount,
                     isLiked: !!isLiked,
                     commentsCount,
+                    topComments,
                 };
             })
         );
@@ -438,6 +402,9 @@ class PostService {
                     where: { postId: post.id, userId },
                 });
 
+                // Get top 2 comments
+                const topComments = await this._getTopComments(post.id, userId);
+
                 const postJson = post.toJSON();
                 return {
                     blockedAt: blockedPost.createdAt,
@@ -447,6 +414,7 @@ class PostService {
                         likesCount,
                         commentsCount,
                         isLiked: !!isLiked,
+                        topComments,
                     },
                 };
             })
@@ -487,8 +455,23 @@ class PostService {
     }
 
     async getPostLikedbyUserId(targetUserId, currentUserId, limit = 20, offset = 0) {
+        // Get blocked post IDs for current user if available
+        let blockedPostIds = [];
+        if (currentUserId) {
+            const blockedPosts = await db.blockedPosts.findAll({
+                where: { userId: currentUserId },
+                attributes: ["postId"],
+            });
+            blockedPostIds = blockedPosts.map((bp) => bp.postId);
+        }
+
+        const whereClause = { userId: targetUserId };
+        if (blockedPostIds.length > 0) {
+            whereClause.postId = { [Op.notIn]: blockedPostIds };
+        }
+
         const { count, rows: likedPosts } = await db.postLikes.findAndCountAll({
-            where: { userId: targetUserId },
+            where: whereClause,
             distinct: true,
             include: [
                 {
@@ -536,6 +519,9 @@ class PostService {
                     isLiked = !!likeCheck;
                 }
 
+                // Get top 2 comments
+                const topComments = await this._getTopComments(post.id, currentUserId);
+
                 const postJson = post.toJSON();
                 return {
                     likedAt: likedPost.createdAt,
@@ -545,6 +531,7 @@ class PostService {
                         likesCount,
                         commentsCount,
                         isLiked,
+                        topComments,
                     },
                 };
             })
@@ -553,6 +540,61 @@ class PostService {
         // Filter out null values (in case post was deleted)
         const finalPosts = enrichedPosts.filter((p) => p !== null);
         return { posts: finalPosts, totalCount: count };
+    }
+
+    /**
+     * Helper to get top comments for a post
+     * @param {string} postId - Post ID
+     * @param {string} userId - Current user ID
+     */
+    async _getTopComments(postId, userId) {
+        const topComments = await db.postComments.findAll({
+            where: { postId },
+            distinct: true,
+            attributes: {
+                include: [
+                    [
+                        db.sequelize.literal(`(
+                            SELECT COUNT(*)
+                            FROM postCommentLikes AS likes
+                            WHERE likes.commentId = postComments.id
+                        )`),
+                        "likesCount",
+                    ],
+                    [
+                        db.sequelize.literal(
+                            userId
+                                ? `CASE WHEN postComments.userId = '${userId}' THEN 1 ELSE 0 END`
+                                : "0"
+                        ),
+                        "priority",
+                    ],
+                ],
+            },
+            include: [
+                {
+                    model: db.masterCustomer,
+                    as: "user",
+                    attributes: ["name", "username", "profileImageUrl"],
+                },
+            ],
+            order: [
+                [db.sequelize.literal("priority"), "DESC"],
+                [db.sequelize.literal("likesCount"), "DESC"],
+                ["createdAt", "DESC"],
+            ],
+            limit: 2,
+        });
+
+        return topComments.map((comment) => {
+            const json = comment.toJSON();
+            return {
+                ...json,
+                postId: undefined,
+                likesCount: parseInt(json.likesCount) || 0,
+                priority: undefined,
+            };
+        });
     }
 }
 
