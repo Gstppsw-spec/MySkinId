@@ -109,7 +109,7 @@ class PostService {
             posts.map(async (post) => {
                 // Get user info
                 const user = await db.masterCustomer.findByPk(post.userId, {
-                    attributes: ["id", "name", "username", "profileImageUrl"],
+                    attributes: ["name", "username", "profileImageUrl"],
                 });
 
                 // Get media
@@ -161,7 +161,7 @@ class PostService {
                         {
                             model: db.masterCustomer,
                             as: "user",
-                            attributes: ["id", "name", "username", "profileImageUrl"],
+                            attributes: ["name", "username", "profileImageUrl"],
                         },
                     ],
                     order: [
@@ -175,7 +175,10 @@ class PostService {
                 return {
                     ...post,
                     user: user ? user.toJSON() : null,
-                    media: media.map((m) => m.toJSON()),
+                    media: media.map((m) => {
+                        const mJson = m.toJSON();
+                        return { ...mJson, postId: undefined };
+                    }),
                     likesCount,
                     isLiked: !!isLiked,
                     commentsCount,
@@ -183,6 +186,7 @@ class PostService {
                         const json = comment.toJSON();
                         return {
                             ...json,
+                            postId: undefined,
                             likesCount: parseInt(json.likesCount) || 0,
                             priority: undefined,
                         };
@@ -206,7 +210,7 @@ class PostService {
                 {
                     model: db.masterCustomer,
                     as: "user",
-                    attributes: ["id", "name", "username", "profileImageUrl"],
+                    attributes: ["name", "username", "profileImageUrl"],
                 },
                 {
                     model: db.postMedia,
@@ -236,8 +240,10 @@ class PostService {
             where: { postId },
         });
 
+        const postJson = post.toJSON();
         return {
-            ...post.toJSON(),
+            ...postJson,
+            media: postJson.media ? postJson.media.map(m => ({ ...m, postId: undefined })) : [],
             likesCount,
             isLiked: !!isLiked,
             commentsCount,
@@ -279,7 +285,7 @@ class PostService {
                 {
                     model: db.masterCustomer,
                     as: "user",
-                    attributes: ["id", "name", "username", "profileImageUrl"],
+                    attributes: ["name", "username", "profileImageUrl"],
                 },
                 {
                     model: db.postMedia,
@@ -308,8 +314,10 @@ class PostService {
                     where: { postId: post.id },
                 });
 
+                const postJson = post.toJSON();
                 return {
-                    ...post.toJSON(),
+                    ...postJson,
+                    media: postJson.media ? postJson.media.map(m => ({ ...m, postId: undefined })) : [],
                     likesCount,
                     isLiked: !!isLiked,
                     commentsCount,
@@ -395,7 +403,7 @@ class PostService {
                         {
                             model: db.masterCustomer,
                             as: "user",
-                            attributes: ["id", "name", "username", "profileImageUrl"],
+                            attributes: ["name", "username", "profileImageUrl"],
                         },
                         {
                             model: db.postMedia,
@@ -430,10 +438,12 @@ class PostService {
                     where: { postId: post.id, userId },
                 });
 
+                const postJson = post.toJSON();
                 return {
                     blockedAt: blockedPost.createdAt,
                     post: {
-                        ...post.toJSON(),
+                        ...postJson,
+                        media: postJson.media ? postJson.media.map(m => ({ ...m, postId: undefined })) : [],
                         likesCount,
                         commentsCount,
                         isLiked: !!isLiked,
@@ -488,7 +498,7 @@ class PostService {
                         {
                             model: db.masterCustomer,
                             as: "user",
-                            attributes: ["id", "name", "username", "profileImageUrl"],
+                            attributes: ["name", "username", "profileImageUrl"],
                         },
                         {
                             model: db.postMedia,
@@ -526,10 +536,12 @@ class PostService {
                     isLiked = !!likeCheck;
                 }
 
+                const postJson = post.toJSON();
                 return {
                     likedAt: likedPost.createdAt,
                     post: {
-                        ...post.toJSON(),
+                        ...postJson,
+                        media: postJson.media ? postJson.media.map(m => ({ ...m, postId: undefined })) : [],
                         likesCount,
                         commentsCount,
                         isLiked,

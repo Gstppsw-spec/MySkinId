@@ -81,17 +81,17 @@ class PostController {
     async getFeed(req, res) {
         try {
             const userId = req.user.id;
-            const limit = parseInt(req.query.limit) || 20;
-            const offset = parseInt(req.query.offset) || 0;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 20;
+            const limit = pageSize;
+            const offset = (page - 1) * pageSize;
 
             const { posts, totalCount } = await postService.getFeed(userId, limit, offset);
-
-            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: posts,
-                pagination: formatPagination(totalCount, pageNumber, limit),
+                pagination: formatPagination(totalCount, page, pageSize),
             });
         } catch (error) {
             console.error("Get feed error:", error);
@@ -165,17 +165,17 @@ class PostController {
         try {
             const { targetUserId } = req.params;
             const userId = req.user.id;
-            const limit = parseInt(req.query.limit) || 20;
-            const offset = parseInt(req.query.offset) || 0;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 20;
+            const limit = pageSize;
+            const offset = (page - 1) * pageSize;
 
             const { posts, totalCount } = await postService.getUserPosts(userId, targetUserId, limit, offset);
-
-            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: posts,
-                pagination: formatPagination(totalCount, pageNumber, limit),
+                pagination: formatPagination(totalCount, page, pageSize),
             });
         } catch (error) {
             console.error("Get user posts error:", error);
@@ -250,17 +250,17 @@ class PostController {
     async getBlockedPosts(req, res) {
         try {
             const userId = req.user.id;
-            const limit = parseInt(req.query.limit) || 20;
-            const offset = parseInt(req.query.offset) || 0;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 20;
+            const limit = pageSize;
+            const offset = (page - 1) * pageSize;
 
             const { posts, totalCount } = await postService.getBlockedPosts(userId, limit, offset);
-
-            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: posts,
-                pagination: formatPagination(totalCount, pageNumber, limit),
+                pagination: formatPagination(totalCount, page, pageSize),
             });
         } catch (error) {
             console.error("Get blocked posts error:", error);
@@ -301,8 +301,10 @@ class PostController {
     async getPostLikedbyUserId(req, res) {
         try {
             const { userId } = req.params;
-            const limit = parseInt(req.query.limit) || 20;
-            const offset = parseInt(req.query.offset) || 0;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 20;
+            const limit = pageSize;
+            const offset = (page - 1) * pageSize;
 
             const { posts, totalCount } = await postService.getPostLikedbyUserId(
                 userId,
@@ -311,12 +313,10 @@ class PostController {
                 offset
             );
 
-            const pageNumber = Math.floor(offset / limit) + 1;
-
             res.status(200).json({
                 success: true,
                 data: posts,
-                pagination: formatPagination(totalCount, pageNumber, limit),
+                pagination: formatPagination(totalCount, page, pageSize),
             });
         } catch (error) {
             console.error("Get post liked by user error:", error);
