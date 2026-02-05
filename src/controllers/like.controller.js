@@ -66,17 +66,17 @@ class LikeController {
     async getPostLikes(req, res) {
         try {
             const { postId } = req.params;
-            const limit = parseInt(req.query.limit) || 20;
-            const offset = parseInt(req.query.offset) || 0;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 20;
+            const limit = pageSize;
+            const offset = (page - 1) * pageSize;
 
             const { likes, totalCount } = await likeService.getPostLikes(postId, limit, offset);
-
-            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: likes,
-                pagination: formatPagination(totalCount, pageNumber, limit),
+                pagination: formatPagination(totalCount, page, pageSize),
             });
         } catch (error) {
             console.error("Get post likes error:", error);

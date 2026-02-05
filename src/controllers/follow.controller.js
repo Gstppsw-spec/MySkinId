@@ -70,17 +70,17 @@ class FollowController {
         try {
             const { userId } = req.params;
             const currentUserId = req.user?.id;
-            const limit = parseInt(req.query.limit) || 20;
-            const offset = parseInt(req.query.offset) || 0;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 20;
+            const limit = pageSize;
+            const offset = (page - 1) * pageSize;
 
             const { followers, totalCount } = await followService.getFollowers(userId, currentUserId, limit, offset);
-
-            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: followers,
-                pagination: formatPagination(totalCount, pageNumber, limit),
+                pagination: formatPagination(totalCount, page, pageSize),
             });
         } catch (error) {
             console.error("Get followers error:", error);
@@ -99,17 +99,17 @@ class FollowController {
         try {
             const { userId } = req.params;
             const currentUserId = req.user?.id;
-            const limit = parseInt(req.query.limit) || 20;
-            const offset = parseInt(req.query.offset) || 0;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 20;
+            const limit = pageSize;
+            const offset = (page - 1) * pageSize;
 
             const { following, totalCount } = await followService.getFollowing(userId, currentUserId, limit, offset);
-
-            const pageNumber = Math.floor(offset / limit) + 1;
 
             res.status(200).json({
                 success: true,
                 data: following,
-                pagination: formatPagination(totalCount, pageNumber, limit),
+                pagination: formatPagination(totalCount, page, pageSize),
             });
         } catch (error) {
             console.error("Get following error:", error);

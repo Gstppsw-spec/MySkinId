@@ -54,6 +54,12 @@ class CommentService {
      * @returns {Array} Array of comments
      */
     async getComments(postId, userId, limit = 20, offset = 0) {
+        // Fetch post to identify the author
+        const post = await db.posts.findByPk(postId, { attributes: ["userId"] });
+        if (!post) {
+            throw new Error("Post not found");
+        }
+
         const { count, rows: comments } = await db.postComments.findAndCountAll({
             where: { postId },
             distinct: true,
@@ -89,7 +95,7 @@ class CommentService {
                 {
                     model: db.masterCustomer,
                     as: "user",
-                    attributes: ["id", "name", "username", "profileImageUrl"],
+                    attributes: ["name", "username", "profileImageUrl"],
                 },
             ],
             order: [
@@ -105,8 +111,10 @@ class CommentService {
             const json = comment.toJSON();
             return {
                 ...json,
+                postId: undefined,
                 likesCount: parseInt(json.likesCount) || 0,
                 isLiked: json.isLiked === 1 || json.isLiked === "1" || json.isLiked === true || json.isLiked === "true",
+                isAuthor: json.userId === post.userId,
                 priority: undefined,
             };
         });
