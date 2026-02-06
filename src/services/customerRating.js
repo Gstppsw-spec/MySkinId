@@ -37,33 +37,12 @@ module.exports = {
         transaction,
       });
 
-      // UPDATE rating
+      // CHECK IF RATING EXISTS
       if (existing) {
-        const oldRating = existing.rating;
-
-        await existing.update({ rating, review }, { transaction });
-
-        await updateRatingAvg({
-          model: targetModel,
-          entityId,
-          oldRating,
-          newRating: rating,
-          transaction,
-        });
-
-        await RatingImage.destroy({
-          where: { ratingId: existing.id },
-          transaction,
-        });
-
-        await saveRatingImages(existing.id, images, transaction);
-
-        await transaction.commit();
-
+        await transaction.rollback();
         return {
-          status: true,
-          message: "Berhasil update rating",
-          data: existing,
+          status: false,
+          message: "Anda sudah memberikan rating untuk item ini.",
         };
       }
 
@@ -125,7 +104,14 @@ module.exports = {
       return { status: false, message: error.message, data: null };
     }
   },
-  async getByEntity(entityType, entityId, currentUserId = null, ratingFilter = null) {
+  async getByEntity(
+    entityType,
+    entityId,
+    currentUserId = null,
+    ratingFilter = null,
+    limit = 20,
+    offset = 0
+  ) {
     try {
       if (!entityType || !entityId) {
         return {
@@ -144,8 +130,9 @@ module.exports = {
         whereClause.rating = ratingFilter;
       }
 
-      const ratings = await Rating.findAll({
+      const { count, rows: ratings } = await Rating.findAndCountAll({
         where: whereClause,
+        distinct: true,
         include: [
           {
             model: RatingImage,
@@ -155,7 +142,7 @@ module.exports = {
           {
             model: masterCustomer,
             as: "customer",
-            attributes: ["id", "name"],
+            attributes: ["id", "name", "profileImageUrl"],
           },
           {
             model: RatingLike,
@@ -163,7 +150,19 @@ module.exports = {
             attributes: ["customerId"],
           },
         ],
-        order: [["createdAt", "DESC"]],
+        order: [
+          [
+            sequelize.literal(
+              currentUserId
+                ? `CASE WHEN Rating.customerId = '${currentUserId}' THEN 0 ELSE 1 END`
+                : "1"
+            ),
+            "ASC",
+          ],
+          ["createdAt", "DESC"],
+        ],
+        limit,
+        offset,
       });
 
       const processedRatings = ratings.map((rating) => {
@@ -179,7 +178,10 @@ module.exports = {
       return {
         status: true,
         message: "Berhasil mengambil data rating",
-        data: processedRatings,
+        data: {
+          list: processedRatings,
+          totalRating: count,
+        },
       };
     } catch (error) {
       return {

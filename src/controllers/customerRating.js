@@ -1,5 +1,6 @@
 const response = require("../helpers/response");
 const ratingService = require("../services/customerRating");
+const { formatPagination } = require("../utils/pagination");
 
 module.exports = {
   async createOrUpdateRating(req, res) {
@@ -26,20 +27,37 @@ module.exports = {
     try {
       const { entityId } = req.params;
       const { entityType, rating } = req.query;
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 20;
+      const limit = pageSize;
+      const offset = (page - 1) * pageSize;
 
       const currentUserId = req.user ? req.user.id : null;
       const result = await ratingService.getByEntity(
         entityType.toUpperCase(),
         entityId,
         currentUserId,
-        rating
+        rating,
+        limit,
+        offset
       );
 
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
 
-      return response.success(res, result.message, result.data);
+      return res.status(200).json({
+        status: true,
+        message: result.message,
+        data: {
+          ...result.data,
+          pagination: formatPagination(
+            result.data.totalRating,
+            page,
+            pageSize
+          ),
+        },
+      });
     } catch (error) {
       return response.serverError(res, error);
     }
