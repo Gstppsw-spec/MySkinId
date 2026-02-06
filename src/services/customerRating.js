@@ -165,6 +165,45 @@ module.exports = {
         offset,
       });
 
+      const avgResult = await Rating.findOne({
+        where: {
+          entityType,
+          entityId,
+        },
+        attributes: [
+          [sequelize.fn("AVG", sequelize.col("rating")), "avgRating"],
+        ],
+      });
+
+      const totalAvgRating = avgResult
+        ? parseFloat(avgResult.get("avgRating") || 0).toFixed(1)
+        : 0;
+
+      const statsResult = await Rating.findAll({
+        where: {
+          entityType,
+          entityId,
+        },
+        attributes: [
+          "rating",
+          [sequelize.fn("COUNT", sequelize.col("rating")), "count"],
+        ],
+        group: ["rating"],
+        raw: true,
+      });
+
+      const ratingStats = {
+        1: 0,
+        2: 0,
+        3: 0,
+        4: 0,
+        5: 0,
+      };
+
+      statsResult.forEach((item) => {
+        ratingStats[item.rating] = parseInt(item.count);
+      });
+
       const processedRatings = ratings.map((rating) => {
         const ratingJson = rating.toJSON();
         ratingJson.likeCount = ratingJson.likes.length;
@@ -178,9 +217,11 @@ module.exports = {
       return {
         status: true,
         message: "Berhasil mengambil data rating",
+        totalCount: count,
         data: {
           list: processedRatings,
-          totalRating: count,
+          totalAvgRating: totalAvgRating,
+          ratingStats,
         },
       };
     } catch (error) {

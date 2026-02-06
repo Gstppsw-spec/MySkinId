@@ -52,7 +52,7 @@ module.exports = {
         data: {
           ...result.data,
           pagination: formatPagination(
-            result.data.totalRating,
+            result.totalCount,
             page,
             pageSize
           ),
