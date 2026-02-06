@@ -125,7 +125,7 @@ module.exports = {
       return { status: false, message: error.message, data: null };
     }
   },
-  async getByEntity(entityType, entityId, currentUserId = null) {
+  async getByEntity(entityType, entityId, currentUserId = null, ratingFilter = null) {
     try {
       if (!entityType || !entityId) {
         return {
@@ -135,11 +135,17 @@ module.exports = {
         };
       }
 
+      const whereClause = {
+        entityType,
+        entityId,
+      };
+
+      if (ratingFilter) {
+        whereClause.rating = ratingFilter;
+      }
+
       const ratings = await Rating.findAll({
-        where: {
-          entityType,
-          entityId,
-        },
+        where: whereClause,
         include: [
           {
             model: RatingImage,

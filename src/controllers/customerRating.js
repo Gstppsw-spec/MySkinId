@@ -25,13 +25,14 @@ module.exports = {
   async getByEntity(req, res) {
     try {
       const { entityId } = req.params;
-      const { entityType } = req.query;
+      const { entityType, rating } = req.query;
 
       const currentUserId = req.user ? req.user.id : null;
       const result = await ratingService.getByEntity(
         entityType.toUpperCase(),
         entityId,
-        currentUserId
+        currentUserId,
+        rating
       );
 
       if (!result.status) {
