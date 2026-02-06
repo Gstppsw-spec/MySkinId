@@ -5,6 +5,9 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const uploadPath = "uploads/rating";
+const { verifyToken } = require("../middlewares/authMiddleware");
+
+router.use(verifyToken);
 
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
@@ -35,7 +38,9 @@ router.post(
 );
 
 router.patch("/image/:id", rating.deleteImage);
+router.post("/like/:ratingId", rating.toggleLike);
 router.get("/:entityId", rating.getByEntity);
+router.delete("/:id", rating.deleteRating);
 
 
 module.exports = router;

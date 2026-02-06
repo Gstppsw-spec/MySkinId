@@ -1,16 +1,17 @@
 const sequelize = require("../models").sequelize;
-const { Rating, RatingImage, masterCustomer } = require("../models");
+const { Rating, RatingImage, masterCustomer, RatingLike } = require("../models");
 const fs = require("fs");
 const getRatingTargetModel = require("../helpers/getRatingTargetModel");
 const updateRatingAvg = require("../helpers/updateRatingAvg");
 
 module.exports = {
-  async createOrUpdateRating(data, images) {
+  async createOrUpdateRating(customerId, data, images) {
     const transaction = await sequelize.transaction();
     try {
-      const { customerId, entityType, entityId, rating, review } = data;
+      console.log(data);
+      const { entityType, entityId, rating, review } = data;
 
-      if (!customerId || !entityType || !entityId || !rating)
+      if (!entityType || !entityId || !rating)
         return { status: false, message: "Data tidak lengkap" };
 
       const targetModel = getRatingTargetModel(entityType);
@@ -124,7 +125,7 @@ module.exports = {
       return { status: false, message: error.message, data: null };
     }
   },
-  async getByEntity(entityType, entityId) {
+  async getByEntity(entityType, entityId, currentUserId = null) {
     try {
       if (!entityType || !entityId) {
         return {
@@ -150,14 +151,29 @@ module.exports = {
             as: "customer",
             attributes: ["id", "name"],
           },
+          {
+            model: RatingLike,
+            as: "likes",
+            attributes: ["customerId"],
+          },
         ],
         order: [["createdAt", "DESC"]],
+      });
+
+      const processedRatings = ratings.map((rating) => {
+        const ratingJson = rating.toJSON();
+        ratingJson.likeCount = ratingJson.likes.length;
+        ratingJson.isLiked = currentUserId
+          ? ratingJson.likes.some((like) => like.customerId === currentUserId)
+          : false;
+        delete ratingJson.likes;
+        return ratingJson;
       });
 
       return {
         status: true,
         message: "Berhasil mengambil data rating",
-        data: ratings,
+        data: processedRatings,
       };
     } catch (error) {
       return {
@@ -165,6 +181,59 @@ module.exports = {
         message: error.message,
         data: null,
       };
+    }
+  },
+
+  async deleteRating(id) {
+    try {
+      const rating = await Rating.findByPk(id);
+
+      if (!rating) {
+        return { status: false, message: "Rating not found", data: null };
+      }
+
+      await rating.destroy();
+
+      return {
+        status: true,
+        message: "Rating deleted successfully",
+        data: { id },
+      };
+    } catch (error) {
+      console.error("Delete Rating Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async toggleLike(ratingId, customerId) {
+    try {
+      const rating = await Rating.findByPk(ratingId);
+      if (!rating) {
+        return { status: false, message: "Rating not found" };
+      }
+
+      const existingLike = await RatingLike.findOne({
+        where: { ratingId, customerId },
+      });
+
+      if (existingLike) {
+        await existingLike.destroy();
+        return {
+          status: true,
+          message: "Unliked successfully",
+          data: { isLiked: false },
+        };
+      } else {
+        await RatingLike.create({ ratingId, customerId });
+        return {
+          status: true,
+          message: "Liked successfully",
+          data: { isLiked: true },
+        };
+      }
+    } catch (error) {
+      console.error("Toggle Like Error:", error);
+      return { status: false, message: error.message };
     }
   },
 };

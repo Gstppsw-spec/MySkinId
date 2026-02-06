@@ -1532,16 +1532,9 @@
     "/api/v2/consultation/room/readyToAssign": {
       "get": {
         "description": "",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
-          }
-        ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1549,16 +1542,9 @@
     "/api/v2/consultation/room": {
       "post": {
         "description": "",
-        "parameters": [
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
-          }
-        ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1589,16 +1575,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1612,16 +1593,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1635,16 +1611,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1658,16 +1629,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1681,16 +1647,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1704,16 +1665,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1727,16 +1683,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1752,11 +1703,6 @@
             "type": "string"
           },
           {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
-          },
-          {
             "name": "cursor",
             "in": "query",
             "type": "string"
@@ -1768,8 +1714,8 @@
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1783,16 +1729,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1806,16 +1747,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -1829,16 +1765,11 @@
             "in": "path",
             "required": true,
             "type": "string"
-          },
-          {
-            "name": "authorization",
-            "in": "header",
-            "type": "string"
           }
         ],
         "responses": {
-          "401": {
-            "description": "Unauthorized"
+          "default": {
+            "description": ""
           }
         }
       }
@@ -2156,9 +2087,16 @@
     "/api/v2/rating/": {
       "post": {
         "description": "",
+        "parameters": [
+          {
+            "name": "authorization",
+            "in": "header",
+            "type": "string"
+          }
+        ],
         "responses": {
-          "default": {
-            "description": ""
+          "401": {
+            "description": "Unauthorized"
           }
         }
       }
@@ -2172,11 +2110,39 @@
             "in": "path",
             "required": true,
             "type": "string"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "type": "string"
           }
         ],
         "responses": {
-          "default": {
-            "description": ""
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v2/rating/like/{ratingId}": {
+      "post": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "ratingId",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized"
           }
         }
       }
@@ -2192,14 +2158,42 @@
             "type": "string"
           },
           {
+            "name": "authorization",
+            "in": "header",
+            "type": "string"
+          },
+          {
             "name": "entityType",
             "in": "query",
             "type": "string"
           }
         ],
         "responses": {
-          "default": {
-            "description": ""
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v2/rating/{id}": {
+      "delete": {
+        "description": "",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Unauthorized"
           }
         }
       }
@@ -2694,12 +2688,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
@@ -2727,12 +2721,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
@@ -2766,12 +2760,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
@@ -2855,12 +2849,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
@@ -3037,12 +3031,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
@@ -3112,12 +3106,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
@@ -3227,12 +3221,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
@@ -3319,12 +3313,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
@@ -3358,12 +3352,12 @@
             "type": "string"
           },
           {
-            "name": "limit",
+            "name": "page",
             "in": "query",
             "type": "string"
           },
           {
-            "name": "offset",
+            "name": "pageSize",
             "in": "query",
             "type": "string"
           }
