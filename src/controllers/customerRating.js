@@ -26,7 +26,7 @@ module.exports = {
   async getByEntity(req, res) {
     try {
       const { entityId } = req.params;
-      const { entityType, rating } = req.query;
+      const { entityType, rating, sortBy, hasImage } = req.query;
       const page = parseInt(req.query.page) || 1;
       const pageSize = parseInt(req.query.pageSize) || 20;
       const limit = pageSize;
@@ -39,7 +39,9 @@ module.exports = {
         currentUserId,
         rating,
         limit,
-        offset
+        offset,
+        sortBy,
+        hasImage
       );
 
       if (!result.status) {

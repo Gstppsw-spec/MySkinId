@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const sequelize = require("../models").sequelize;
 const { Rating, RatingImage, masterCustomer, RatingLike } = require("../models");
 const fs = require("fs");
@@ -110,7 +111,9 @@ module.exports = {
     currentUserId = null,
     ratingFilter = null,
     limit = 20,
-    offset = 0
+    offset = 0,
+    sortBy = "newest",
+    hasImage = null
   ) {
     try {
       if (!entityType || !entityId) {
@@ -130,6 +133,19 @@ module.exports = {
         whereClause.rating = ratingFilter;
       }
 
+      // Filter by Image
+      let imageRequired = false;
+      if (hasImage === "true") {
+        imageRequired = true;
+      } else if (hasImage === "false") {
+        whereClause[Op.and] = sequelize.literal(
+          "NOT EXISTS (SELECT 1 FROM rating_images WHERE rating_images.ratingId = Rating.id)"
+        );
+      }
+
+      // Sorting
+      const sortOrder = sortBy === "oldest" ? "ASC" : "DESC";
+
       const { count, rows: ratings } = await Rating.findAndCountAll({
         where: whereClause,
         distinct: true,
@@ -138,6 +154,7 @@ module.exports = {
             model: RatingImage,
             as: "images",
             attributes: ["imageUrl"],
+            required: imageRequired,
           },
           {
             model: masterCustomer,
@@ -159,7 +176,7 @@ module.exports = {
             ),
             "ASC",
           ],
-          ["createdAt", "DESC"],
+          ["createdAt", sortOrder],
         ],
         limit,
         offset,
