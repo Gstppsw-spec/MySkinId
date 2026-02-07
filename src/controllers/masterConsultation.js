@@ -111,7 +111,8 @@ module.exports = {
   },
 
   async addPrescription(req, res) {
-    const result = await consultation.addPrescription(req.body);
+    const { id } = req.params;
+    const result = await consultation.addPrescription(req.body, id);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
@@ -121,6 +122,14 @@ module.exports = {
     const { id } = req.params;
     const result = await consultation.getPrescriptionByRoomId(id);
 
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async getAllPrescriptionByOutlet(req, res) {
+    const { id } = req.params;
+    const result = await consultation.getAllPrescriptionByOutlet(id);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

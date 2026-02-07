@@ -7,8 +7,6 @@ const fs = require("fs");
 const uploadPath = "uploads/rating";
 const { verifyToken } = require("../middlewares/authMiddleware");
 
-router.use(verifyToken);
-
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
 }
@@ -31,6 +29,13 @@ const uploadImageReview = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
 
+// Public route (no authentication required)
+router.get("/:entityId", rating.getByEntity);
+
+// Apply authentication middleware to all routes below
+router.use(verifyToken);
+
+// Protected routes (authentication required)
 router.post(
   "/",
   uploadImageReview.array("images", 10),
@@ -39,7 +44,6 @@ router.post(
 
 router.patch("/image/:id", rating.deleteImage);
 router.post("/like/:ratingId", rating.toggleLike);
-router.get("/:entityId", rating.getByEntity);
 router.delete("/:id", rating.deleteRating);
 
 

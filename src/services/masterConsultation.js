@@ -8,6 +8,8 @@ const {
   masterProduct,
   masterLocation,
   masterCustomer,
+  masterPackage,
+  masterService,
 } = require("../models");
 
 const { Op, Sequelize, where } = require("sequelize");
@@ -343,26 +345,58 @@ module.exports = {
       };
     }
   },
-  async addPrescription(data) {
+  async addPrescription(data, roomId) {
     try {
-      const { roomId, refferenceId, refferenceType, notes } = data;
-
-      if (!roomId || !notes) {
+      // Validate input
+      if (!roomId) {
         return {
           status: false,
-          message: "Room dan data resep tidak boleh kosong",
+          message: "Room ID tidak boleh kosong",
           data: null,
         };
       }
 
-      const prescription = await masterConsultationPrescription.create({
-        roomId,
-        notes,
-        refferenceId,
-        refferenceType,
-      });
+      if (!Array.isArray(data)) {
+        return {
+          status: false,
+          message: "Data harus berupa array",
+          data: null,
+        };
+      }
 
-      return { status: true, message: "Berhasil", data: prescription };
+      if (data.length === 0) {
+        return {
+          status: false,
+          message: "Data resep tidak boleh kosong",
+          data: null,
+        };
+      }
+
+      // Validate each prescription has required fields
+      for (const prescription of data) {
+        if (!prescription.notes) {
+          return {
+            status: false,
+            message: "Setiap resep harus memiliki notes",
+            data: null,
+          };
+        }
+      }
+
+      // Map prescriptions to include roomId
+      const prescriptionsData = data.map((prescription) => ({
+        roomId,
+        notes: prescription.notes,
+        refferenceId: prescription.refferenceId || null,
+        refferenceType: prescription.refferenceType || null,
+      }));
+
+      // Bulk create prescriptions
+      const prescriptions = await masterConsultationPrescription.bulkCreate(
+        prescriptionsData
+      );
+
+      return { status: true, message: "Berhasil menambahkan resep", data: prescriptions };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
@@ -372,9 +406,115 @@ module.exports = {
     try {
       const prescriptions = await masterConsultationPrescription.findAll({
         where: { roomId },
-        include: [{ model: masterProduct, as: "product" }],
+        include: [
+          {
+            model: masterProduct,
+            as: "product",
+            attributes: ["id", "name", "description"],
+            where: { isVerified: true, isActive: true },
+            required: false
+          },
+          {
+            model: masterService,
+            as: "service",
+            attributes: ["id", "name", "description"],
+            where: { isVerified: true, isActive: true },
+            required: false
+          },
+          {
+            model: masterPackage,
+            as: "package",
+            attributes: ["id", "name", "description"],
+            where: { isVerified: true, isActive: true },
+            required: false
+          }
+        ],
         order: [["createdAt", "ASC"]],
       });
+
+      // Map to unified prescription object
+      const formattedPrescriptions = prescriptions.map((prescription) => {
+        const prescriptionJson = prescription.toJSON();
+
+        // Determine which reference type to use based on refferenceType
+        let prescriptionData = null;
+        if (prescriptionJson.refferenceType === "product" && prescriptionJson.product) {
+          prescriptionData = prescriptionJson.product;
+        } else if (prescriptionJson.refferenceType === "service" && prescriptionJson.service) {
+          prescriptionData = prescriptionJson.service;
+        } else if (prescriptionJson.refferenceType === "package" && prescriptionJson.package) {
+          prescriptionData = prescriptionJson.package;
+        }
+
+        // Remove individual reference fields and add unified prescription field
+        delete prescriptionJson.product;
+        delete prescriptionJson.service;
+        delete prescriptionJson.package;
+        delete prescriptionJson.refferenceId;
+        delete prescriptionJson.createdAt;
+        delete prescriptionJson.updatedAt;
+
+        return {
+          ...prescriptionJson,
+          prescription: prescriptionData
+        };
+      });
+
+      return { status: true, message: "Berhasil", data: formattedPrescriptions };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getAllPrescriptionByOutlet(roomId) {
+    try {
+      // Get the room to extract locationId
+      const room = await masterRoomConsultation.findOne({
+        where: { id: roomId },
+        attributes: ["id", "locationId"],
+      });
+
+      if (!room) {
+        return { status: false, message: "Room tidak ditemukan", data: null };
+      }
+
+      if (!room.locationId) {
+        return { status: false, message: "Room tidak memiliki locationId", data: null };
+      }
+
+      // Fetch products, services, and packages with the same locationId
+      const [productPrescription, servicePrescription, packagePrescription] = await Promise.all([
+        masterProduct.findAll({
+          where: {
+            locationId: room.locationId,
+            isVerified: true,
+            isActive: true
+          },
+          attributes: ["id", "name"],
+        }),
+        masterService.findAll({
+          where: {
+            locationId: room.locationId,
+            isVerified: true,
+            isActive: true
+          },
+          attributes: ["id", "name"],
+        }),
+        masterPackage.findAll({
+          where: {
+            locationId: room.locationId,
+            isVerified: true,
+            isActive: true
+          },
+          attributes: ["id", "name"],
+        }),
+      ]);
+
+      const prescriptions = {
+        product: productPrescription,
+        service: servicePrescription,
+        package: packagePrescription,
+      };
 
       return { status: true, message: "Berhasil", data: prescriptions };
     } catch (error) {

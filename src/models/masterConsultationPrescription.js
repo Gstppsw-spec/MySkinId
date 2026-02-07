@@ -24,6 +24,13 @@ module.exports = (sequelize, DataTypes) => {
         constraints: false, // Penting karna refferenceId bisa mengacu ke table lain
         as: "package",
       });
+
+      // Relasi ke masterProduct
+      masterConsultationPrescription.belongsTo(models.masterProduct, {
+        foreignKey: "refferenceId",
+        constraints: false, // Penting karna refferenceId bisa mengacu ke table lain
+        as: "product",
+      });
     }
   }
 
