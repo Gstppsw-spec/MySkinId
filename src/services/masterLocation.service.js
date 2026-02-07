@@ -444,7 +444,17 @@ class MasterLocationService {
     }
   }
 
-
+  async getCities() {
+    try {
+      const cities = await masterCity.findAll({
+        attributes: ["id", "name"]
+      });
+      return { status: true, message: "Cities fetched successfully", data: cities };
+    } catch (error) {
+      console.error("Get Cities Error:", error);
+      return { status: false, message: error.message };
+    }
+  }
 
   async upsertProvince(data) {
     try {

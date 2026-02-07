@@ -51,6 +51,8 @@ router.put("/room/:id/message/read", consultation.readMessage);
 router.get("/room/:id/messages", consultation.getMessagesByRoomId);
 router.get("/room/:id/media", consultation.getMediaByRoomId);
 
+router.put("/room/:id/updateLocation", consultation.updateLocation);
+
 router.post("/room/:id/prescription", consultation.addPrescription);
 router.get("/room/:id/prescriptions", consultation.getPrescriptionByRoomId);
 router.get("/room/:id/allPrescriptionByOutlet", consultation.getAllPrescriptionByOutlet);

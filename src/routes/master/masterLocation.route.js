@@ -65,6 +65,7 @@ router.get(
   "/get-district-by-latitude-longitude",
   masterLocationController.getDistrictByLatitudeLongitude
 );
+router.get("/cities", masterLocationController.getCities);
 router.get("/", masterLocationController.list);
 router.get("/:id", masterLocationController.detail);
 

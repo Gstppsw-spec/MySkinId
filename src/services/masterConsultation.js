@@ -6,10 +6,13 @@ const {
   masterConsultationPrescription,
   relationshipUserLocation,
   masterProduct,
+  masterProductImage,
   masterLocation,
+  masterLocationImage,
   masterCustomer,
   masterPackage,
   masterService,
+  masterCity
 } = require("../models");
 
 const { Op, Sequelize, where } = require("sequelize");
@@ -345,6 +348,28 @@ module.exports = {
       };
     }
   },
+
+  async updateLocation(cityId, roomId) {
+    try {
+      const room = await masterRoomConsultation.findByPk(roomId);
+      if (!room) {
+        return { status: false, message: "Room not found", data: null };
+      }
+      const city = await masterCity.findByPk(cityId);
+      if (!city) {
+        return { status: false, message: "City not found", data: null };
+      }
+      const latitude = city.latitude;
+      const longitude = city.longitude;
+      room.latitude = latitude;
+      room.longitude = longitude;
+      await room.save();
+      return { status: true, message: "Location updated successfully", data: room };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
   async addPrescription(data, roomId) {
     try {
       // Validate input
@@ -383,6 +408,54 @@ module.exports = {
         }
       }
 
+      // validate refferenceId and refferenceType
+      for (const prescription of data) {
+        if (!prescription.refferenceType) {
+          return {
+            status: false,
+            message: "Refference type tidak boleh kosong",
+            data: null,
+          };
+        }
+        if (!prescription.refferenceId) {
+          return {
+            status: false,
+            message: "Refference ID tidak boleh kosong",
+            data: null,
+          };
+        }
+        if (prescription.refferenceType === "product") {
+          const product = await masterProduct.findByPk(prescription.refferenceId);
+          if (!product) {
+            return {
+              status: false,
+              message: "Product tidak ditemukan",
+              data: null,
+            };
+          }
+        }
+        if (prescription.refferenceType === "service") {
+          const service = await masterService.findByPk(prescription.refferenceId);
+          if (!service) {
+            return {
+              status: false,
+              message: "Service tidak ditemukan",
+              data: null,
+            };
+          }
+        }
+        if (prescription.refferenceType === "package") {
+          const package = await masterPackage.findByPk(prescription.refferenceId);
+          if (!package) {
+            return {
+              status: false,
+              message: "Package tidak ditemukan",
+              data: null,
+            };
+          }
+        }
+      }
+
       // Map prescriptions to include roomId
       const prescriptionsData = data.map((prescription) => ({
         roomId,
@@ -410,23 +483,58 @@ module.exports = {
           {
             model: masterProduct,
             as: "product",
-            attributes: ["id", "name", "description"],
+            attributes: ["id", "name", "description", "locationId"],
             where: { isVerified: true, isActive: true },
-            required: false
+            required: false,
+            include: [
+              {
+                model: masterProductImage,
+                as: "images",
+                attributes: ["imageUrl"]
+              }
+            ]
           },
           {
             model: masterService,
             as: "service",
-            attributes: ["id", "name", "description"],
+            attributes: ["id", "name", "description", "locationId"],
             where: { isVerified: true, isActive: true },
-            required: false
+            required: false,
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id"],
+                include: [
+                  {
+                    model: masterLocationImage,
+                    as: "images",
+                    attributes: ["imageUrl"]
+                  }
+                ]
+              }
+            ]
           },
           {
             model: masterPackage,
             as: "package",
-            attributes: ["id", "name", "description"],
+            attributes: ["id", "name", "description", "locationId"],
             where: { isVerified: true, isActive: true },
-            required: false
+            required: false,
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id"],
+                include: [
+                  {
+                    model: masterLocationImage,
+                    as: "images",
+                    attributes: ["imageUrl"]
+                  }
+                ]
+              }
+            ]
           }
         ],
         order: [["createdAt", "ASC"]],
@@ -438,12 +546,41 @@ module.exports = {
 
         // Determine which reference type to use based on refferenceType
         let prescriptionData = null;
+        let media = [];
+
         if (prescriptionJson.refferenceType === "product" && prescriptionJson.product) {
-          prescriptionData = prescriptionJson.product;
+          prescriptionData = {
+            id: prescriptionJson.product.id,
+            name: prescriptionJson.product.name,
+            description: prescriptionJson.product.description
+          };
+          // Extract product images
+          media = prescriptionJson.product.images || [];
         } else if (prescriptionJson.refferenceType === "service" && prescriptionJson.service) {
-          prescriptionData = prescriptionJson.service;
+          prescriptionData = {
+            id: prescriptionJson.service.id,
+            name: prescriptionJson.service.name,
+            description: prescriptionJson.service.description
+          };
+          // Extract location images for service
+          if (prescriptionJson.service.location && prescriptionJson.service.location.images) {
+            media = prescriptionJson.service.location.images;
+          }
         } else if (prescriptionJson.refferenceType === "package" && prescriptionJson.package) {
-          prescriptionData = prescriptionJson.package;
+          prescriptionData = {
+            id: prescriptionJson.package.id,
+            name: prescriptionJson.package.name,
+            description: prescriptionJson.package.description
+          };
+          // Extract location images for package
+          if (prescriptionJson.package.location && prescriptionJson.package.location.images) {
+            media = prescriptionJson.package.location.images;
+          }
+        }
+
+        // Add media to prescription data if it exists
+        if (prescriptionData) {
+          prescriptionData.media = media;
         }
 
         // Remove individual reference fields and add unified prescription field
@@ -468,10 +605,10 @@ module.exports = {
 
   async getAllPrescriptionByOutlet(roomId) {
     try {
-      // Get the room to extract locationId
+      // Get the room to extract locationId or latitude/longitude
       const room = await masterRoomConsultation.findOne({
         where: { id: roomId },
-        attributes: ["id", "locationId"],
+        attributes: ["id", "locationId", "latitude", "longitude"],
       });
 
       if (!room) {
@@ -479,44 +616,258 @@ module.exports = {
       }
 
       if (!room.locationId) {
-        return { status: false, message: "Room tidak memiliki locationId", data: null };
+        // If no locationId, try to find nearest locations using latitude/longitude
+        if (!room.latitude || !room.longitude) {
+          return { status: false, message: "Room tidak memiliki locationId / latitude longitude", data: null };
+        }
+
+        const latitude = room.latitude;
+        const longitude = room.longitude;
+
+        // Find nearest locations by latitude and longitude
+        const distanceLiteral = Sequelize.literal(`
+          6371 * acos(
+            cos(radians(${latitude})) *
+            cos(radians(CAST(latitude AS FLOAT))) *
+            cos(radians(CAST(longitude AS FLOAT)) - radians(${longitude})) +
+            sin(radians(${latitude})) *
+            sin(radians(CAST(latitude AS FLOAT)))
+          )
+        `);
+
+        const nearestLocations = await masterLocation.findAll({
+          attributes: [
+            "id",
+            "name",
+            [distanceLiteral, "distance"]
+          ],
+          where: {
+            latitude: { [Op.ne]: null },
+            longitude: { [Op.ne]: null }
+          },
+          order: [[distanceLiteral, "ASC"]],
+          limit: 10, // Get 10 nearest locations
+        });
+
+        const locationIds = nearestLocations.map((location) => location.id);
+
+        if (locationIds.length === 0) {
+          return {
+            status: true,
+            message: "Tidak ada lokasi terdekat ditemukan",
+            data: {
+              product: [],
+              service: [],
+              package: []
+            }
+          };
+        }
+
+        const [productPrescription, servicePrescription, packagePrescription] = await Promise.all([
+          masterProduct.findAll({
+            where: {
+              locationId: locationIds,
+              isVerified: true,
+              isActive: true
+            },
+            attributes: ["id", "name", "description"],
+            include: [
+              {
+                model: masterProductImage,
+                as: "images",
+                attributes: ["imageUrl"]
+              }
+            ]
+          }),
+          masterService.findAll({
+            where: {
+              locationId: locationIds,
+              isVerified: true,
+              isActive: true
+            },
+            attributes: ["id", "name", "description"],
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id"],
+                include: [
+                  {
+                    model: masterLocationImage,
+                    as: "images",
+                    attributes: ["imageUrl"]
+                  }
+                ]
+              }
+            ]
+          }),
+          masterPackage.findAll({
+            where: {
+              locationId: locationIds,
+              isVerified: true,
+              isActive: true
+            },
+            attributes: ["id", "name", "description"],
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id"],
+                include: [
+                  {
+                    model: masterLocationImage,
+                    as: "images",
+                    attributes: ["imageUrl"]
+                  }
+                ]
+              }
+            ]
+          }),
+        ]);
+
+        // Format the response to include media property
+        const formattedProducts = productPrescription.map(product => {
+          const productJson = product.toJSON();
+          return {
+            id: productJson.id,
+            name: productJson.name,
+            description: productJson.description,
+            media: productJson.images || []
+          };
+        });
+
+        const formattedServices = servicePrescription.map(service => {
+          const serviceJson = service.toJSON();
+          return {
+            id: serviceJson.id,
+            name: serviceJson.name,
+            description: serviceJson.description,
+            media: (serviceJson.location && serviceJson.location.images) ? serviceJson.location.images : []
+          };
+        });
+
+        const formattedPackages = packagePrescription.map(pkg => {
+          const pkgJson = pkg.toJSON();
+          return {
+            id: pkgJson.id,
+            name: pkgJson.name,
+            description: pkgJson.description,
+            media: (pkgJson.location && pkgJson.location.images) ? pkgJson.location.images : []
+          };
+        });
+
+        const prescriptions = {
+          product: formattedProducts,
+          service: formattedServices,
+          package: formattedPackages,
+        };
+
+        return { status: true, message: "Berhasil", data: prescriptions };
+      }
+      else {
+        // Fetch products, services, and packages with the same locationId
+        const [productPrescription, servicePrescription, packagePrescription] = await Promise.all([
+          masterProduct.findAll({
+            where: {
+              locationId: room.locationId,
+              isVerified: true,
+              isActive: true
+            },
+            attributes: ["id", "name", "description"],
+            include: [
+              {
+                model: masterProductImage,
+                as: "images",
+                attributes: ["imageUrl"]
+              }
+            ]
+          }),
+          masterService.findAll({
+            where: {
+              locationId: room.locationId,
+              isVerified: true,
+              isActive: true
+            },
+            attributes: ["id", "name", "description"],
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id"],
+                include: [
+                  {
+                    model: masterLocationImage,
+                    as: "images",
+                    attributes: ["imageUrl"]
+                  }
+                ]
+              }
+            ]
+          }),
+          masterPackage.findAll({
+            where: {
+              locationId: room.locationId,
+              isVerified: true,
+              isActive: true
+            },
+            attributes: ["id", "name", "description"],
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id"],
+                include: [
+                  {
+                    model: masterLocationImage,
+                    as: "images",
+                    attributes: ["imageUrl"]
+                  }
+                ]
+              }
+            ]
+          }),
+        ]);
+
+        // Format the response to include media property
+        const formattedProducts = productPrescription.map(product => {
+          const productJson = product.toJSON();
+          return {
+            id: productJson.id,
+            name: productJson.name,
+            description: productJson.description,
+            media: productJson.images || []
+          };
+        });
+
+        const formattedServices = servicePrescription.map(service => {
+          const serviceJson = service.toJSON();
+          return {
+            id: serviceJson.id,
+            name: serviceJson.name,
+            description: serviceJson.description,
+            media: (serviceJson.location && serviceJson.location.images) ? serviceJson.location.images : []
+          };
+        });
+
+        const formattedPackages = packagePrescription.map(pkg => {
+          const pkgJson = pkg.toJSON();
+          return {
+            id: pkgJson.id,
+            name: pkgJson.name,
+            description: pkgJson.description,
+            media: (pkgJson.location && pkgJson.location.images) ? pkgJson.location.images : []
+          };
+        });
+
+        const prescriptions = {
+          product: formattedProducts,
+          service: formattedServices,
+          package: formattedPackages,
+        };
+
+        return { status: true, message: "Berhasil", data: prescriptions };
       }
 
-      // Fetch products, services, and packages with the same locationId
-      const [productPrescription, servicePrescription, packagePrescription] = await Promise.all([
-        masterProduct.findAll({
-          where: {
-            locationId: room.locationId,
-            isVerified: true,
-            isActive: true
-          },
-          attributes: ["id", "name"],
-        }),
-        masterService.findAll({
-          where: {
-            locationId: room.locationId,
-            isVerified: true,
-            isActive: true
-          },
-          attributes: ["id", "name"],
-        }),
-        masterPackage.findAll({
-          where: {
-            locationId: room.locationId,
-            isVerified: true,
-            isActive: true
-          },
-          attributes: ["id", "name"],
-        }),
-      ]);
-
-      const prescriptions = {
-        product: productPrescription,
-        service: servicePrescription,
-        package: packagePrescription,
-      };
-
-      return { status: true, message: "Berhasil", data: prescriptions };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
