@@ -9,7 +9,7 @@ const {
   customerFavorites,
   masterProvince,
   masterCity,
-  masterDistrict
+  masterDistrict,
 } = require("../models");
 
 const fs = require("fs");
@@ -230,8 +230,6 @@ class MasterLocationService {
   }
 
   async getLocationByUser({ id: userId, roleCode, locationIds }) {
-    console.log(locationIds);
-
     try {
       if (roleCode === "SUPER_ADMIN") {
         const data = await masterLocation.findAll({
@@ -354,7 +352,10 @@ class MasterLocationService {
   async getCityByLatitudeLongitude(latitude, longitude) {
     try {
       if (latitude == null || longitude == null) {
-        return { status: false, message: "Latitude and Longitude are required" };
+        return {
+          status: false,
+          message: "Latitude and Longitude are required",
+        };
       }
 
       // pastikan angka (menghindari SQL injection + error query)
@@ -395,12 +396,14 @@ class MasterLocationService {
     }
   }
 
-
   async getDistrictByLatitudeLongitude(latitude, longitude) {
     try {
       // validasi: jangan pakai !latitude karena 0 dianggap false
       if (latitude == null || longitude == null) {
-        return { status: false, message: "Latitude and Longitude are required" };
+        return {
+          status: false,
+          message: "Latitude and Longitude are required",
+        };
       }
 
       // pastikan angka (lebih aman)
@@ -447,9 +450,13 @@ class MasterLocationService {
   async getCities() {
     try {
       const cities = await masterCity.findAll({
-        attributes: ["id", "name"]
+        attributes: ["id", "name"],
       });
-      return { status: true, message: "Cities fetched successfully", data: cities };
+      return {
+        status: true,
+        message: "Cities fetched successfully",
+        data: cities,
+      };
     } catch (error) {
       console.error("Get Cities Error:", error);
       return { status: false, message: error.message };

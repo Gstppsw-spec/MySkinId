@@ -86,7 +86,7 @@ class masterLocationController {
 
   async getLocationByUser(req, res) {
     const user = req.user;
-    console.log(user);
+    console.log(user, 'ini user');
 
     const location = await masterLocationService.getLocationByUser(user);
     return location.status

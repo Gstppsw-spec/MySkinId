@@ -73,8 +73,8 @@ module.exports.verifyToken = async (req, res, next) => {
 
     let locationIds = [];
 
-    // 🔥 ROLE: ADMIN_COMPANY
-    if (roleCode === "ADMIN_COMPANY") {
+    // 🔥 ROLE: COMPANY_ADMIN
+    if (roleCode === "COMPANY_ADMIN") {
       const companyIds = await relationshipUserCompany
         .findAll({
           where: { userId },
@@ -96,7 +96,7 @@ module.exports.verifyToken = async (req, res, next) => {
       }
     }
 
-    // 🔥 ROLE: selain SUPER_ADMIN & ADMIN_COMPANY
+    // 🔥 ROLE: selain SUPER_ADMIN & COMPANY_ADMIN
     else if (roleCode !== "SUPER_ADMIN") {
       locationIds = await relationshipUserLocation
         .findAll({
