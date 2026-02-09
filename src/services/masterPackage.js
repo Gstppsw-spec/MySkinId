@@ -69,10 +69,10 @@ module.exports = {
           required: !!(userLat && userLng),
           ...(distanceLiteral && maxDistance
             ? {
-                where: Sequelize.where(distanceLiteral, {
-                  [Op.lte]: maxDistance,
-                }),
-              }
+              where: Sequelize.where(distanceLiteral, {
+                [Op.lte]: maxDistance,
+              }),
+            }
             : {}),
         },
         {
@@ -367,10 +367,10 @@ module.exports = {
           required: !!(userLat && userLng),
           ...(distanceLiteral && maxDistance
             ? {
-                where: Sequelize.where(distanceLiteral, {
-                  [Op.lte]: maxDistance,
-                }),
-              }
+              where: Sequelize.where(distanceLiteral, {
+                [Op.lte]: maxDistance,
+              }),
+            }
             : {}),
         },
         {
@@ -502,6 +502,32 @@ module.exports = {
         await transaction.rollback();
         return { status: false, message: "Data tidak lengkap", data: null };
       }
+
+      const package = await masterPackage.findOne({
+        where: { id: data.packageId },
+        transaction,
+      });
+
+      if (!package) {
+        await transaction.rollback();
+        return { status: false, message: "Package tidak ditemukan", data: null };
+      }
+
+      const service = await masterService.findOne({
+        where: { id: data.serviceId },
+        transaction,
+      });
+
+      if (!service) {
+        await transaction.rollback();
+        return { status: false, message: "Service tidak ditemukan", data: null };
+      }
+
+      if (package.locationId !== service.locationId) {
+        await transaction.rollback();
+        return { status: false, message: "Package dan Service harus berada di lokasi yang sama", data: null };
+      }
+
       const existing = await masterPackageItems.findOne({
         where: { serviceId: data.serviceId, packageId: data.packageId },
         transaction,

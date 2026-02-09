@@ -91,10 +91,11 @@ class RequestVerificationService {
         }
     }
 
-    async list(status) {
+    async list(status, type) {
         try {
             const where = {};
             if (status) where.status = status;
+            if (type) where.type = type;
 
             const requests = await requestVerification.findAll({
                 where,
