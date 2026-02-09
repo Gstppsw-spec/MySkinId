@@ -3,13 +3,21 @@ const RequestVerificationService = require("../services/requestVerificationServi
 class RequestVerificationController {
     async create(req, res) {
         const data = req.body;
+        const role = req.user.role;
+        if ((data.refferenceType === "company" || data.refferenceType === "location") && role === "OUTLET_ADMIN") {
+            return res.status(401).json({
+                status: false,
+                message: "Unauthorized",
+                data: null,
+            });
+        }
         const result = await RequestVerificationService.create(data);
         return res.status(result.status ? 201 : 400).json(result);
     }
 
     async list(req, res) {
-        const { status } = req.query;
-        const result = await RequestVerificationService.list(status);
+        const { status, type } = req.query;
+        const result = await RequestVerificationService.list(status, type);
         return res.status(result.status ? 200 : 400).json(result);
     }
 
