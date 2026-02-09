@@ -143,4 +143,20 @@ module.exports = {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   },
+
+  async deletePrescriptionsByRoomId(req, res) {
+    const { roomId } = req.params;
+    const result = await consultation.deletePrescriptionsByRoomId(roomId);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async deletePrescription(req, res) {
+    const { id } = req.params;
+    const result = await consultation.deletePrescription(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
 };

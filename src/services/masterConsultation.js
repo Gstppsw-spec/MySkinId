@@ -433,6 +433,13 @@ module.exports = {
               data: null,
             };
           }
+          if (product.isActive === false || product.isVerified === false) {
+            return {
+              status: false,
+              message: "Product tidak aktif / tidak terverifikasi",
+              data: null,
+            };
+          }
         }
         if (prescription.refferenceType === "service") {
           const service = await masterService.findByPk(prescription.refferenceId);
@@ -443,6 +450,13 @@ module.exports = {
               data: null,
             };
           }
+          if (service.isActive === false || service.isVerified === false) {
+            return {
+              status: false,
+              message: "Service tidak aktif / tidak terverifikasi",
+              data: null,
+            };
+          }
         }
         if (prescription.refferenceType === "package") {
           const package = await masterPackage.findByPk(prescription.refferenceId);
@@ -450,6 +464,13 @@ module.exports = {
             return {
               status: false,
               message: "Package tidak ditemukan",
+              data: null,
+            };
+          }
+          if (package.isActive === false || package.isVerified === false) {
+            return {
+              status: false,
+              message: "Package tidak aktif / tidak terverifikasi",
               data: null,
             };
           }
@@ -868,6 +889,26 @@ module.exports = {
         return { status: true, message: "Berhasil", data: prescriptions };
       }
 
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async deletePrescriptionsByRoomId(roomId) {
+    try {
+      const result = await masterConsultationPrescription.destroy({ where: { roomId } });
+      console.log(result);
+      return { status: true, message: "Berhasil", data: result };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async deletePrescription(id) {
+    try {
+      const result = await masterConsultationPrescription.destroy({ where: { id } });
+      console.log(result);
+      return { status: true, message: "Berhasil", data: result };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

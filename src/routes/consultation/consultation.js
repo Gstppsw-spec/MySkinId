@@ -56,5 +56,7 @@ router.put("/room/:id/updateLocation", consultation.updateLocation);
 router.post("/room/:id/prescription", consultation.addPrescription);
 router.get("/room/:id/prescriptions", consultation.getPrescriptionByRoomId);
 router.get("/room/:id/allPrescriptionByOutlet", consultation.getAllPrescriptionByOutlet);
+router.delete("/room/:roomId/prescriptions", consultation.deletePrescriptionsByRoomId);
+router.delete("/prescription/:id", consultation.deletePrescription);
 
 module.exports = router;
