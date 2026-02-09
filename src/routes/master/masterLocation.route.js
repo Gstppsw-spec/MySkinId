@@ -31,14 +31,14 @@ router.get(
 router.post(
   "/",
   verifyToken,
-  allowRoles("ADMIN_COMPANY", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadLocationImages.array("photos", 10),
   masterLocationController.create,
 );
 router.put(
   "/:id",
   verifyToken,
-  allowRoles("ADMIN_COMPANY", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadLocationImages.array("photos", 10),
   masterLocationController.update,
 );
@@ -51,7 +51,7 @@ router.patch(
 router.patch(
   "/image/:id",
   verifyToken,
-  allowRoles("ADMIN_COMPANY", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterLocationController.deleteImage,
 );
 
@@ -59,15 +59,13 @@ router.patch(
 router.post("/inject-region", masterLocationController.injectDataRegion);
 router.get(
   "/get-city-by-latitude-longitude",
-  masterLocationController.getCityByLatitudeLongitude
+  masterLocationController.getCityByLatitudeLongitude,
 );
 router.get(
   "/get-district-by-latitude-longitude",
-  masterLocationController.getDistrictByLatitudeLongitude
+  masterLocationController.getDistrictByLatitudeLongitude,
 );
 router.get("/", masterLocationController.list);
 router.get("/:id", masterLocationController.detail);
-
-
 
 module.exports = router;
