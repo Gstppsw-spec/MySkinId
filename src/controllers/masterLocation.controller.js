@@ -140,6 +140,13 @@ class masterLocationController {
       : response.error(res, result.message, null);
   }
 
+  async getCities(req, res) {
+    const result = await masterLocationService.getCities();
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
   async injectDataRegion(req, res) {
     // Note: Usually we would have some auth check or API key here, but user asked for public endpoint usage logic.
     // Assuming this is an admin feature, but strict requirement "endpoint that uses axios to inject".
