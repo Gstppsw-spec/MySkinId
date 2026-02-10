@@ -4,8 +4,8 @@ const customerCart = require("../services/customerCart");
 module.exports = {
   async getCustomerCart(req, res) {
     try {
-      const { customerId } = req.user.id;
-      const result = await customerCart.getCustomerCart(customerId);
+      const userId = req.user.id;
+      const result = await customerCart.getCustomerCart(userId);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -15,9 +15,9 @@ module.exports = {
   },
 
   async createCustomerCart(req, res) {
-    const { customerId } = req.user.id;
+    const userId = req.user.id;
     try {
-      const result = await customerCart.createCustomerCart(req.body, customerId);
+      const result = await customerCart.createCustomerCart(req.body, userId);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -39,11 +39,11 @@ module.exports = {
   },
 
   async clearCartByRefferenceType(req, res) {
-    const { customerId } = req.user.id;
+    const userId = req.user.id;
     try {
       const { refferenceType } = req.body;
       const result = await customerCart.clearCartByRefferenceType(
-        customerId,
+        userId,
         refferenceType
       );
       if (!result.status)
@@ -55,10 +55,10 @@ module.exports = {
   },
 
   async addQtyCustomerCart(req, res) {
-    const { customerId } = req.user.id;
+    const userId = req.user.id;
     const { refferenceId } = req.body;
     try {
-      const result = await customerCart.addQtyCustomerCart(refferenceId, customerId);
+      const result = await customerCart.addQtyCustomerCart(refferenceId, userId);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -68,10 +68,10 @@ module.exports = {
   },
 
   async reduceQtyCustomerCart(req, res) {
-    const { customerId } = req.user.id;
+    const userId = req.user.id;
     const { refferenceId } = req.body;
     try {
-      const result = await customerCart.reduceQtyCustomerCart(refferenceId, customerId);
+      const result = await customerCart.reduceQtyCustomerCart(refferenceId, userId);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -93,10 +93,10 @@ module.exports = {
   },
 
   async selectAllCustomerCartByRefferenceType(req, res) {
-    const { customerId } = req.user.id;
+    const userId = req.user.id;
     const { refferenceType } = req.body;
     try {
-      const result = await customerCart.selectAllCustomerCartByRefferenceType(customerId, refferenceType);
+      const result = await customerCart.selectAllCustomerCartByRefferenceType(userId, refferenceType);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
