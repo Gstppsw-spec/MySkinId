@@ -186,4 +186,98 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  //package
+  async getCartPackage(req, res) {
+    try {
+      const { customerId } = req.params;
+      const result = await orderCart.getCartPackage(customerId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async createCartPackage(req, res) {
+    try {
+      const result = await orderCart.createCartPackage(req.body);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async deleteCartPackage(req, res) {
+    try {
+      const { cartId } = req.params;
+      const result = await orderCart.deleteCartPackage(cartId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async clearCartPackage(req, res) {
+    try {
+      const { customerId } = req.params;
+      const result = await orderCart.clearCartPackage(customerId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async reduceQtyCartPackage(req, res) {
+    try {
+      const result = await orderCart.reduceQtyCartPackage(req.body);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async addQtyCartPackage(req, res) {
+    try {
+      const result = await orderCart.addQtyCartPackage(req.body);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async selectCartPackage(req, res) {
+    try {
+      const { cartId } = req.params;
+      const result = await orderCart.selectCartPackage(cartId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async selectAllCartPackage(req, res) {
+    try {
+      const { customerId } = req.params;
+      const result = await orderCart.selectAllCartPackage(customerId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

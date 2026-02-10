@@ -22,4 +22,13 @@ router.post("/service/reduce", orderCart.reduceQtyCartService);
 router.put("/service/select/:cartId", orderCart.selectCartService);
 router.put("/service/select-all/:customerId", orderCart.selectAllCartService);
 
+router.get("/package/:customerId", orderCart.getCartPackage);
+router.post("/package", orderCart.createCartPackage);
+router.delete("/package/delete/:cartId", orderCart.deleteCartPackage);
+router.delete("/package/delete-all/:customerId", orderCart.clearCartPackage);
+router.post("/package/add", orderCart.addQtyCartPackage);
+router.post("/package/reduce", orderCart.reduceQtyCartPackage);
+router.put("/package/select/:cartId", orderCart.selectCartPackage);
+router.put("/package/select-all/:customerId", orderCart.selectAllCartPackage);
+
 module.exports = router;

@@ -394,7 +394,7 @@ module.exports = {
           attributes: ["id"],
           where: {
             customerId,
-            favoriteType: "product",
+            favoriteType: "package",
           },
           required: false,
         });
@@ -456,7 +456,7 @@ module.exports = {
           attributes: ["id"],
           where: {
             customerId,
-            favoriteType: "product",
+            favoriteType: "package",
           },
           required: false,
         });

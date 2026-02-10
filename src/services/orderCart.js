@@ -443,5 +443,223 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
-  
+
+  //package
+  async getCartPackage(customerId) {
+    try {
+      if (!customerId)
+        return { status: false, message: "Customer tidak boleh kosong" };
+
+      const cartPackage = await orderCartService.findAll({
+        where: { customerId },
+        include: [
+          {
+            model: masterPackage,
+            as: "package",
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+              },
+            ],
+          },
+        ],
+      });
+
+      return { status: true, message: "Berhasil", data: cartPackage };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async createCartPackage(data) {
+    try {
+      const { packageId, customerId } = data;
+
+      if (!packageId || !customerId)
+        return { status: false, message: "Data belum lengkap" };
+
+      let cart = await orderCartService.findOne({
+        where: { packageId, customerId },
+      });
+
+      if (cart) {
+        cart.qty += 1;
+        await cart.save();
+
+        return {
+          status: true,
+          message: "Qty berhasil ditambahkan",
+          data: cart,
+        };
+      }
+
+      const newCartPackage = await orderCartService.create({
+        packageId,
+        customerId,
+        qty: 1,
+      });
+
+      return { status: true, message: "Berhasil", data: newCartPackage };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async deleteCartPackage(cartId) {
+    try {
+      if (!cartId)
+        return { status: false, message: "Package tidak boleh kosong" };
+
+      const cartPackage = await orderCartService.findByPk(cartId);
+
+      if (!cartPackage) {
+        return { status: false, message: "Cart tidak ditemukan", data: null };
+      }
+
+      await cartPackage.destroy();
+
+      return {
+        status: true,
+        message: "Cart berhasil di hapus",
+        data: cartPackage,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async clearCartPackage(customerId) {
+    try {
+      if (!customerId)
+        return { status: false, message: "Customer tidak boleh kosong" };
+
+      await orderCartService.destroy({
+        where: { customerId },
+      });
+
+      return { status: true, message: "Semua cart package berhasil dihapus" };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async addQtyCartPackage({ packageId, customerId }) {
+    try {
+      if (!packageId || !customerId)
+        return { status: false, message: "Data belum lengkap" };
+
+      let cart = await orderCartService.findOne({
+        where: { packageId, customerId },
+      });
+
+      if (!cart) {
+        return { status: false, message: "Cart tidak ditemukan", data: null };
+      }
+
+      cart.qty += 1;
+      await cart.save();
+
+      return { status: true, message: "Berhasil menambahkan qty", data: cart };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async reduceQtyCartPackage({ packageId, customerId }) {
+    try {
+      if (!packageId || !customerId)
+        return { status: false, message: "Data belum lengkap" };
+
+      const cart = await orderCartService.findOne({
+        where: { packageId, customerId },
+      });
+
+      if (!cart) {
+        return { status: false, message: "Cart package tidak ditemukan" };
+      }
+
+      cart.qty -= 1;
+
+      if (cart.qty <= 0) {
+        await cart.destroy();
+        return { status: true, message: "Item dihapus karena qty habis" };
+      }
+
+      await cart.save();
+
+      return { status: true, message: "Berhasil mengurangi qty", data: cart };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async selectCartPackage(cartId) {
+    try {
+      if (!cartId)
+        return { status: false, message: "Package tidak boleh kosong" };
+
+      const cartPackage = await orderCartService.findByPk(cartId);
+
+      if (!cartPackage) {
+        return { status: false, message: "Cart tidak ditemukan", data: null };
+      }
+
+      if (cartPackage.isSelected == false) {
+        await cartPackage.update({
+          isSelected: true,
+        });
+        return {
+          status: true,
+          message: "Cart berhasil di update",
+          data: cartPackage,
+        };
+      }
+
+      if (cartPackage.isSelected == true) {
+        await cartPackage.update({
+          isSelected: false,
+        });
+        return {
+          status: true,
+          message: "Cart berhasil di update",
+          data: cartPackage,
+        };
+      }
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async selectAllCartPackage(customerId) {
+    try {
+      if (!customerId)
+        return { status: false, message: "Customer tidak boleh kosong" };
+
+      const cartPackages = await orderCartService.findAll({
+        where: { customerId },
+      });
+
+      if (!cartPackages || cartPackages.length === 0) {
+        return { status: false, message: "Cart tidak ditemukan", data: null };
+      }
+      const hasUnselected = cartPackages.some((item) => !item.isSelected);
+      const newSelectedValue = hasUnselected ? true : false;
+
+      await orderCartService.update(
+        { isSelected: newSelectedValue },
+        { where: { customerId } }
+      );
+
+      return {
+        status: true,
+        message: newSelectedValue
+          ? "Semua cart package berhasil di-select"
+          : "Semua cart package berhasil di-unselect",
+        data: { isSelected: newSelectedValue },
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
 };

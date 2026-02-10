@@ -108,9 +108,9 @@ module.exports = {
     }
   },
 
-  async createCustomerCart(data) {
+  async createCustomerCart(data, customerId) {
     try {
-      const { refferenceId, customerId, refferenceType } = data;
+      const { refferenceId, refferenceType } = data;
 
       if (!refferenceId || !customerId || !refferenceType)
         return { status: false, message: "Data belum lengkap" };
@@ -186,7 +186,7 @@ module.exports = {
     }
   },
 
-  async addQtyCustomerCart({ refferenceId, customerId }) {
+  async addQtyCustomerCart(refferenceId, customerId) {
     try {
       if (!refferenceId || !customerId)
         return { status: false, message: "Data belum lengkap" };
@@ -208,7 +208,7 @@ module.exports = {
     }
   },
 
-  async reduceQtyCustomerCart({ refferenceId, customerId }) {
+  async reduceQtyCustomerCart(refferenceId, customerId) {
     try {
       if (!refferenceId || !customerId)
         return { status: false, message: "Data belum lengkap" };

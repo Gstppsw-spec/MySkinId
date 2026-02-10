@@ -16,6 +16,11 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
       });
+
+      masterPackage.hasMany(models.customerFavorites, {
+        foreignKey: "refferenceId",
+        as: "favorites",
+      });
     }
   }
 
