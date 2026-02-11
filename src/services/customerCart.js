@@ -97,9 +97,52 @@ module.exports = {
       };
 
       customerCarts.forEach((cart) => {
-        if (cart.product) result.product.push(cart.product);
-        if (cart.service) result.service.push(cart.service);
-        if (cart.package) result.package.push(cart.package);
+        if (cart.product) {
+          result.product.push({
+            id: cart.product.id,
+            name: cart.product.name,
+            desc: cart.product.description,
+            price: cart.product.price,
+            discountpercent: cart.product.discountPercent,
+            images: cart.product.images,
+            isSelected: cart.isSelected,
+            isDirect: cart.isDirect,
+            isOnPayment: cart.isOnPayment,
+            cartId: cart.id,
+            quantity: cart.qty,
+          });
+        }
+        if (cart.service) {
+          result.service.push({
+            id: cart.service.id,
+            name: cart.service.name,
+            desc: cart.service.description,
+            duration: cart.service.duration,
+            price: cart.service.price,
+            discountpercent: cart.service.discountPercent,
+            location: cart.service.location,
+            isSelected: cart.isSelected,
+            isDirect: cart.isDirect,
+            isOnPayment: cart.isOnPayment,
+            cartId: cart.id,
+            quantity: cart.qty,
+          });
+        }
+        if (cart.package) {
+          result.package.push({
+            id: cart.package.id,
+            name: cart.package.name,
+            desc: cart.package.description,
+            price: cart.package.price,
+            discpercent: cart.package.discountPercent,
+            location: cart.package.location,
+            isSelected: cart.isSelected,
+            isDirect: cart.isDirect,
+            isOnPayment: cart.isOnPayment,
+            cartId: cart.id,
+            quantity: cart.qty,
+          });
+        }
       });
 
       return { status: true, message: "Berhasil", data: result };
