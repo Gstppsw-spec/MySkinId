@@ -92,7 +92,6 @@ module.exports = {
 
       const result = {
         product: [],
-        service: [],
         package: [],
       };
 
@@ -105,22 +104,6 @@ module.exports = {
             price: cart.product.price,
             discountpercent: cart.product.discountPercent,
             images: cart.product.images,
-            isSelected: cart.isSelected,
-            isDirect: cart.isDirect,
-            isOnPayment: cart.isOnPayment,
-            cartId: cart.id,
-            quantity: cart.qty,
-          });
-        }
-        if (cart.service) {
-          result.service.push({
-            id: cart.service.id,
-            name: cart.service.name,
-            desc: cart.service.description,
-            duration: cart.service.duration,
-            price: cart.service.price,
-            discountpercent: cart.service.discountPercent,
-            location: cart.service.location,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
             isOnPayment: cart.isOnPayment,

@@ -46,8 +46,17 @@ class PostController {
     async createPost(req, res) {
         try {
             const userId = req.user.id; // From auth middleware
-            const { caption } = req.body;
+            let { caption, tags } = req.body;
             const files = req.files || [];
+
+            // Handle tags if sent as string (e.g. from form-data)
+            if (typeof tags === 'string') {
+                try {
+                    tags = JSON.parse(tags);
+                } catch (e) {
+                    tags = [];
+                }
+            }
 
             // Process uploaded files
             const mediaFiles = files.map((file) => {
@@ -58,7 +67,7 @@ class PostController {
                 };
             });
 
-            const post = await postService.createPost(userId, caption, mediaFiles);
+            const post = await postService.createPost(userId, caption, mediaFiles, tags);
 
             res.status(201).json({
                 success: true,

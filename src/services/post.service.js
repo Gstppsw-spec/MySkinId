@@ -10,7 +10,7 @@ class PostService {
      * @param {Array} mediaFiles - Array of media file paths [{url, type}]
      * @returns {Object} Created post with media
      */
-    async createPost(userId, caption, mediaFiles = []) {
+    async createPost(userId, caption, mediaFiles = [], tags = []) {
         const transaction = await db.sequelize.transaction();
 
         try {
@@ -36,6 +36,23 @@ class PostService {
                 }));
 
                 await db.postMedia.bulkCreate(mediaData, { transaction });
+            }
+
+            // Create tags if provided
+            if (tags && tags.length > 0) {
+                // Ensure tags is an array and filter out invalid ones
+                const tagData = tags
+                    .filter(tag => tag && tag.referenceId && tag.referenceType) // Basic validation
+                    .map(tag => ({
+                        id: uuidv4(),
+                        postId,
+                        referenceId: tag.referenceId,
+                        referenceType: tag.referenceType,
+                    }));
+
+                if (tagData.length > 0) {
+                    await db.postTags.bulkCreate(tagData, { transaction });
+                }
             }
 
             await transaction.commit();
@@ -78,8 +95,10 @@ class PostService {
           WHEN f.followerId IS NOT NULL THEN 1
           ELSE 0
         END AS priority
+
       FROM posts p
       LEFT JOIN followers f ON p.userId = f.followingId AND f.followerId = :userId
+      
       WHERE 1=1
       ${blockedPostIds.length > 0 ? "AND p.id NOT IN (:blockedPostIds)" : ""}
       ORDER BY priority DESC, p.createdAt DESC
@@ -136,6 +155,9 @@ class PostService {
                 // Get top 2 comments
                 const topComments = await this._getTopComments(post.id, userId);
 
+                // Get tags with details
+                const tags = await this._getPostTags(post.id);
+
                 return {
                     ...post,
                     user: user ? user.toJSON() : null,
@@ -147,6 +169,15 @@ class PostService {
                     isLiked: !!isLiked,
                     commentsCount,
                     topComments,
+                    tags,
+                    // Remove old fields from response
+                    referenceId: undefined,
+                    referenceType: undefined,
+                    titleProduct: undefined,
+                    titlePackage: undefined,
+                    locationName: undefined,
+                    locationLatitude: undefined,
+                    locationLongitude: undefined
                 };
             })
         );
@@ -199,10 +230,14 @@ class PostService {
         // Get top 2 comments
         const topComments = await this._getTopComments(postId, userId);
 
+        // Get tags
+        const tags = await this._getPostTags(postId);
+
         const postJson = post.toJSON();
         return {
             ...postJson,
             media: postJson.media ? postJson.media.map(m => ({ ...m, postId: undefined })) : [],
+            tags,
             likesCount,
             isLiked: !!isLiked,
             commentsCount,
@@ -277,14 +312,19 @@ class PostService {
                 // Get top 2 comments
                 const topComments = await this._getTopComments(post.id, userId);
 
+                // Get tags
+                const tags = await this._getPostTags(post.id);
+
                 const postJson = post.toJSON();
                 return {
                     ...postJson,
                     media: postJson.media ? postJson.media.map(m => ({ ...m, postId: undefined })) : [],
+                    tags,
                     likesCount,
                     isLiked: !!isLiked,
                     commentsCount,
                     topComments,
+                    tags,
                 };
             })
         );
@@ -405,12 +445,16 @@ class PostService {
                 // Get top 2 comments
                 const topComments = await this._getTopComments(post.id, userId);
 
+                // Get tags
+                const tags = await this._getPostTags(post.id);
+
                 const postJson = post.toJSON();
                 return {
                     blockedAt: blockedPost.createdAt,
                     post: {
                         ...postJson,
                         media: postJson.media ? postJson.media.map(m => ({ ...m, postId: undefined })) : [],
+                        tags,
                         likesCount,
                         commentsCount,
                         isLiked: !!isLiked,
@@ -522,12 +566,16 @@ class PostService {
                 // Get top 2 comments
                 const topComments = await this._getTopComments(post.id, currentUserId);
 
+                // Get tags
+                const tags = await this._getPostTags(post.id);
+
                 const postJson = post.toJSON();
                 return {
                     likedAt: likedPost.createdAt,
                     post: {
                         ...postJson,
                         media: postJson.media ? postJson.media.map(m => ({ ...m, postId: undefined })) : [],
+                        tags,
                         likesCount,
                         commentsCount,
                         isLiked,
@@ -540,6 +588,50 @@ class PostService {
         // Filter out null values (in case post was deleted)
         const finalPosts = enrichedPosts.filter((p) => p !== null);
         return { posts: finalPosts, totalCount: count };
+    }
+
+    async _getPostTags(postId) {
+        const tags = await db.postTags.findAll({
+            where: { postId },
+        });
+
+        const enrichedTags = await Promise.all(tags.map(async (tag) => {
+            let details = {};
+            if (tag.referenceType === 'product') {
+                const product = await db.masterProduct.findByPk(tag.referenceId, {
+                    attributes: ['id', 'name']
+                });
+                if (product) {
+                    details = { productId: product.id, productName: product.name };
+                }
+            } else if (tag.referenceType === 'package') {
+                const pkg = await db.masterPackage.findByPk(tag.referenceId, {
+                    attributes: ['id', 'name']
+                });
+                if (pkg) {
+                    details = { packageId: pkg.id, packageName: pkg.name };
+                }
+            } else if (tag.referenceType === 'location') {
+                const loc = await db.masterLocation.findByPk(tag.referenceId, {
+                    attributes: ['id', 'name', 'latitude', 'longitude']
+                });
+                if (loc) {
+                    details = {
+                        locationId: loc.id,
+                        locationName: loc.name,
+                        latitude: loc.latitude,
+                        longitude: loc.longitude
+                    };
+                }
+            }
+
+            const { id, postId: pId, referenceId, createdAt, updatedAt, ...tagData } = tag.toJSON();
+            return {
+                ...tagData,
+                ...details
+            };
+        }));
+        return enrichedTags;
     }
 
     /**

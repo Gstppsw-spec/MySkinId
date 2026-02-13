@@ -44,6 +44,11 @@ module.exports = {
             model: masterCustomer,
             as: 'customer',
             attributes: ['id', 'name']
+          },
+          {
+            model: masterLocation,
+            as: 'location',
+            attributes: ['id', 'name']
           }
         ],
       });

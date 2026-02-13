@@ -26,6 +26,7 @@ const ratingRoute = require("./routes/ratingRoute");
 const packageRoute = require("./routes/master/package");
 
 const customerCartRoute = require("./routes/transaction/customerCart");
+const transactionOrderRoute = require("./routes/transaction/order");
 const userRoute = require("./routes/userRoute");
 
 // Social media routes
@@ -86,6 +87,7 @@ app.use("/api/v2/package", packageRoute);
 app.use("/api/v2/user", userRoute);
 
 app.use("/api/v2/customer-cart", customerCartRoute);
+app.use("/api/v2/transaction/order", transactionOrderRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);

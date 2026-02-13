@@ -50,10 +50,16 @@ module.exports = (sequelize, DataTypes) => {
             as: "likes",
         });
 
-        // Post has many comments
         Posts.hasMany(models.postComments, {
             foreignKey: "postId",
             as: "comments",
+        });
+
+        // Associations for tagging
+        // Association with PostTags
+        Posts.hasMany(models.postTags, {
+            foreignKey: "postId",
+            as: "tags",
         });
     };
 
