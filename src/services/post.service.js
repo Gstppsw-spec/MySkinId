@@ -688,6 +688,102 @@ class PostService {
             };
         });
     }
+
+    /**
+     * Search for tags (products, packages, locations)
+     * @param {string} type - 'product' | 'package' | 'location'
+     * @param {string} query - Search query
+     * @returns {Array} List of found items
+     */
+    /**
+     * Search for tags (products, packages, locations)
+     * @param {string} type - 'product' | 'package' | 'location'
+     * @param {string} name - Search query (optional)
+     * @returns {Array} List of found items
+     */
+    async searchTags(type, name) {
+        let options = {
+            limit: 20,
+            attributes: ['id', 'name']
+        };
+
+        if (name) {
+            options.where = {
+                name: { [Op.like]: `%${name}%` }
+            };
+        }
+
+        let results = [];
+
+        if (type === 'product') {
+            const products = await db.masterProduct.findAll({
+                ...options,
+                include: [{
+                    model: db.masterProductImage,
+                    as: 'images',
+                    attributes: ['imageUrl'],
+                    limit: 1
+                }]
+            });
+            results = products.map(p => {
+                const img = p.images && p.images.length > 0 ? p.images[0].imageUrl : null;
+                return {
+                    name: p.name,
+                    productId: p.id,
+                    image: img
+                };
+            });
+        } else if (type === 'package') {
+            const packages = await db.masterPackage.findAll({
+                ...options,
+                include: [{
+                    model: db.masterLocation,
+                    as: 'location',
+                    attributes: ['id'],
+                    include: [{
+                        model: db.masterLocationImage,
+                        as: 'images',
+                        attributes: ['imageUrl'],
+                        limit: 1
+                    }]
+                }]
+            });
+            results = packages.map(p => {
+                const loc = p.location;
+                const img = loc && loc.images && loc.images.length > 0 ? loc.images[0].imageUrl : null;
+                return {
+                    name: p.name,
+                    packageId: p.id,
+                    image: img
+                };
+            });
+        } else if (type === 'location') {
+            // For location we might want to keep lat/long if needed, but per request just name & image & id
+            // The previous code included lat/long, I will keep them but remove referenceId/Type
+            const locations = await db.masterLocation.findAll({
+                ...options,
+                attributes: ['id', 'name', 'latitude', 'longitude'],
+                include: [{
+                    model: db.masterLocationImage,
+                    as: 'images',
+                    attributes: ['imageUrl'],
+                    limit: 1
+                }]
+            });
+            results = locations.map(l => {
+                const img = l.images && l.images.length > 0 ? l.images[0].imageUrl : null;
+                return {
+                    name: l.name,
+                    locationId: l.id,
+                    latitude: l.latitude,
+                    longitude: l.longitude,
+                    image: img
+                };
+            });
+        }
+
+        return results;
+    }
 }
 
 module.exports = new PostService();

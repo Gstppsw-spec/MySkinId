@@ -9,6 +9,9 @@ router.use(verifyToken);
 // Create a new post with media
 router.post("/", postController.upload, postController.createPost);
 
+// Search tags
+router.get("/tags/search", postController.searchTags);
+
 // Get personalized feed
 router.get("/feed", postController.getFeed);
 

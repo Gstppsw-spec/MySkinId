@@ -335,6 +335,36 @@ class PostController {
             });
         }
     }
+
+    /**
+     * Search tags
+     * GET /tags/search
+     */
+    async searchTags(req, res) {
+        try {
+            const { type, name } = req.query;
+
+            if (!type || !['product', 'package', 'location'].includes(type)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid or missing 'type' parameter. Must be 'product', 'package', or 'location'."
+                });
+            }
+
+            const results = await postService.searchTags(type, name);
+
+            res.status(200).json({
+                success: true,
+                data: results,
+            });
+        } catch (error) {
+            console.error("Search tags error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to search tags",
+            });
+        }
+    }
 }
 
 // Export controller instance and upload middleware
