@@ -7,6 +7,8 @@ const {
   relationshipUserLocation,
   masterProduct,
   masterProductImage,
+  masterProductCategory,
+  masterSubCategoryService,
   masterLocation,
   masterLocationImage,
   masterCustomer,
@@ -626,7 +628,7 @@ module.exports = {
     }
   },
 
-  async getAllPrescriptionByOutlet(roomId) {
+  async getAllPrescriptionByOutlet(roomId, categoryName) {
     try {
       // Get the room to extract locationId or latitude/longitude
       const room = await masterRoomConsultation.findOne({
@@ -685,51 +687,77 @@ module.exports = {
           };
         }
 
+        const productInclude = [
+          {
+            model: masterProductImage,
+            as: "images",
+            attributes: ["imageUrl"]
+          }
+        ];
+
+        if (categoryName) {
+          productInclude.push({
+            model: masterProductCategory,
+            as: "categories",
+            where: { name: { [Op.like]: `%${categoryName}%` } },
+            attributes: [],
+            through: { attributes: [] }
+          });
+        }
+
+        const packageInclude = [
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id"],
+            include: [
+              {
+                model: masterLocationImage,
+                as: "images",
+                attributes: ["imageUrl"]
+              }
+            ]
+          },
+          {
+            model: masterPackageItems,
+            as: "items",
+            attributes: ["id", "qty"],
+            required: categoryName ? true : false,
+            include: [
+              {
+                model: masterService,
+                as: "service",
+                attributes: ["id", "name", "description", "duration", "price"],
+                required: categoryName ? true : false,
+                include: categoryName ? [
+                  {
+                    model: masterSubCategoryService,
+                    as: "categories",
+                    where: { name: { [Op.like]: `%${categoryName}%` } },
+                    attributes: [],
+                    through: { attributes: [] },
+                    required: true
+                  }
+                ] : []
+              }
+            ]
+          }
+        ];
+
         const [productPrescription, packagePrescription] = await Promise.all([
           masterProduct.findAll({
             where: {
               locationId: locationIds,
             },
             attributes: ["id", "name", "description"],
-            include: [
-              {
-                model: masterProductImage,
-                as: "images",
-                attributes: ["imageUrl"]
-              }
-            ]
+            include: productInclude
           }),
           masterPackage.findAll({
             where: {
               locationId: locationIds,
             },
             attributes: ["id", "name", "description"],
-            include: [
-              {
-                model: masterLocation,
-                as: "location",
-                attributes: ["id"],
-                include: [
-                  {
-                    model: masterLocationImage,
-                    as: "images",
-                    attributes: ["imageUrl"]
-                  }
-                ]
-              },
-              {
-                model: masterPackageItems,
-                as: "items",
-                attributes: ["id", "qty"],
-                include: [
-                  {
-                    model: masterService,
-                    as: "service",
-                    attributes: ["id", "name", "description", "duration", "price"]
-                  }
-                ]
-              }
-            ]
+            include: packageInclude
           }),
         ]);
 
@@ -768,6 +796,63 @@ module.exports = {
         return { status: true, message: "Berhasil", data: prescriptions };
       }
       else {
+        const productInclude = [
+          {
+            model: masterProductImage,
+            as: "images",
+            attributes: ["imageUrl"]
+          }
+        ];
+
+        if (categoryName) {
+          productInclude.push({
+            model: masterProductCategory,
+            as: "categories",
+            where: { name: { [Op.like]: `%${categoryName}%` } },
+            attributes: [],
+            through: { attributes: [] }
+          });
+        }
+
+        const packageInclude = [
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id"],
+            include: [
+              {
+                model: masterLocationImage,
+                as: "images",
+                attributes: ["imageUrl"]
+              }
+            ]
+          },
+          {
+            model: masterPackageItems,
+            as: "items",
+            attributes: ["id", "qty"],
+            required: categoryName ? true : false,
+            include: [
+              {
+                model: masterService,
+                as: "service",
+                attributes: ["id", "name", "description", "duration", "price"],
+                required: categoryName ? true : false,
+                include: categoryName ? [
+                  {
+                    model: masterSubCategoryService,
+                    as: "categories",
+                    where: { name: { [Op.like]: `%${categoryName}%` } },
+                    attributes: [],
+                    through: { attributes: [] },
+                    required: true
+                  }
+                ] : []
+              }
+            ]
+          }
+        ];
+
         // Fetch products and packages with the same locationId
         const [productPrescription, packagePrescription] = await Promise.all([
           masterProduct.findAll({
@@ -775,45 +860,14 @@ module.exports = {
               locationId: room.locationId,
             },
             attributes: ["id", "name", "description"],
-            include: [
-              {
-                model: masterProductImage,
-                as: "images",
-                attributes: ["imageUrl"]
-              }
-            ]
+            include: productInclude
           }),
           masterPackage.findAll({
             where: {
               locationId: room.locationId,
             },
             attributes: ["id", "name", "description"],
-            include: [
-              {
-                model: masterLocation,
-                as: "location",
-                attributes: ["id"],
-                include: [
-                  {
-                    model: masterLocationImage,
-                    as: "images",
-                    attributes: ["imageUrl"]
-                  }
-                ]
-              },
-              {
-                model: masterPackageItems,
-                as: "items",
-                attributes: ["id", "qty"],
-                include: [
-                  {
-                    model: masterService,
-                    as: "service",
-                    attributes: ["id", "name", "description", "duration", "price"]
-                  }
-                ]
-              }
-            ]
+            include: packageInclude
           }),
         ]);
 
