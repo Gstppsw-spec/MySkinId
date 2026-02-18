@@ -11,6 +11,7 @@ const {
   masterLocationImage,
   masterCustomer,
   masterPackage,
+  masterPackageItems,
   masterService,
   masterCity
 } = require("../models");
@@ -459,6 +460,13 @@ module.exports = {
             data: null,
           };
         }
+        if (!['product', 'package'].includes(prescription.refferenceType)) {
+          return {
+            status: false,
+            message: "Refference type hanya boleh 'product' atau 'package'",
+            data: null,
+          };
+        }
         if (!prescription.refferenceId) {
           return {
             status: false,
@@ -475,47 +483,16 @@ module.exports = {
               data: null,
             };
           }
-          // if (product.isActive === false || product.isVerified === false) {
-          //   return {
-          //     status: false,
-          //     message: "Product tidak aktif / tidak terverifikasi",
-          //     data: null,
-          //   };
-          // }
-        }
-        if (prescription.refferenceType === "service") {
-          const service = await masterService.findByPk(prescription.refferenceId);
-          if (!service) {
-            return {
-              status: false,
-              message: "Service tidak ditemukan",
-              data: null,
-            };
-          }
-          // if (service.isActive === false || service.isVerified === false) {
-          //   return {
-          //     status: false,
-          //     message: "Service tidak aktif / tidak terverifikasi",
-          //     data: null,
-          //   };
-          // }
         }
         if (prescription.refferenceType === "package") {
-          const package = await masterPackage.findByPk(prescription.refferenceId);
-          if (!package) {
+          const pkg = await masterPackage.findByPk(prescription.refferenceId);
+          if (!pkg) {
             return {
               status: false,
               message: "Package tidak ditemukan",
               data: null,
             };
           }
-          // if (package.isActive === false || package.isVerified === false) {
-          //   return {
-          //     status: false,
-          //     message: "Package tidak aktif / tidak terverifikasi",
-          //     data: null,
-          //   };
-          // }
         }
       }
 
@@ -546,8 +523,7 @@ module.exports = {
           {
             model: masterProduct,
             as: "product",
-            attributes: ["id", "name", "description", "locationId"],
-            // where: { isVerified: true, isActive: true },
+            attributes: ["id", "name", "description"],
             required: false,
             include: [
               {
@@ -558,10 +534,9 @@ module.exports = {
             ]
           },
           {
-            model: masterService,
-            as: "service",
-            attributes: ["id", "name", "description", "locationId"],
-            // where: { isVerified: true, isActive: true },
+            model: masterPackage,
+            as: "package",
+            attributes: ["id", "name", "description"],
             required: false,
             include: [
               {
@@ -575,25 +550,16 @@ module.exports = {
                     attributes: ["imageUrl"]
                   }
                 ]
-              }
-            ]
-          },
-          {
-            model: masterPackage,
-            as: "package",
-            attributes: ["id", "name", "description", "locationId"],
-            // where: { isVerified: true, isActive: true },
-            required: false,
-            include: [
+              },
               {
-                model: masterLocation,
-                as: "location",
-                attributes: ["id"],
+                model: masterPackageItems,
+                as: "items",
+                attributes: ["id", "qty"],
                 include: [
                   {
-                    model: masterLocationImage,
-                    as: "images",
-                    attributes: ["imageUrl"]
+                    model: masterService,
+                    as: "service",
+                    attributes: ["id", "name", "description", "duration", "price"]
                   }
                 ]
               }
@@ -607,7 +573,6 @@ module.exports = {
       const formattedPrescriptions = prescriptions.map((prescription) => {
         const prescriptionJson = prescription.toJSON();
 
-        // Determine which reference type to use based on refferenceType
         let prescriptionData = null;
         let media = [];
 
@@ -617,38 +582,33 @@ module.exports = {
             name: prescriptionJson.product.name,
             description: prescriptionJson.product.description
           };
-          // Extract product images
           media = prescriptionJson.product.images || [];
-        } else if (prescriptionJson.refferenceType === "service" && prescriptionJson.service) {
-          prescriptionData = {
-            id: prescriptionJson.service.id,
-            name: prescriptionJson.service.name,
-            description: prescriptionJson.service.description
-          };
-          // Extract location images for service
-          if (prescriptionJson.service.location && prescriptionJson.service.location.images) {
-            media = prescriptionJson.service.location.images;
-          }
         } else if (prescriptionJson.refferenceType === "package" && prescriptionJson.package) {
-          prescriptionData = {
-            id: prescriptionJson.package.id,
-            name: prescriptionJson.package.name,
-            description: prescriptionJson.package.description
-          };
-          // Extract location images for package
-          if (prescriptionJson.package.location && prescriptionJson.package.location.images) {
-            media = prescriptionJson.package.location.images;
+          const pkg = prescriptionJson.package;
+          // Format items: setiap item berisi data service + qty
+          const items = (pkg.items || []).map((item) => ({
+            id: item.id,
+            qty: item.qty,
+            service: item.service || null,
+          }));
+          // Ambil gambar dari location package
+          if (pkg.location && pkg.location.images) {
+            media = pkg.location.images;
           }
+          prescriptionData = {
+            id: pkg.id,
+            name: pkg.name,
+            description: pkg.description,
+            items,
+          };
         }
 
-        // Add media to prescription data if it exists
         if (prescriptionData) {
           prescriptionData.media = media;
         }
 
-        // Remove individual reference fields and add unified prescription field
+        // Bersihkan field mentah dari response
         delete prescriptionJson.product;
-        delete prescriptionJson.service;
         delete prescriptionJson.package;
         delete prescriptionJson.refferenceId;
         delete prescriptionJson.createdAt;
@@ -720,18 +680,15 @@ module.exports = {
             message: "Tidak ada lokasi terdekat ditemukan",
             data: {
               product: [],
-              service: [],
               package: []
             }
           };
         }
 
-        const [productPrescription, servicePrescription, packagePrescription] = await Promise.all([
+        const [productPrescription, packagePrescription] = await Promise.all([
           masterProduct.findAll({
             where: {
               locationId: locationIds,
-              // isVerified: true,
-              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -742,11 +699,9 @@ module.exports = {
               }
             ]
           }),
-          masterService.findAll({
+          masterPackage.findAll({
             where: {
               locationId: locationIds,
-              // isVerified: true,
-              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -761,26 +716,16 @@ module.exports = {
                     attributes: ["imageUrl"]
                   }
                 ]
-              }
-            ]
-          }),
-          masterPackage.findAll({
-            where: {
-              locationId: locationIds,
-              // isVerified: true,
-              // isActive: true
-            },
-            attributes: ["id", "name", "description"],
-            include: [
+              },
               {
-                model: masterLocation,
-                as: "location",
-                attributes: ["id"],
+                model: masterPackageItems,
+                as: "items",
+                attributes: ["id", "qty"],
                 include: [
                   {
-                    model: masterLocationImage,
-                    as: "images",
-                    attributes: ["imageUrl"]
+                    model: masterService,
+                    as: "service",
+                    attributes: ["id", "name", "description", "duration", "price"]
                   }
                 ]
               }
@@ -799,42 +744,35 @@ module.exports = {
           };
         });
 
-        const formattedServices = servicePrescription.map(service => {
-          const serviceJson = service.toJSON();
-          return {
-            id: serviceJson.id,
-            name: serviceJson.name,
-            description: serviceJson.description,
-            media: (serviceJson.location && serviceJson.location.images) ? serviceJson.location.images : []
-          };
-        });
-
         const formattedPackages = packagePrescription.map(pkg => {
           const pkgJson = pkg.toJSON();
+          const items = (pkgJson.items || []).map((item) => ({
+            id: item.id,
+            qty: item.qty,
+            service: item.service || null,
+          }));
           return {
             id: pkgJson.id,
             name: pkgJson.name,
             description: pkgJson.description,
+            items,
             media: (pkgJson.location && pkgJson.location.images) ? pkgJson.location.images : []
           };
         });
 
         const prescriptions = {
           product: formattedProducts,
-          service: formattedServices,
           package: formattedPackages,
         };
 
         return { status: true, message: "Berhasil", data: prescriptions };
       }
       else {
-        // Fetch products, services, and packages with the same locationId
-        const [productPrescription, servicePrescription, packagePrescription] = await Promise.all([
+        // Fetch products and packages with the same locationId
+        const [productPrescription, packagePrescription] = await Promise.all([
           masterProduct.findAll({
             where: {
               locationId: room.locationId,
-              // isVerified: true,
-              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -845,11 +783,9 @@ module.exports = {
               }
             ]
           }),
-          masterService.findAll({
+          masterPackage.findAll({
             where: {
               locationId: room.locationId,
-              // isVerified: true,
-              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -864,26 +800,16 @@ module.exports = {
                     attributes: ["imageUrl"]
                   }
                 ]
-              }
-            ]
-          }),
-          masterPackage.findAll({
-            where: {
-              locationId: room.locationId,
-              // isVerified: true,
-              // isActive: true
-            },
-            attributes: ["id", "name", "description"],
-            include: [
+              },
               {
-                model: masterLocation,
-                as: "location",
-                attributes: ["id"],
+                model: masterPackageItems,
+                as: "items",
+                attributes: ["id", "qty"],
                 include: [
                   {
-                    model: masterLocationImage,
-                    as: "images",
-                    attributes: ["imageUrl"]
+                    model: masterService,
+                    as: "service",
+                    attributes: ["id", "name", "description", "duration", "price"]
                   }
                 ]
               }
@@ -902,29 +828,24 @@ module.exports = {
           };
         });
 
-        const formattedServices = servicePrescription.map(service => {
-          const serviceJson = service.toJSON();
-          return {
-            id: serviceJson.id,
-            name: serviceJson.name,
-            description: serviceJson.description,
-            media: (serviceJson.location && serviceJson.location.images) ? serviceJson.location.images : []
-          };
-        });
-
         const formattedPackages = packagePrescription.map(pkg => {
           const pkgJson = pkg.toJSON();
+          const items = (pkgJson.items || []).map((item) => ({
+            id: item.id,
+            qty: item.qty,
+            service: item.service || null,
+          }));
           return {
             id: pkgJson.id,
             name: pkgJson.name,
             description: pkgJson.description,
+            items,
             media: (pkgJson.location && pkgJson.location.images) ? pkgJson.location.images : []
           };
         });
 
         const prescriptions = {
           product: formattedProducts,
-          service: formattedServices,
           package: formattedPackages,
         };
 

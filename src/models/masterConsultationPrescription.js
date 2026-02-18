@@ -55,8 +55,8 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         validate: {
           isIn: {
-            args: [["product", "service", "package"]],
-            msg: "Invalid favorite type",
+            args: [["product", "package"]],
+            msg: "Invalid prescription type",
           },
         },
       },
