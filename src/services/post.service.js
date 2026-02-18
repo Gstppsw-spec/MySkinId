@@ -41,14 +41,49 @@ class PostService {
             // Create tags if provided
             if (tags && tags.length > 0) {
                 // Ensure tags is an array and filter out invalid ones
-                const tagData = tags
-                    .filter(tag => tag && tag.referenceId && tag.referenceType) // Basic validation
-                    .map(tag => ({
-                        id: uuidv4(),
-                        postId,
-                        referenceId: tag.referenceId,
-                        referenceType: tag.referenceType,
-                    }));
+                const validTags = tags.filter(tag => tag && tag.referenceId && tag.referenceType);
+
+                // Validasi: jika ada tag product/package, locationId-nya harus sama
+                // dengan referenceId dari tag yang referenceType = 'location'
+                const locationTag = validTags.find(tag => tag.referenceType === 'location');
+                const locationTagId = locationTag ? locationTag.referenceId : null;
+
+                for (const tag of validTags) {
+                    if (tag.referenceType === 'product') {
+                        const product = await db.masterProduct.findByPk(tag.referenceId, {
+                            attributes: ['id', 'locationId'],
+                        });
+                        if (!product) {
+                            throw new Error(`Product dengan id ${tag.referenceId} tidak ditemukan`);
+                        }
+                        if (!locationTagId) {
+                            throw new Error(`Tag product memerlukan tag location. Harap sertakan tag dengan referenceType = 'location'`);
+                        }
+                        if (product.locationId !== locationTagId) {
+                            throw new Error(`Product "${tag.referenceId}" tidak berasal dari location yang di-tag. LocationId product (${product.locationId}) harus sama dengan referenceId location tag (${locationTagId})`);
+                        }
+                    } else if (tag.referenceType === 'package') {
+                        const pkg = await db.masterPackage.findByPk(tag.referenceId, {
+                            attributes: ['id', 'locationId'],
+                        });
+                        if (!pkg) {
+                            throw new Error(`Package dengan id ${tag.referenceId} tidak ditemukan`);
+                        }
+                        if (!locationTagId) {
+                            throw new Error(`Tag package memerlukan tag location. Harap sertakan tag dengan referenceType = 'location'`);
+                        }
+                        if (pkg.locationId !== locationTagId) {
+                            throw new Error(`Package "${tag.referenceId}" tidak berasal dari location yang di-tag. LocationId package (${pkg.locationId}) harus sama dengan referenceId location tag (${locationTagId})`);
+                        }
+                    }
+                }
+
+                const tagData = validTags.map(tag => ({
+                    id: uuidv4(),
+                    postId,
+                    referenceId: tag.referenceId,
+                    referenceType: tag.referenceType,
+                }));
 
                 if (tagData.length > 0) {
                     await db.postTags.bulkCreate(tagData, { transaction });
@@ -158,6 +193,9 @@ class PostService {
                 // Get tags with details
                 const tags = await this._getPostTags(post.id);
 
+                // Get follow status
+                const { isFollowing, isFriend } = await this._getFollowStatus(userId, post.userId);
+
                 return {
                     ...post,
                     user: user ? user.toJSON() : null,
@@ -170,6 +208,8 @@ class PostService {
                     commentsCount,
                     topComments,
                     tags,
+                    isFollowing,
+                    isFriend,
                     // Remove old fields from response
                     referenceId: undefined,
                     referenceType: undefined,
@@ -233,6 +273,9 @@ class PostService {
         // Get tags
         const tags = await this._getPostTags(postId);
 
+        // Get follow status
+        const { isFollowing, isFriend } = await this._getFollowStatus(userId, post.userId);
+
         const postJson = post.toJSON();
         return {
             ...postJson,
@@ -242,6 +285,8 @@ class PostService {
             isLiked: !!isLiked,
             commentsCount,
             topComments,
+            isFollowing,
+            isFriend,
         };
     }
 
@@ -315,6 +360,9 @@ class PostService {
                 // Get tags
                 const tags = await this._getPostTags(post.id);
 
+                // Get follow status
+                const { isFollowing, isFriend } = await this._getFollowStatus(userId, post.userId);
+
                 const postJson = post.toJSON();
                 return {
                     ...postJson,
@@ -325,6 +373,8 @@ class PostService {
                     commentsCount,
                     topComments,
                     tags,
+                    isFollowing,
+                    isFriend,
                 };
             })
         );
@@ -448,6 +498,11 @@ class PostService {
                 // Get tags
                 const tags = await this._getPostTags(post.id);
 
+                // Get follow status
+                // For blocked posts, we might not need follow status heavily, but for consistency we add it.
+                // userId is the one who blocked, post.userId is the author.
+                const { isFollowing, isFriend } = await this._getFollowStatus(userId, post.userId);
+
                 const postJson = post.toJSON();
                 return {
                     blockedAt: blockedPost.createdAt,
@@ -459,6 +514,8 @@ class PostService {
                         commentsCount,
                         isLiked: !!isLiked,
                         topComments,
+                        isFollowing,
+                        isFriend,
                     },
                 };
             })
@@ -569,6 +626,11 @@ class PostService {
                 // Get tags
                 const tags = await this._getPostTags(post.id);
 
+                // Get follow status
+                // targetUserId is likely the one who liked, currentUserId is the viewer.
+                // We want to know if viewer follows the post author.
+                const { isFollowing, isFriend } = await this._getFollowStatus(currentUserId, post.userId);
+
                 const postJson = post.toJSON();
                 return {
                     likedAt: likedPost.createdAt,
@@ -580,6 +642,8 @@ class PostService {
                         commentsCount,
                         isLiked,
                         topComments,
+                        isFollowing,
+                        isFriend,
                     },
                 };
             })
@@ -632,6 +696,32 @@ class PostService {
             };
         }));
         return enrichedTags;
+    }
+
+    /**
+     * Check follow status between current user and target user
+     * @param {string} currentUserId
+     * @param {string} targetUserId
+     * @returns {Promise<{isFollowing: boolean, isFriend: boolean}>}
+     */
+    async _getFollowStatus(currentUserId, targetUserId) {
+        if (!currentUserId || !targetUserId || currentUserId === targetUserId) {
+            return { isFollowing: false, isFriend: false };
+        }
+
+        const [following, follower] = await Promise.all([
+            db.followers.findOne({
+                where: { followingId: targetUserId, followerId: currentUserId }
+            }),
+            db.followers.findOne({
+                where: { followingId: currentUserId, followerId: targetUserId }
+            })
+        ]);
+
+        const isFollowing = !!following;
+        const isFriend = isFollowing && !!follower;
+
+        return { isFollowing, isFriend };
     }
 
     /**
@@ -701,7 +791,7 @@ class PostService {
      * @param {string} name - Search query (optional)
      * @returns {Array} List of found items
      */
-    async searchTags(type, name) {
+    async searchTags(type, name, locationId) {
         let options = {
             limit: 20,
             attributes: ['id', 'name']
@@ -716,8 +806,13 @@ class PostService {
         let results = [];
 
         if (type === 'product') {
+            const where = {};
+            if (locationId) {
+                where.locationId = locationId;
+            }
             const products = await db.masterProduct.findAll({
                 ...options,
+                where,
                 include: [{
                     model: db.masterProductImage,
                     as: 'images',
@@ -734,8 +829,13 @@ class PostService {
                 };
             });
         } else if (type === 'package') {
+            const where = {};
+            if (locationId) {
+                where.locationId = locationId;
+            }
             const packages = await db.masterPackage.findAll({
                 ...options,
+                where,
                 include: [{
                     model: db.masterLocation,
                     as: 'location',

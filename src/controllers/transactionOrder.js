@@ -65,4 +65,43 @@ module.exports = {
             return response.serverError(res, error);
         }
     },
+
+    async shipTransaction(req, res) {
+        try {
+            const merchantId = req.user.id;
+            const { transactionId } = req.body;
+            const result = await transactionOrder.updateTransactionToShipped(transactionId, merchantId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async deliverTransaction(req, res) {
+        try {
+            const merchantId = req.user.id;
+            const { transactionId } = req.body;
+            const result = await transactionOrder.updateTransactionToDelivered(transactionId, merchantId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async completeTransaction(req, res) {
+        try {
+            const customerId = req.user.id;
+            const { transactionId } = req.body;
+            const result = await transactionOrder.completeTransaction(transactionId, customerId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
 };

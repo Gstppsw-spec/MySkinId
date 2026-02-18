@@ -53,11 +53,48 @@ module.exports = {
         ],
       });
 
-      return { status: true, message: "Success", data: rooms };
+      // Untuk room yang locationId = null tapi punya lat/long,
+      // cari location terdekat dan isi field location
+      const enrichedRooms = await Promise.all(rooms.map(async (room) => {
+        const roomJson = room.toJSON();
+
+        if (!roomJson.locationId && roomJson.latitude != null && roomJson.longitude != null) {
+          const latitude = roomJson.latitude;
+          const longitude = roomJson.longitude;
+
+          const distanceLiteral = Sequelize.literal(`
+            6371 * acos(
+              cos(radians(${latitude})) *
+              cos(radians(CAST(latitude AS FLOAT))) *
+              cos(radians(CAST(longitude AS FLOAT)) - radians(${longitude})) +
+              sin(radians(${latitude})) *
+              sin(radians(CAST(latitude AS FLOAT)))
+            )
+          `);
+
+          const nearestLocation = await masterLocation.findOne({
+            attributes: ['id', 'name', [distanceLiteral, 'distance']],
+            where: {
+              latitude: { [Op.ne]: null },
+              longitude: { [Op.ne]: null },
+            },
+            order: [[distanceLiteral, 'ASC']],
+          });
+
+          roomJson.location = nearestLocation
+            ? { id: nearestLocation.id, name: nearestLocation.name }
+            : null;
+        }
+
+        return roomJson;
+      }));
+
+      return { status: true, message: "Success", data: enrichedRooms };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
   },
+
 
   async createRoom(data) {
     try {

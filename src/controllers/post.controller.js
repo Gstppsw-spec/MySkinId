@@ -76,7 +76,12 @@ class PostController {
             });
         } catch (error) {
             console.error("Create post error:", error);
-            res.status(500).json({
+            const isValidationError = error.message && (
+                error.message.includes("tidak ditemukan") ||
+                error.message.includes("tidak berasal dari location") ||
+                error.message.includes("memerlukan tag location")
+            );
+            res.status(isValidationError ? 400 : 500).json({
                 success: false,
                 message: error.message || "Failed to create post",
             });
@@ -342,7 +347,7 @@ class PostController {
      */
     async searchTags(req, res) {
         try {
-            const { type, name } = req.query;
+            const { type, name, locationId } = req.query;
 
             if (!type || !['product', 'package', 'location'].includes(type)) {
                 return res.status(400).json({
@@ -351,7 +356,7 @@ class PostController {
                 });
             }
 
-            const results = await postService.searchTags(type, name);
+            const results = await postService.searchTags(type, name, locationId);
 
             res.status(200).json({
                 success: true,

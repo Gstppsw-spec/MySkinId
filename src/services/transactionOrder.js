@@ -437,7 +437,9 @@ module.exports = {
                     await trx.update({ orderStatus: "CANCELLED" }, { transaction: t });
                 }
             } else if (orderData.paymentStatus === "PAID") {
-                const canCancel = orderData.transactions.every((trx) => trx.orderStatus === "CREATED");
+                // After payment callback, orderStatus becomes "PAID", not "CREATED"
+                // Can only cancel if all transactions are still PAID (not yet in processing stages like SHIPPED, DELIVERED, etc.)
+                const canCancel = orderData.transactions.every((trx) => trx.orderStatus === "PAID");
                 if (!canCancel) {
                     throw new Error("Order cannot be cancelled as some items are being processed");
                 }
@@ -521,6 +523,125 @@ module.exports = {
         } catch (error) {
             await t.rollback();
             console.error("Xendit Callback Error:", error.message);
+            return { status: false, message: error.message };
+        }
+    },
+
+    async updateTransactionToShipped(transactionId, merchantId) {
+        const t = await sequelize.transaction();
+        try {
+            const trx = await transaction.findOne({
+                where: { id: transactionId },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        where: { paymentStatus: "PAID" }
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "merchantId"]
+                    }
+                ]
+            });
+
+            if (!trx) {
+                throw new Error("Transaction not found or order not paid");
+            }
+
+            // Verify merchant owns this location
+            if (trx.location.merchantId !== merchantId) {
+                throw new Error("Unauthorized: You don't own this transaction");
+            }
+
+            // Can only ship items that are PAID
+            if (trx.orderStatus !== "PAID") {
+                throw new Error(`Cannot ship transaction with status ${trx.orderStatus}`);
+            }
+
+            await trx.update({ orderStatus: "SHIPPED" }, { transaction: t });
+
+            await t.commit();
+            return { status: true, message: "Transaction marked as shipped" };
+        } catch (error) {
+            await t.rollback();
+            return { status: false, message: error.message };
+        }
+    },
+
+    async updateTransactionToDelivered(transactionId, merchantId) {
+        const t = await sequelize.transaction();
+        try {
+            const trx = await transaction.findOne({
+                where: { id: transactionId },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        where: { paymentStatus: "PAID" }
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "merchantId"]
+                    }
+                ]
+            });
+
+            if (!trx) {
+                throw new Error("Transaction not found or order not paid");
+            }
+
+            // Verify merchant owns this location
+            if (trx.location.merchantId !== merchantId) {
+                throw new Error("Unauthorized: You don't own this transaction");
+            }
+
+            // Can only mark as delivered if already shipped
+            if (trx.orderStatus !== "SHIPPED") {
+                throw new Error(`Cannot deliver transaction with status ${trx.orderStatus}. Must be SHIPPED first.`);
+            }
+
+            await trx.update({ orderStatus: "DELIVERED" }, { transaction: t });
+
+            await t.commit();
+            return { status: true, message: "Transaction marked as delivered" };
+        } catch (error) {
+            await t.rollback();
+            return { status: false, message: error.message };
+        }
+    },
+
+    async completeTransaction(transactionId, customerId) {
+        const t = await sequelize.transaction();
+        try {
+            const trx = await transaction.findOne({
+                where: { id: transactionId },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        where: { customerId: customerId, paymentStatus: "PAID" }
+                    }
+                ]
+            });
+
+            if (!trx) {
+                throw new Error("Transaction not found or you don't have access");
+            }
+
+            // Can only complete if already delivered
+            if (trx.orderStatus !== "DELIVERED") {
+                throw new Error(`Cannot complete transaction with status ${trx.orderStatus}. Must be DELIVERED first.`);
+            }
+
+            await trx.update({ orderStatus: "COMPLETED" }, { transaction: t });
+
+            await t.commit();
+            return { status: true, message: "Transaction completed successfully" };
+        } catch (error) {
+            await t.rollback();
             return { status: false, message: error.message };
         }
     },
