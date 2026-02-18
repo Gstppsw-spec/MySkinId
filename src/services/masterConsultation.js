@@ -475,13 +475,13 @@ module.exports = {
               data: null,
             };
           }
-          if (product.isActive === false || product.isVerified === false) {
-            return {
-              status: false,
-              message: "Product tidak aktif / tidak terverifikasi",
-              data: null,
-            };
-          }
+          // if (product.isActive === false || product.isVerified === false) {
+          //   return {
+          //     status: false,
+          //     message: "Product tidak aktif / tidak terverifikasi",
+          //     data: null,
+          //   };
+          // }
         }
         if (prescription.refferenceType === "service") {
           const service = await masterService.findByPk(prescription.refferenceId);
@@ -492,13 +492,13 @@ module.exports = {
               data: null,
             };
           }
-          if (service.isActive === false || service.isVerified === false) {
-            return {
-              status: false,
-              message: "Service tidak aktif / tidak terverifikasi",
-              data: null,
-            };
-          }
+          // if (service.isActive === false || service.isVerified === false) {
+          //   return {
+          //     status: false,
+          //     message: "Service tidak aktif / tidak terverifikasi",
+          //     data: null,
+          //   };
+          // }
         }
         if (prescription.refferenceType === "package") {
           const package = await masterPackage.findByPk(prescription.refferenceId);
@@ -509,13 +509,13 @@ module.exports = {
               data: null,
             };
           }
-          if (package.isActive === false || package.isVerified === false) {
-            return {
-              status: false,
-              message: "Package tidak aktif / tidak terverifikasi",
-              data: null,
-            };
-          }
+          // if (package.isActive === false || package.isVerified === false) {
+          //   return {
+          //     status: false,
+          //     message: "Package tidak aktif / tidak terverifikasi",
+          //     data: null,
+          //   };
+          // }
         }
       }
 
@@ -547,7 +547,7 @@ module.exports = {
             model: masterProduct,
             as: "product",
             attributes: ["id", "name", "description", "locationId"],
-            where: { isVerified: true, isActive: true },
+            // where: { isVerified: true, isActive: true },
             required: false,
             include: [
               {
@@ -561,7 +561,7 @@ module.exports = {
             model: masterService,
             as: "service",
             attributes: ["id", "name", "description", "locationId"],
-            where: { isVerified: true, isActive: true },
+            // where: { isVerified: true, isActive: true },
             required: false,
             include: [
               {
@@ -582,7 +582,7 @@ module.exports = {
             model: masterPackage,
             as: "package",
             attributes: ["id", "name", "description", "locationId"],
-            where: { isVerified: true, isActive: true },
+            // where: { isVerified: true, isActive: true },
             required: false,
             include: [
               {
@@ -730,8 +730,8 @@ module.exports = {
           masterProduct.findAll({
             where: {
               locationId: locationIds,
-              isVerified: true,
-              isActive: true
+              // isVerified: true,
+              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -745,8 +745,8 @@ module.exports = {
           masterService.findAll({
             where: {
               locationId: locationIds,
-              isVerified: true,
-              isActive: true
+              // isVerified: true,
+              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -767,8 +767,8 @@ module.exports = {
           masterPackage.findAll({
             where: {
               locationId: locationIds,
-              isVerified: true,
-              isActive: true
+              // isVerified: true,
+              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -833,8 +833,8 @@ module.exports = {
           masterProduct.findAll({
             where: {
               locationId: room.locationId,
-              isVerified: true,
-              isActive: true
+              // isVerified: true,
+              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -848,8 +848,8 @@ module.exports = {
           masterService.findAll({
             where: {
               locationId: room.locationId,
-              isVerified: true,
-              isActive: true
+              // isVerified: true,
+              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [
@@ -870,8 +870,8 @@ module.exports = {
           masterPackage.findAll({
             where: {
               locationId: room.locationId,
-              isVerified: true,
-              isActive: true
+              // isVerified: true,
+              // isActive: true
             },
             attributes: ["id", "name", "description"],
             include: [

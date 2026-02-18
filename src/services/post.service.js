@@ -792,26 +792,23 @@ class PostService {
      * @returns {Array} List of found items
      */
     async searchTags(type, name, locationId) {
-        let options = {
+        const baseOptions = {
             limit: 20,
             attributes: ['id', 'name']
         };
 
-        if (name) {
-            options.where = {
-                name: { [Op.like]: `%${name}%` }
-            };
-        }
+        // Filter name dibangun terpisah agar bisa digabung dengan filter lain
+        const nameFilter = name ? { name: { [Op.like]: `%${name}%` } } : {};
 
         let results = [];
 
         if (type === 'product') {
-            const where = {};
-            if (locationId) {
-                where.locationId = locationId;
-            }
+            const where = {
+                ...nameFilter,
+                ...(locationId ? { locationId } : {}),
+            };
             const products = await db.masterProduct.findAll({
-                ...options,
+                ...baseOptions,
                 where,
                 include: [{
                     model: db.masterProductImage,
@@ -829,12 +826,12 @@ class PostService {
                 };
             });
         } else if (type === 'package') {
-            const where = {};
-            if (locationId) {
-                where.locationId = locationId;
-            }
+            const where = {
+                ...nameFilter,
+                ...(locationId ? { locationId } : {}),
+            };
             const packages = await db.masterPackage.findAll({
-                ...options,
+                ...baseOptions,
                 where,
                 include: [{
                     model: db.masterLocation,
@@ -858,11 +855,10 @@ class PostService {
                 };
             });
         } else if (type === 'location') {
-            // For location we might want to keep lat/long if needed, but per request just name & image & id
-            // The previous code included lat/long, I will keep them but remove referenceId/Type
             const locations = await db.masterLocation.findAll({
-                ...options,
+                ...baseOptions,
                 attributes: ['id', 'name', 'latitude', 'longitude'],
+                where: { ...nameFilter },
                 include: [{
                     model: db.masterLocationImage,
                     as: 'images',
