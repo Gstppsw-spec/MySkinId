@@ -28,6 +28,7 @@ const packageRoute = require("./routes/master/package");
 const customerCartRoute = require("./routes/transaction/customerCart");
 const transactionOrderRoute = require("./routes/transaction/order");
 const userRoute = require("./routes/userRoute");
+const roleRoute = require("./routes/master/masterRole.route");
 
 // Social media routes
 const postRoute = require("./routes/social/post.route");
@@ -85,6 +86,7 @@ app.use("/api/v2/skin-analysis", skinAnalysisRoute);
 app.use("/api/v2/rating", ratingRoute);
 app.use("/api/v2/package", packageRoute);
 app.use("/api/v2/user", userRoute);
+app.use("/api/v2/role", roleRoute);
 
 app.use("/api/v2/customer-cart", customerCartRoute);
 app.use("/api/v2/transaction/order", transactionOrderRoute);

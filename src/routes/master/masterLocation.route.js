@@ -67,6 +67,7 @@ router.get(
 );
 router.get("/cities", masterLocationController.getCities);
 router.get("/", masterLocationController.list);
+router.get("/city/:cityId", masterLocationController.getByCityId);
 router.get("/:id", masterLocationController.detail);
 
 module.exports = router;

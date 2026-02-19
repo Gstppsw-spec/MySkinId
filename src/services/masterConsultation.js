@@ -394,20 +394,13 @@ module.exports = {
     }
   },
 
-  async updateLocation(cityId, roomId) {
+  async updateLocation(locationId, roomId) {
     try {
       const room = await masterRoomConsultation.findByPk(roomId);
       if (!room) {
         return { status: false, message: "Room not found", data: null };
       }
-      const city = await masterCity.findByPk(cityId);
-      if (!city) {
-        return { status: false, message: "City not found", data: null };
-      }
-      const latitude = city.latitude;
-      const longitude = city.longitude;
-      room.latitude = latitude;
-      room.longitude = longitude;
+      room.locationId = locationId;
       await room.save();
       return { status: true, message: "Location updated successfully", data: room };
     } catch (error) {

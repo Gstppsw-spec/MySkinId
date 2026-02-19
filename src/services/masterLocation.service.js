@@ -174,6 +174,38 @@ class MasterLocationService {
     }
   }
 
+  async getByCityId(cityId) {
+    try {
+      if (!cityId) return { status: false, message: "Data tidak lengkap" };
+
+      const locations = await masterLocation.findAll({
+        where: { cityId },
+        order: [["createdAt", "DESC"]],
+        attributes: ["id", "name"],
+      });
+
+      if (!locations) {
+        return {
+          status: false,
+          message: "Data outlet tidak ditemukan",
+          data: null,
+        };
+      }
+
+      return {
+        status: true,
+        message: "Success",
+        data: locations,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
+    }
+  }
+
   async getByCompanyId(companyId) {
     try {
       if (!companyId) return { status: false, message: "Data tidak lengkap" };

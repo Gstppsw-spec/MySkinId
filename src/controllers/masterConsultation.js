@@ -112,8 +112,8 @@ module.exports = {
 
   async updateLocation(req, res) {
     const { id } = req.params;
-    const cityId = req.body.cityId;
-    const result = await consultation.updateLocation(cityId, id);
+    const locationId = req.body.locationId;
+    const result = await consultation.updateLocation(locationId, id);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

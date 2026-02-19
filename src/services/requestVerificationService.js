@@ -93,9 +93,21 @@ class RequestVerificationService {
 
     async list(status, type) {
         try {
+            //allowed type
+            const allowedType = ["location", "company", "product", "service", "package"];
+
             const where = {};
             if (status) where.status = status;
-            if (type) where.type = type;
+            if (type && allowedType.includes(type)) {
+                where.refferenceType = type;
+            } else {
+                //throw error
+                return {
+                    status: false,
+                    message: "Type tidak valid",
+                    data: null,
+                };
+            }
 
             const requests = await requestVerification.findAll({
                 where,

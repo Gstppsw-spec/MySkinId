@@ -63,6 +63,14 @@ class masterLocationController {
       : response.error(res, result.message, null);
   }
 
+  async getByCityId(req, res) {
+    const { cityId } = req.params;
+    const result = await masterLocationService.getByCityId(cityId);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
   async getByCompanyId(req, res) {
     try {
       const result = await masterLocationService.getByCompanyId(
