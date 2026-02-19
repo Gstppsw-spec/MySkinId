@@ -572,6 +572,179 @@ class MasterLocationService {
   async injectDataRegion() {
     return await this.syncRajaOngkir();
   }
+
+  // --- PROVINCE CRUD ---
+  async listProvince() {
+    try {
+      const provinces = await masterProvince.findAll({
+        order: [["name", "ASC"]],
+      });
+      return { status: true, message: "Province list", data: provinces };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async detailProvince(id) {
+    try {
+      const province = await masterProvince.findByPk(id);
+      if (!province) return { status: false, message: "Province not found" };
+      return { status: true, message: "Province found", data: province };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async createProvince(data) {
+    try {
+      const province = await masterProvince.create(data);
+      return { status: true, message: "Province created", data: province };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async updateProvince(id, data) {
+    try {
+      const province = await masterProvince.findByPk(id);
+      if (!province) return { status: false, message: "Province not found" };
+      await province.update(data);
+      return { status: true, message: "Province updated", data: province };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async deleteProvince(id) {
+    try {
+      const province = await masterProvince.findByPk(id);
+      if (!province) return { status: false, message: "Province not found" };
+      await province.destroy();
+      return { status: true, message: "Province deleted" };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  // --- CITY CRUD ---
+  async listCity(provinceId) {
+    try {
+      const where = {};
+      if (provinceId) where.provinceId = provinceId;
+
+      const cities = await masterCity.findAll({
+        where,
+        include: [{ model: masterProvince, as: "province" }],
+        order: [["name", "ASC"]],
+      });
+      return { status: true, message: "City list", data: cities };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async detailCity(id) {
+    try {
+      const city = await masterCity.findByPk(id, {
+        include: [{ model: masterProvince, as: "province" }],
+      });
+      if (!city) return { status: false, message: "City not found" };
+      return { status: true, message: "City found", data: city };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async createCity(data) {
+    try {
+      const city = await masterCity.create(data);
+      return { status: true, message: "City created", data: city };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async updateCity(id, data) {
+    try {
+      const city = await masterCity.findByPk(id);
+      if (!city) return { status: false, message: "City not found" };
+      await city.update(data);
+      return { status: true, message: "City updated", data: city };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async deleteCity(id) {
+    try {
+      const city = await masterCity.findByPk(id);
+      if (!city) return { status: false, message: "City not found" };
+      await city.destroy();
+      return { status: true, message: "City deleted" };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  // --- DISTRICT CRUD ---
+  async listDistrict(cityId) {
+    try {
+      const where = {};
+      if (cityId) where.cityId = cityId;
+
+      const districts = await masterDistrict.findAll({
+        where,
+        include: [{ model: masterCity, as: "city" }],
+        order: [["name", "ASC"]],
+      });
+      return { status: true, message: "District list", data: districts };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async detailDistrict(id) {
+    try {
+      const district = await masterDistrict.findByPk(id, {
+        include: [{ model: masterCity, as: "city" }],
+      });
+      if (!district) return { status: false, message: "District not found" };
+      return { status: true, message: "District found", data: district };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async createDistrict(data) {
+    try {
+      const district = await masterDistrict.create(data);
+      return { status: true, message: "District created", data: district };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async updateDistrict(id, data) {
+    try {
+      const district = await masterDistrict.findByPk(id);
+      if (!district) return { status: false, message: "District not found" };
+      await district.update(data);
+      return { status: true, message: "District updated", data: district };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async deleteDistrict(id) {
+    try {
+      const district = await masterDistrict.findByPk(id);
+      if (!district) return { status: false, message: "District not found" };
+      await district.destroy();
+      return { status: true, message: "District deleted" };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
 }
 
 module.exports = new MasterLocationService();

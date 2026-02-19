@@ -164,6 +164,125 @@ class masterLocationController {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   }
+
+  // --- PROVINCE ---
+  async listProvince(req, res) {
+    const result = await masterLocationService.listProvince();
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async detailProvince(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.detailProvince(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async createProvince(req, res) {
+    const result = await masterLocationService.createProvince(req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async updateProvince(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.updateProvince(id, req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async deleteProvince(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.deleteProvince(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  // --- CITY ---
+  async listCity(req, res) {
+    const { provinceId } = req.query;
+    const result = await masterLocationService.listCity(provinceId);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async detailCity(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.detailCity(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async createCity(req, res) {
+    const result = await masterLocationService.createCity(req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async updateCity(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.updateCity(id, req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async deleteCity(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.deleteCity(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  // --- DISTRICT ---
+  async listDistrict(req, res) {
+    const { cityId } = req.query;
+    const result = await masterLocationService.listDistrict(cityId);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async detailDistrict(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.detailDistrict(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async createDistrict(req, res) {
+    const result = await masterLocationService.createDistrict(req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async updateDistrict(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.updateDistrict(id, req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async deleteDistrict(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.deleteDistrict(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
 }
 
 module.exports = new masterLocationController();

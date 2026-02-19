@@ -65,6 +65,73 @@ router.get(
   "/get-district-by-latitude-longitude",
   masterLocationController.getDistrictByLatitudeLongitude,
 );
+
+// --- PROVINCE ---
+router.get("/province", masterLocationController.listProvince);
+router.get("/province/:id", masterLocationController.detailProvince);
+router.post(
+  "/province",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.createProvince,
+);
+router.put(
+  "/province/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.updateProvince,
+);
+router.delete(
+  "/province/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.deleteProvince,
+);
+
+// --- CITY ---
+router.get("/city", masterLocationController.listCity);
+router.get("/city-detail/:id", masterLocationController.detailCity);
+router.post(
+  "/city",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.createCity,
+);
+router.put(
+  "/city/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.updateCity,
+);
+router.delete(
+  "/city/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.deleteCity,
+);
+
+// --- DISTRICT ---
+router.get("/district", masterLocationController.listDistrict);
+router.get("/district-detail/:id", masterLocationController.detailDistrict);
+router.post(
+  "/district",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.createDistrict,
+);
+router.put(
+  "/district/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.updateDistrict,
+);
+router.delete(
+  "/district/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.deleteDistrict,
+);
+
 router.get("/cities", masterLocationController.getCities);
 router.get("/", masterLocationController.list);
 router.get("/city/:cityId", masterLocationController.getByCityId);
