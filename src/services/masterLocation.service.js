@@ -574,9 +574,13 @@ class MasterLocationService {
   }
 
   // --- PROVINCE CRUD ---
-  async listProvince() {
+  async listProvince(name) {
     try {
+      const where = {};
+      if (name) where.name = { [Op.like]: `%${name}%` };
+
       const provinces = await masterProvince.findAll({
+        where,
         order: [["name", "ASC"]],
       });
       return { status: true, message: "Province list", data: provinces };
@@ -627,10 +631,11 @@ class MasterLocationService {
   }
 
   // --- CITY CRUD ---
-  async listCity(provinceId) {
+  async listCity(provinceId, name) {
     try {
       const where = {};
       if (provinceId) where.provinceId = provinceId;
+      if (name) where.name = { [Op.like]: `%${name}%` };
 
       const cities = await masterCity.findAll({
         where,
@@ -687,10 +692,11 @@ class MasterLocationService {
   }
 
   // --- DISTRICT CRUD ---
-  async listDistrict(cityId) {
+  async listDistrict(cityId, name) {
     try {
       const where = {};
       if (cityId) where.cityId = cityId;
+      if (name) where.name = { [Op.like]: `%${name}%` };
 
       const districts = await masterDistrict.findAll({
         where,

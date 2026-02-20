@@ -167,7 +167,8 @@ class masterLocationController {
 
   // --- PROVINCE ---
   async listProvince(req, res) {
-    const result = await masterLocationService.listProvince();
+    const { name } = req.query;
+    const result = await masterLocationService.listProvince(name);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
@@ -206,8 +207,8 @@ class masterLocationController {
 
   // --- CITY ---
   async listCity(req, res) {
-    const { provinceId } = req.query;
-    const result = await masterLocationService.listCity(provinceId);
+    const { provinceId, name } = req.query;
+    const result = await masterLocationService.listCity(provinceId, name);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
@@ -246,8 +247,8 @@ class masterLocationController {
 
   // --- DISTRICT ---
   async listDistrict(req, res) {
-    const { cityId } = req.query;
-    const result = await masterLocationService.listDistrict(cityId);
+    const { cityId, name } = req.query;
+    const result = await masterLocationService.listDistrict(cityId, name);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

@@ -98,19 +98,36 @@ class RequestVerificationService {
 
             const where = {};
             if (status) where.status = status;
+
+            let include = [];
+
             if (type && allowedType.includes(type)) {
                 where.refferenceType = type;
-            } else {
-                //throw error
+                if (type === "location") include.push({ model: masterLocation, as: "location" });
+                if (type === "company") include.push({ model: masterCompany, as: "company" });
+                if (type === "product") include.push({ model: masterProduct, as: "product" });
+                if (type === "service") include.push({ model: masterService, as: "service" });
+                if (type === "package") include.push({ model: masterPackage, as: "package" });
+            } else if (type && !allowedType.includes(type)) {
                 return {
                     status: false,
                     message: "Type tidak valid",
                     data: null,
                 };
+            } else {
+                // If no type filter, include all to support mixed list
+                include = [
+                    { model: masterLocation, as: "location" },
+                    { model: masterCompany, as: "company" },
+                    { model: masterProduct, as: "product" },
+                    { model: masterService, as: "service" },
+                    { model: masterPackage, as: "package" },
+                ];
             }
 
             const requests = await requestVerification.findAll({
                 where,
+                include,
                 order: [["createdAt", "DESC"]],
             });
 
