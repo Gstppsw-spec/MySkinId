@@ -284,6 +284,46 @@ class masterLocationController {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   }
+
+  // --- SUB DISTRICT ---
+  async listSubDistrict(req, res) {
+    const { districtId, name } = req.query;
+    const result = await masterLocationService.listSubDistrict(districtId, name);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async detailSubDistrict(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.detailSubDistrict(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async createSubDistrict(req, res) {
+    const result = await masterLocationService.createSubDistrict(req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async updateSubDistrict(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.updateSubDistrict(id, req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
+  async deleteSubDistrict(req, res) {
+    const { id } = req.params;
+    const result = await masterLocationService.deleteSubDistrict(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
 }
 
 module.exports = new masterLocationController();

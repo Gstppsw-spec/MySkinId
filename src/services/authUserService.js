@@ -291,4 +291,163 @@ module.exports = {
       };
     }
   },
+
+  async getAllUser() {
+    try {
+      const users = await masterUser.findAll({
+        attributes: ["id", "name", "email", "phone", "avatar"],
+        distinct: true,
+        include: [
+          {
+            model: masterRole,
+            as: "role",
+            attributes: ["id", "name"],
+            where: {
+              roleCode: {
+                [Op.in]: ["OUTLET_ADMIN", "OUTLET_DOCTOR"],
+              },
+            },
+          },
+          {
+            model: relationshipUserLocation,
+            as: "userLocations",
+            attributes: ["id", "isactive"],
+            required: true,
+            where: {
+              isactive: true,
+            },
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id", "name", "companyId"],
+                required: true,
+                where: {
+                  isactive: true,
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      if (!users || users.length === 0) {
+        return {
+          status: false,
+          message: "Data users tidak ditemukan",
+          data: [],
+        };
+      }
+
+      const data = users.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        avatar: user.avatar,
+        role: user.role?.name || null,
+        location: user.userLocations?.[0]?.location?.name || null,
+      }));
+
+      return {
+        status: true,
+        message: "Success",
+        data: data,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
+    }
+  },
+
+  async getUserById(id) {
+    try {
+      const user = await masterUser.findByPk(id, {
+        attributes: ["id", "name", "email", "phone", "avatar", "isactive", "roleId"],
+        include: [
+          {
+            model: masterRole,
+            as: "role",
+            attributes: ["id", "name", "roleCode"],
+          },
+          {
+            model: relationshipUserLocation,
+            as: "userLocations",
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id", "name"],
+              },
+            ],
+          },
+        ],
+      });
+
+      if (!user) {
+        return { status: false, message: "User tidak ditemukan", data: null };
+      }
+
+      return { status: true, message: "Success", data: user };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async updateUser(id, data) {
+    try {
+      const { name, email, password, phone, roleId, locationId, isactive } = data;
+      const user = await masterUser.findByPk(id);
+
+      if (!user) {
+        return { status: false, message: "User tidak ditemukan", data: null };
+      }
+
+      const updateData = { name, email, phone, roleId, isactive };
+
+      if (password) {
+        updateData.password = await bcrypt.hash(password, 10);
+      }
+
+      await user.update(updateData);
+
+      if (locationId) {
+        const userLocation = await relationshipUserLocation.findOne({
+          where: { userId: id },
+        });
+
+        if (userLocation) {
+          await userLocation.update({ locationId });
+        } else {
+          await relationshipUserLocation.create({
+            userId: id,
+            locationId,
+            isactive: true,
+          });
+        }
+      }
+
+      return { status: true, message: "User berhasil diperbarui", data: user };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async deleteUser(id) {
+    try {
+      const user = await masterUser.findByPk(id);
+      if (!user) {
+        return { status: false, message: "User tidak ditemukan", data: null };
+      }
+
+      await user.update({ isactive: false });
+
+      return { status: true, message: "User berhasil dinonaktifkan", data: null };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
 };

@@ -55,4 +55,55 @@ module.exports = {
       return response.serverError(res, err);
     }
   },
+
+  async getAllUser(req, res) {
+    try {
+      const result = await authService.getAllUser();
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getUserById(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await authService.getUserById(id);
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async editUser(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await authService.updateUser(id, req.body);
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async deleteUser(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await authService.deleteUser(id);
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

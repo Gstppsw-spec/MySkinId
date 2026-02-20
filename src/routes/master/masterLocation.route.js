@@ -132,6 +132,31 @@ router.delete(
   masterLocationController.deleteDistrict,
 );
 
+// --- SUB DISTRICT ---
+router.get("/sub-district", masterLocationController.listSubDistrict);
+router.get(
+  "/sub-district-detail/:id",
+  masterLocationController.detailSubDistrict,
+);
+router.post(
+  "/sub-district",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.createSubDistrict,
+);
+router.put(
+  "/sub-district/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.updateSubDistrict,
+);
+router.delete(
+  "/sub-district/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.deleteSubDistrict,
+);
+
 router.get("/cities", masterLocationController.getCities);
 router.get("/", masterLocationController.list);
 router.get("/city/:cityId", masterLocationController.getByCityId);

@@ -10,6 +10,7 @@ const {
   masterProvince,
   masterCity,
   masterDistrict,
+  masterSubDistrict,
 } = require("../models");
 
 const fs = require("fs");
@@ -747,6 +748,98 @@ class MasterLocationService {
       if (!district) return { status: false, message: "District not found" };
       await district.destroy();
       return { status: true, message: "District deleted" };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  // --- SUB DISTRICT CRUD ---
+  async listSubDistrict(districtId, name) {
+    try {
+      const where = {};
+      if (districtId) where.districtId = districtId;
+      if (name) where.name = { [Op.like]: `%${name}%` };
+
+      const subDistricts = await masterSubDistrict.findAll({
+        where,
+        include: [
+          {
+            model: masterDistrict,
+            as: "district",
+            include: [{ model: masterCity, as: "city" }],
+          },
+        ],
+        order: [["name", "ASC"]],
+      });
+      return {
+        status: true,
+        message: "Sub-district list",
+        data: subDistricts,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async detailSubDistrict(id) {
+    try {
+      const subDistrict = await masterSubDistrict.findByPk(id, {
+        include: [
+          {
+            model: masterDistrict,
+            as: "district",
+            include: [{ model: masterCity, as: "city" }],
+          },
+        ],
+      });
+      if (!subDistrict)
+        return { status: false, message: "Sub-district not found" };
+      return {
+        status: true,
+        message: "Sub-district found",
+        data: subDistrict,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async createSubDistrict(data) {
+    try {
+      const subDistrict = await masterSubDistrict.create(data);
+      return {
+        status: true,
+        message: "Sub-district created",
+        data: subDistrict,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async updateSubDistrict(id, data) {
+    try {
+      const subDistrict = await masterSubDistrict.findByPk(id);
+      if (!subDistrict)
+        return { status: false, message: "Sub-district not found" };
+      await subDistrict.update(data);
+      return {
+        status: true,
+        message: "Sub-district updated",
+        data: subDistrict,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  }
+
+  async deleteSubDistrict(id) {
+    try {
+      const subDistrict = await masterSubDistrict.findByPk(id);
+      if (!subDistrict)
+        return { status: false, message: "Sub-district not found" };
+      await subDistrict.destroy();
+      return { status: true, message: "Sub-district deleted" };
     } catch (error) {
       return { status: false, message: error.message };
     }

@@ -9,6 +9,10 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: 'cityId',
                 as: 'city'
             });
+            masterDistrict.hasMany(models.masterSubDistrict, {
+                foreignKey: 'districtId',
+                as: 'subDistricts'
+            });
         }
     }
     masterDistrict.init({

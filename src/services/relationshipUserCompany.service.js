@@ -28,33 +28,42 @@ class RelationshipUserCompanyService {
     return data?.company || null;
   }
 
-  async updateCompany(companyId, payload) {
-    const company = await masterCompany.findByPk(companyId);
-    if (!company) throw new Error("Company tidak ditemukan");
+  async getAllCompany() {
+    return await masterCompany.findAll();
+  }
 
-    await company.update({ ...payload });
+  async detailCompany(id) {
+    const company = await masterCompany.findByPk(id);
+    if (!company) throw new Error("Company tidak ditemukan");
     return company;
   }
 
-  //   async updateCompanyStatus(companyId, isactive, updatedBy) {
-  //     const company = await masterCompany.findByPk(companyId);
-  //     if (!company) throw new Error("Company tidak ditemukan");
+  async updateCompany(id, payload) {
+    const company = await masterCompany.findByPk(id);
+    if (!company) throw new Error("Company tidak ditemukan");
+    await company.update(payload);
+    return company;
+  }
 
-  //     await company.update({ isactive, updatedBy });
-  //     return company;
-  //   }
+  async addCompany(payload) {
+    // Generate code if not provided
+    if (!payload.code && payload.name) {
+      payload.code = payload.name.toUpperCase().replace(/\s+/g, "_");
+    }
+    return await masterCompany.create(payload);
+  }
 
-  //   async updateCompanyVerified(companyId, isVerified, updatedBy) {
-  //     const company = await masterCompany.findByPk(companyId);
-  //     if (!company) throw new Error("Company tidak ditemukan");
+  async deleteCompany(id, deletedBy = null) {
+    const company = await masterCompany.findByPk(id);
+    if (!company) throw new Error("Company tidak ditemukan");
 
-  //     await company.update({
-  //       isVerified,
-  //       verifiedDate: isVerified ? new Date() : null,
-  //       updatedBy,
-  //     });
-  //     return company;
-  //   }
+    // If we want to track who deleted it before soft delete
+    if (deletedBy) {
+      await company.update({ deletedBy });
+    }
+
+    return await company.destroy();
+  }
 }
 
 module.exports = new RelationshipUserCompanyService();

@@ -39,50 +39,58 @@ class RelationshipUserCompanyController {
     }
   }
 
-//   async updateCompanyStatus(req, res) {
-//     try {
-//       const { id } = req.params; // companyId
-//       const { isactive } = req.body;
-//       const updatedBy = req.user?.id || null;
+  async detailCompany(req, res) {
+    try {
+      const { id } = req.params;
+      const company = await RelationshipUserCompanyService.detailCompany(id);
+      return response.success(res, "Detail company ditemukan", company);
+    } catch (error) {
+      console.error(error);
+      return response.serverError(res, error);
+    }
+  }
 
-//       const company = await RelationshipUserCompanyService.updateCompanyStatus(
-//         id,
-//         isactive,
-//         updatedBy
-//       );
-//       return response.success(
-//         res,
-//         "Status company berhasil diperbarui",
-//         company
-//       );
-//     } catch (error) {
-//       console.error(error);
-//       return response.serverError(res, error);
-//     }
-//   }
+  async getAllCompany(req, res) {
+    try {
+      const data = await RelationshipUserCompanyService.getAllCompany();
+      return response.success(res, "Data relationship user company", data);
+    } catch (error) {
+      console.error(error);
+      return response.serverError(res, error);
+    }
+  }
 
-//   async updateCompanyVerified(req, res) {
-//     try {
-//       const { id } = req.params; // companyId
-//       const { isVerified } = req.body;
-//       const updatedBy = req.user?.id || null;
+  async addCompany(req, res) {
+    try {
+      const payload = {
+        ...req.body,
+        createdBy: req.user?.id || null,
+        updatedBy: req.user?.id || null,
+      };
 
-//       const company =
-//         await RelationshipUserCompanyService.updateCompanyVerified(
-//           id,
-//           isVerified,
-//           updatedBy
-//         );
-//       return response.success(
-//         res,
-//         "Status verifikasi company berhasil diperbarui",
-//         company
-//       );
-//     } catch (error) {
-//       console.error(error);
-//       return response.serverError(res, error);
-//     }
-//   }
+      if (!payload.name) {
+        return response.error(res, "Nama company harus diisi", null, 400);
+      }
+
+      const data = await RelationshipUserCompanyService.addCompany(payload);
+      return response.success(res, "Company berhasil ditambahkan", data);
+    } catch (error) {
+      console.error(error);
+      return response.serverError(res, error);
+    }
+  }
+
+  async deleteCompany(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id || null;
+      await RelationshipUserCompanyService.deleteCompany(id, userId);
+      return response.success(res, "Company berhasil dihapus", null);
+    } catch (error) {
+      console.error(error);
+      return response.serverError(res, error);
+    }
+  }
 }
 
 module.exports = new RelationshipUserCompanyController();
