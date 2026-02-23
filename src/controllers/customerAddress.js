@@ -52,6 +52,7 @@ module.exports = {
                 city,
                 district,
                 cityId,
+                districtId,
                 postalCode,
                 isPrimary
             } = req.body;
@@ -78,6 +79,7 @@ module.exports = {
                 city,
                 district,
                 cityId,
+                districtId,
                 postalCode,
                 isPrimary: makePrimary
             });

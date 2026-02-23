@@ -276,7 +276,7 @@ module.exports = {
                 if (!location) throw new Error(`Location ${locationId} not found`);
 
                 let shippingFee = 0;
-                let destinationCityId = null;
+                let destinationId = null;
                 let finalReceiverName = null;
                 let finalReceiverPhone = null;
                 let finalAddress = null;
@@ -286,12 +286,12 @@ module.exports = {
                         const custAddr = await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } });
                         if (!custAddr) throw new Error(`Customer address not found`);
 
-                        destinationCityId = custAddr.cityId;
+                        destinationId = custAddr.districtId || custAddr.cityId;
                         finalReceiverName = custAddr.receiverName;
                         finalReceiverPhone = custAddr.receiverPhone;
                         finalAddress = `${custAddr.address}, ${custAddr.district}, ${custAddr.city}, ${custAddr.province} ${custAddr.postalCode || ''}`.trim();
                     } else {
-                        destinationCityId = shippingOpt.destinationCityId;
+                        destinationId = shippingOpt.destinationDistrictId || shippingOpt.destinationId;
                         finalReceiverName = shippingOpt.receiverName;
                         finalReceiverPhone = shippingOpt.receiverPhone;
                         finalAddress = shippingOpt.address;
@@ -299,12 +299,13 @@ module.exports = {
 
                     // Validation & Calculation with RajaOngkir
                     if (items.some(i => i.isShippingRequired)) {
-                        if (!destinationCityId) throw new Error(`Destination city ID is missing for shipping`);
+                        if (!destinationId) throw new Error(`Destination city ID is missing for shipping`);
                         const totalWeight = items.reduce((sum, i) => sum + (i.totalWeight || 0), 0);
-                        console.log(`RajaOngkir DEBUG (${shippingOpt.courierCode}): Origin=${location.cityId}, Dest=${destinationCityId}, Weight=${totalWeight}`);
+                        const originId = location.districtId || location.cityId || 0;
+                        console.log(`RajaOngkir DEBUG (${shippingOpt.courierCode}): Origin=${originId}, Dest=${destinationId}, Weight=${totalWeight}`);
                         const rates = await rajaongkirService.calculateCost({
-                            origin: location.cityId || 0,
-                            destination: destinationCityId,
+                            origin: originId,
+                            destination: destinationId,
                             weight: totalWeight,
                             courier: shippingOpt.courierCode
                         });
@@ -331,7 +332,7 @@ module.exports = {
 
                 calculatedShipping[locationId] = {
                     shippingFee,
-                    destinationCityId,
+                    destinationId,
                     finalReceiverName,
                     finalReceiverPhone,
                     finalAddress,
@@ -407,8 +408,8 @@ module.exports = {
                             receiverName: calcInfo.finalReceiverName,
                             receiverPhone: calcInfo.finalReceiverPhone,
                             address: calcInfo.finalAddress,
-                            originCityId: calcInfo.location ? calcInfo.location.cityId : 0,
-                            destinationCityId: calcInfo.destinationCityId,
+                            originCityId: calcInfo.location ? (calcInfo.location.districtId || calcInfo.location.cityId || 0) : 0,
+                            destinationId: calcInfo.destinationId,
                             totalWeight: items.reduce((sum, i) => sum + (i.totalWeight || 0), 0),
                             courierCode: calcInfo.shippingOpt.courierCode,
                             courierService: calcInfo.shippingOpt.courierService,
@@ -524,7 +525,7 @@ module.exports = {
                 if (!location) throw new Error(`Location ${locationId} not found`);
 
                 let shippingFee = 0;
-                let destinationCityId = null;
+                let destinationId = null;
                 let finalReceiverName = null;
                 let finalReceiverPhone = null;
                 let finalAddress = null;
@@ -534,12 +535,12 @@ module.exports = {
                         const custAddr = await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } });
                         if (!custAddr) throw new Error(`Customer address not found`);
 
-                        destinationCityId = custAddr.cityId;
+                        destinationId = custAddr.districtId || custAddr.cityId;
                         finalReceiverName = custAddr.receiverName;
                         finalReceiverPhone = custAddr.receiverPhone;
                         finalAddress = `${custAddr.address}, ${custAddr.district}, ${custAddr.city}, ${custAddr.province} ${custAddr.postalCode || ''}`.trim();
                     } else {
-                        destinationCityId = shippingOpt.destinationCityId;
+                        destinationId = shippingOpt.destinationDistrictId || shippingOpt.destinationId;
                         finalReceiverName = shippingOpt.receiverName;
                         finalReceiverPhone = shippingOpt.receiverPhone;
                         finalAddress = shippingOpt.address;
@@ -547,12 +548,12 @@ module.exports = {
 
                     // Validation & Calculation with RajaOngkir
                     if (items.some(i => i.isShippingRequired)) {
-                        if (!destinationCityId) throw new Error(`Destination city ID is missing for shipping`);
+                        if (!destinationId) throw new Error(`Destination city ID is missing for shipping`);
                         const totalWeight = items.reduce((sum, i) => sum + (i.totalWeight || 0), 0);
-                        console.log(`RajaOngkir DEBUG (${shippingOpt.courierCode}): Origin=${location.cityId}, Dest=${destinationCityId}, Weight=${totalWeight}`);
+                        console.log(`RajaOngkir DEBUG (${shippingOpt.courierCode}): Origin=${location.cityId}, Dest=${destinationId}, Weight=${totalWeight}`);
                         const rates = await rajaongkirService.calculateCost({
-                            origin: location.cityId || 0,
-                            destination: destinationCityId,
+                            origin: originId,
+                            destination: destinationId,
                             weight: totalWeight,
                             courier: shippingOpt.courierCode
                         });
@@ -579,7 +580,7 @@ module.exports = {
 
                 calculatedShipping[locationId] = {
                     shippingFee,
-                    destinationCityId,
+                    destinationId,
                     finalReceiverName,
                     finalReceiverPhone,
                     finalAddress,
@@ -655,8 +656,8 @@ module.exports = {
                             receiverName: calcInfo.finalReceiverName,
                             receiverPhone: calcInfo.finalReceiverPhone,
                             address: calcInfo.finalAddress,
-                            originCityId: calcInfo.location ? calcInfo.location.cityId : 0,
-                            destinationCityId: calcInfo.destinationCityId,
+                            originCityId: calcInfo.location ? (calcInfo.location.districtId || calcInfo.location.cityId || 0) : 0,
+                            destinationId: calcInfo.destinationId,
                             totalWeight: items.reduce((sum, i) => sum + (i.totalWeight || 0), 0),
                             courierCode: calcInfo.shippingOpt.courierCode,
                             courierService: calcInfo.shippingOpt.courierService,
@@ -1063,6 +1064,82 @@ module.exports = {
             };
         } catch (error) {
             await t.rollback();
+            return { status: false, message: error.message };
+        }
+    },
+
+    async checkVoucher(voucherCode, adminId) {
+        try {
+            // 1. Get Admin's Location
+            const userLocation = await relationshipUserLocation.findOne({
+                where: { userId: adminId, isactive: true },
+            });
+
+            if (!userLocation) {
+                throw new Error("Admin not assigned to any location");
+            }
+
+            // 2. Find Voucher
+            const voucher = await customerVoucher.findOne({
+                where: { voucherCode },
+                include: [
+                    {
+                        model: masterPackage,
+                        as: "package",
+                        include: [
+                            {
+                                model: masterLocation,
+                                as: "location",
+                                attributes: ["id", "name", "address"],
+                            },
+                        ],
+                    },
+                    {
+                        model: masterCustomer,
+                        as: "customer",
+                        attributes: ["id", "name", "username", "email"],
+                    }
+                ],
+            });
+
+            if (!voucher) {
+                throw new Error("Voucher not found");
+            }
+
+            if (voucher.status !== "ACTIVE") {
+                return { 
+                    status: false, 
+                    message: `Voucher is already ${voucher.status}`,
+                    data: voucher 
+                };
+            }
+
+            // 3. Security Check: Admin location must match package location
+            if (voucher.package.locationId !== userLocation.locationId) {
+                throw new Error("Voucher cannot be claimed at this location");
+            }
+
+            return {
+                status: true,
+                message: "Voucher is valid and claimable",
+                data: voucher,
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async addPaymentMethod(data) {
+        try {
+            if (Array.isArray(data)) {
+                await masterPaymentMethod.bulkCreate(data, {
+                    updateOnDuplicate: ["name", "type", "isActive", "logoUrl"]
+                });
+            } else {
+                await masterPaymentMethod.create(data);
+            }
+            return { status: true, message: "Payment method(s) added successfully" };
+        } catch (error) {
             return { status: false, message: error.message };
         }
     },

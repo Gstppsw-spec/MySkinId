@@ -13,6 +13,7 @@ router.post("/checkout-direct", transactionOrder.directCheckout);
 router.get("/status/:orderId", transactionOrder.getTransactionStatus);
 router.post("/cancel", transactionOrder.cancelOrder);
 router.get("/payment-methods", transactionOrder.getPaymentMethods);
+router.post("/add-payment-method", allowRoles("SUPER_ADMIN"), transactionOrder.addPaymentMethod);
 
 // Merchant only: Update order status to shipped/delivered
 router.post("/ship", allowRoles("MERCHANT"), transactionOrder.shipTransaction);
@@ -23,6 +24,7 @@ router.post("/complete", transactionOrder.completeTransaction);
 
 // Vouchers
 router.get("/vouchers", transactionOrder.getMyVouchers);
+router.get("/vouchers/check/:voucherCode", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.checkVoucher);
 router.post("/vouchers/claim", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.claimVoucher);
 
 module.exports = router;

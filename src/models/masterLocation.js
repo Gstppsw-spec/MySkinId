@@ -24,6 +24,7 @@ module.exports = (sequelize, DataTypes) => {
       postalCode: { type: DataTypes.STRING(10) },
 
       cityId: { type: DataTypes.INTEGER },
+      districtId: { type: DataTypes.INTEGER },
 
       latitude: { type: DataTypes.DECIMAL(10, 7) },
       longitude: { type: DataTypes.DECIMAL(10, 7) },

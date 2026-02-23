@@ -140,4 +140,28 @@ module.exports = {
             return response.serverError(res, error);
         }
     },
+
+    async checkVoucher(req, res) {
+        try {
+            const adminId = req.user.id;
+            const { voucherCode } = req.params;
+            const result = await transactionOrder.checkVoucher(voucherCode, adminId);
+            if (!result.status)
+                return response.error(res, result.message, result.data);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async addPaymentMethod(req, res) {
+        try {
+            const result = await transactionOrder.addPaymentMethod(req.body);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
 };
