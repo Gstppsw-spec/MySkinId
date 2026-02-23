@@ -26,6 +26,17 @@ module.exports = {
         }
     },
 
+    async getPaymentMethods(req, res) {
+        try {
+            const result = await transactionOrder.getAvailablePaymentMethods();
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
     async getTransactionStatus(req, res) {
         try {
             const userId = req.user.id;
@@ -100,6 +111,31 @@ module.exports = {
             if (!result.status)
                 return response.error(res, result.message);
             return response.success(res, result.message);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getMyVouchers(req, res) {
+        try {
+            const customerId = req.user.id;
+            const result = await transactionOrder.getMyVouchers(customerId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async claimVoucher(req, res) {
+        try {
+            const adminId = req.user.id;
+            const { voucherCode } = req.body;
+            const result = await transactionOrder.claimVoucher(voucherCode, adminId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
         } catch (error) {
             return response.serverError(res, error);
         }

@@ -104,5 +104,12 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
+  masterCustomer.associate = function (models) {
+    masterCustomer.hasMany(models.customerAddress, {
+      foreignKey: "customerId",
+      as: "addresses"
+    });
+  };
+
   return masterCustomer;
 };

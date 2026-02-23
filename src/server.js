@@ -28,7 +28,9 @@ const packageRoute = require("./routes/master/package");
 const customerCartRoute = require("./routes/transaction/customerCart");
 const transactionOrderRoute = require("./routes/transaction/order");
 const userRoute = require("./routes/userRoute");
+const customerAddressRoute = require("./routes/user/customerAddress.route");
 const roleRoute = require("./routes/master/masterRole.route");
+const rajaongkirRoute = require("./routes/master/rajaongkir.route");
 
 // Social media routes
 const postRoute = require("./routes/social/post.route");
@@ -78,6 +80,7 @@ app.use("/api/v2/verification/location", locationVerificationRoute);
 app.use("/api/v2/location", locationRoute);
 app.use("/api/v2/auth-customer", customerRoute);
 app.use("/api/v2/customer", customerRoute);
+app.use("/api/v2/customer/address", customerAddressRoute);
 app.use("/api/v2/service", serviceRoute);
 app.use("/api/v2/consultation", consultationRoute);
 app.use("/api/v2/cart", orderCartRoute);
@@ -90,6 +93,7 @@ app.use("/api/v2/role", roleRoute);
 
 app.use("/api/v2/customer-cart", customerCartRoute);
 app.use("/api/v2/transaction/order", transactionOrderRoute);
+app.use("/api/v2/rajaongkir", rajaongkirRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);
