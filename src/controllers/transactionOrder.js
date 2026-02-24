@@ -1,5 +1,6 @@
 const transactionOrder = require("../services/transactionOrder");
 const response = require("../helpers/response");
+const { formatPagination } = require("../utils/pagination");
 
 module.exports = {
     async checkoutFromCart(req, res) {
@@ -160,6 +161,51 @@ module.exports = {
             if (!result.status)
                 return response.error(res, result.message);
             return response.success(res, result.message);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getOutletTransactions(req, res) {
+        try {
+            const adminId = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+            const { search } = req.query;
+
+            const result = await transactionOrder.getOutletTransactions(adminId, { page, pageSize, search });
+
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result.data,
+                pagination: formatPagination(result.totalCount, page, pageSize),
+            });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getCustomerTransactions(req, res) {
+        try {
+            const customerId = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+
+            const result = await transactionOrder.getCustomerTransactions(customerId, { page, pageSize });
+
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result.data,
+                pagination: formatPagination(result.totalCount, page, pageSize),
+            });
         } catch (error) {
             return response.serverError(res, error);
         }

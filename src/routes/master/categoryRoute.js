@@ -10,29 +10,34 @@ router.get("/products", productCategory.getAll);
 router.get("/product/:id", productCategory.getById);
 router.post("/products", productCategory.create);
 router.put("/product/:id", productCategory.update);
+router.delete("/product/:id", productCategory.delete);
 
 // Consultation Category
 router.get("/consultations", consultationCategory.getAll);
 router.get("/consultation/:id", consultationCategory.getById);
-router.post("/consultations", consultationCategory.create);
-router.put("/consultation/:id", consultationCategory.update);
+router.post("/consultations", consultationCategory.upload, consultationCategory.create);
+router.put("/consultation/:id", consultationCategory.upload, consultationCategory.update);
+router.delete("/consultation/:id", consultationCategory.delete);
 
 //Product group
 router.get("/groups", groupProduct.getAll);
 router.get("/group/:id", groupProduct.getById);
 router.post("/groups", groupProduct.create);
 router.put("/group/:id", groupProduct.update);
+router.delete("/group/:id", groupProduct.delete);
 
 //Service main category
 router.get("/service-main", serviceCategory.getAllMainServiceCategory);
 router.get("/service-main/:id", serviceCategory.getMainServiceCategoryById);
 router.post("/service-main", serviceCategory.createMainServiceCategory);
 router.put("/service-main/:id", serviceCategory.updateMainServiceCategory);
+router.delete("/service-main/:id", serviceCategory.deleteMainServiceCategory);
 
 //service sub category
 router.get("/service-sub", serviceCategory.getAllSubServiceCategory);
 router.get("/service-sub/:id", serviceCategory.getSubServiceCategoryById);
 router.post("/service-sub", serviceCategory.createSubServiceCategory);
 router.put("/service-sub/:id", serviceCategory.updateSubServiceCategory);
+router.delete("/service-sub/:id", serviceCategory.deleteSubServiceCategory);
 
 module.exports = router;

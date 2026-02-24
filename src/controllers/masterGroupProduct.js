@@ -37,4 +37,10 @@ module.exports = {
     const result = await groupProduct.update(id, data);
     return res.status(result.status ? 200 : 400).json(result);
   },
+
+  async delete(req, res) {
+    const { id } = req.params;
+    const result = await groupProduct.delete(id);
+    return res.status(result.status ? 200 : 400).json(result);
+  },
 };

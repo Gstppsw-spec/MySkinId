@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const {
     order,
     transaction,
@@ -13,6 +14,8 @@ const {
     relationshipUserLocation,
     customerAddress,
     masterPaymentMethod,
+    masterService,
+    masterPackageItems,
     sequelize,
 } = require("../models");
 const { nanoid } = require("nanoid");
@@ -69,21 +72,41 @@ module.exports = {
             } else if (paymentType === "EWALLET") {
                 // E-Wallet Charge
                 const response = await axios.post(
-                    "https://api.xendit.co/ewallets/charges",
+                    "https://api.xendit.co/payment_requests",
                     {
                         reference_id: orderNumber,
                         currency: "IDR",
                         amount: amount,
+
                         checkout_method: "ONE_TIME_PAYMENT",
-                        channel_code: paymentMethodCode.startsWith("ID_") ? paymentMethodCode : `ID_${paymentMethodCode}`,
-                        channel_properties: {
-                            mobile_number: formattedPhone || "+6281234567890",
-                            success_redirect_url: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/payment/success` : "https://myskinid.com/payment/success",
-                            failure_redirect_url: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/payment/failure` : "https://myskinid.com/payment/failure"
+
+                        payment_method: {
+                            type: "EWALLET",
+                            ewallet: {
+                                channel_code: paymentMethodCode.startsWith("ID_")
+                                    ? paymentMethodCode
+                                    : `ID_${paymentMethodCode}`,
+
+                                channel_properties: {
+                                    mobile_number: formattedPhone || "+6281234567890",
+                                    success_redirect_url: process.env.FRONTEND_URL
+                                        ? `${process.env.FRONTEND_URL}/payment/success`
+                                        : "https://myskinid.com/payment/success",
+                                    failure_redirect_url: process.env.FRONTEND_URL
+                                        ? `${process.env.FRONTEND_URL}/payment/failure`
+                                        : "https://myskinid.com/payment/failure"
+                                }
+                            }
                         },
-                        callback_url: `${process.env.BACKEND_URL || 'https://api.myskinid.com'}/api/v2/transaction/order/callback/xendit`
+
+                        callback_url: `${process.env.BACKEND_URL || "https://api.myskinid.com"
+                            }/api/v2/transaction/order/callback/xendit`
                     },
-                    { headers: { Authorization: `Basic ${authHeader}` } }
+                    {
+                        headers: {
+                            Authorization: `Basic ${authHeader}`
+                        }
+                    }
                 );
 
                 let checkoutUrl = null;
@@ -1001,6 +1024,17 @@ module.exports = {
                                 as: "location",
                                 attributes: ["id", "name", "address"],
                             },
+                            {
+                                model: masterPackageItems,
+                                as: "items",
+                                include: [
+                                    {
+                                        model: masterService,
+                                        as: "service",
+                                        attributes: ["id", "name", "description", "price", "duration"],
+                                    },
+                                ],
+                            },
                         ],
                     },
                 ],
@@ -1092,6 +1126,17 @@ module.exports = {
                                 as: "location",
                                 attributes: ["id", "name", "address"],
                             },
+                            {
+                                model: masterPackageItems,
+                                as: "items",
+                                include: [
+                                    {
+                                        model: masterService,
+                                        as: "service",
+                                        attributes: ["id", "name", "description", "price", "duration"],
+                                    },
+                                ],
+                            },
                         ],
                     },
                     {
@@ -1107,10 +1152,10 @@ module.exports = {
             }
 
             if (voucher.status !== "ACTIVE") {
-                return { 
-                    status: false, 
+                return {
+                    status: false,
                     message: `Voucher is already ${voucher.status}`,
-                    data: voucher 
+                    data: voucher
                 };
             }
 
@@ -1139,6 +1184,123 @@ module.exports = {
                 await masterPaymentMethod.create(data);
             }
             return { status: true, message: "Payment method(s) added successfully" };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getOutletTransactions(adminId, { page = 1, pageSize = 10, search = "" }) {
+        try {
+            // 1. Get Admin's Location
+            const userLocation = await relationshipUserLocation.findOne({
+                where: { userId: adminId, isactive: true },
+            });
+
+            if (!userLocation) {
+                throw new Error("Admin not assigned to any location");
+            }
+
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+            const whereClause = {
+                locationId: userLocation.locationId,
+            };
+
+            if (search) {
+                whereClause[Op.or] = [
+                    { transactionNumber: { [Op.like]: `%${search}%` } },
+                    { '$order.customer.name$': { [Op.like]: `%${search}%` } }
+                ];
+            }
+
+            const { count, rows } = await transaction.findAndCountAll({
+                where: whereClause,
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        required: !!search, // Order must exist and be joined for name search
+                        include: [
+                            {
+                                model: masterCustomer,
+                                as: "customer",
+                                attributes: ["id", "name"],
+                                required: !!search, // Customer must exist and be joined for name search
+                            },
+                            {
+                                model: orderPayment,
+                                as: "payments",
+                                attributes: ["paymentMethod", "paymentStatus", "amount"],
+                            }
+                        ],
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        attributes: ["itemName", "quantity", "totalPrice"],
+                    }
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["createdAt", "DESC"]],
+                distinct: true,
+                subQuery: false, // Avoid separate subquery for IDs to handle nested filters
+            });
+
+            return {
+                status: true,
+                message: "Transactions fetched successfully",
+                data: rows,
+                totalCount: count
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getCustomerTransactions(customerId, { page = 1, pageSize = 10 }) {
+        try {
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
+            const { count, rows } = await transaction.findAndCountAll({
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        where: { customerId },
+                        include: [
+                            {
+                                model: orderPayment,
+                                as: "payments",
+                                attributes: ["paymentMethod", "paymentStatus", "amount"],
+                            }
+                        ],
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        attributes: ["itemName", "quantity", "totalPrice"],
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "name", "address"],
+                    }
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["createdAt", "DESC"]],
+                distinct: true,
+                subQuery: false,
+            });
+
+            return {
+                status: true,
+                message: "Transactions fetched successfully",
+                data: rows,
+                totalCount: count
+            };
         } catch (error) {
             return { status: false, message: error.message };
         }

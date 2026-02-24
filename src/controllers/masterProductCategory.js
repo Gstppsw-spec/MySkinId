@@ -32,14 +32,20 @@ module.exports = {
   },
 
   async update(req, res) {
-    
-    
+
+
     const { id } = req.params;
     const data = req.body; // { name, description, isActive }
 
     console.log(data, id);
 
     const result = await productCategoryService.update(id, data);
+    return res.status(result.status ? 200 : 400).json(result);
+  },
+
+  async delete(req, res) {
+    const { id } = req.params;
+    const result = await productCategoryService.delete(id);
     return res.status(result.status ? 200 : 400).json(result);
   },
 };

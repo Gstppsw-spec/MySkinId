@@ -101,4 +101,17 @@ module.exports = {
       return { status: false, message: error.message, data: null };
     }
   },
+
+  async delete(id) {
+    try {
+      const category = await masterProductCategory.findByPk(id);
+      if (!category) {
+        return { status: false, message: "Category not found", data: null };
+      }
+      await category.destroy();
+      return { status: true, message: "Category deleted successfully", data: null };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
 };

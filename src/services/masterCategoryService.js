@@ -112,6 +112,19 @@ module.exports = {
     }
   },
 
+  async deleteMainServiceCategory(id) {
+    try {
+      const category = await masterMainCategoryService.findByPk(id);
+      if (!category) {
+        return { status: false, message: "Category not found", data: null };
+      }
+      await category.destroy();
+      return { status: true, message: "Category deleted successfully", data: null };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
   //sub category service
   async getAllSubServiceCategory() {
     try {
@@ -217,6 +230,19 @@ module.exports = {
         message: "Category updated successfully",
         data: category,
       };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async deleteSubServiceCategory(id) {
+    try {
+      const category = await masterSubCategoryService.findByPk(id);
+      if (!category) {
+        return { status: false, message: "Category not found", data: null };
+      }
+      await category.destroy();
+      return { status: true, message: "Category deleted successfully", data: null };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

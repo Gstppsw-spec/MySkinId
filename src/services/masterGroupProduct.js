@@ -99,4 +99,17 @@ module.exports = {
       return { status: false, message: error.message, data: null };
     }
   },
+
+  async delete(id) {
+    try {
+      const group = await masterGroupProduct.findByPk(id);
+      if (!group) {
+        return { status: false, message: "Group not found", data: null };
+      }
+      await group.destroy();
+      return { status: true, message: "Group deleted successfully", data: null };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
 };

@@ -18,6 +18,8 @@ router.post("/add-payment-method", allowRoles("SUPER_ADMIN"), transactionOrder.a
 // Merchant only: Update order status to shipped/delivered
 router.post("/ship", allowRoles("MERCHANT"), transactionOrder.shipTransaction);
 router.post("/deliver", allowRoles("MERCHANT"), transactionOrder.deliverTransaction);
+router.get("/outlet/transactions", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletTransactions);
+router.get("/customer/transactions", transactionOrder.getCustomerTransactions);
 
 // Customer: Confirm order completion
 router.post("/complete", transactionOrder.completeTransaction);

@@ -42,6 +42,12 @@ module.exports = {
     return res.status(result.status ? 200 : 400).json(result);
   },
 
+  async deleteMainServiceCategory(req, res) {
+    const { id } = req.params;
+    const result = await masterCategoryService.deleteMainServiceCategory(id);
+    return res.status(result.status ? 200 : 400).json(result);
+  },
+
   //sub category
   async getAllSubServiceCategory(req, res) {
     try {
@@ -79,6 +85,12 @@ module.exports = {
       id,
       data,
     );
+    return res.status(result.status ? 200 : 400).json(result);
+  },
+
+  async deleteSubServiceCategory(req, res) {
+    const { id } = req.params;
+    const result = await masterCategoryService.deleteSubServiceCategory(id);
     return res.status(result.status ? 200 : 400).json(result);
   },
 };
