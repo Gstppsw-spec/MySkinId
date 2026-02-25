@@ -35,6 +35,11 @@ module.exports = {
                 as: "images",
                 attributes: ["imageUrl"],
               },
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id", "name", "address"],
+              },
             ],
           },
           {
@@ -104,6 +109,7 @@ module.exports = {
             price: cart.product.price,
             discountpercent: cart.product.discountPercent,
             images: cart.product.images,
+            location: cart.product.location,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
             isOnPayment: cart.isOnPayment,
