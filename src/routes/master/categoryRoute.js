@@ -4,6 +4,7 @@ const productCategory = require("../../controllers/masterProductCategory");
 const consultationCategory = require("../../controllers/masterConsultationCategory");
 const groupProduct = require("../../controllers/masterGroupProduct");
 const serviceCategory = require("../../controllers/masterCategoryService");
+const { optionalAuth } = require("../../middlewares/authMiddleware");
 
 // Product Category
 router.get("/products", productCategory.getAll);
@@ -13,7 +14,7 @@ router.put("/product/:id", productCategory.update);
 router.delete("/product/:id", productCategory.delete);
 
 // Consultation Category
-router.get("/consultations", consultationCategory.getAll);
+router.get("/consultations", optionalAuth, consultationCategory.getAll);
 router.get("/consultation/:id", consultationCategory.getById);
 router.post("/consultations", consultationCategory.upload, consultationCategory.create);
 router.put("/consultation/:id", consultationCategory.upload, consultationCategory.update);

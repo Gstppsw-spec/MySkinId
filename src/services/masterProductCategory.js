@@ -4,7 +4,6 @@ module.exports = {
   async getAll() {
     try {
       const categories = await masterProductCategory.findAll({
-        // where: { isActive: true },
         order: [["name", "ASC"]],
       });
       return { status: true, message: "Success", data: categories };

@@ -41,7 +41,9 @@ module.exports = {
 
   async getAll(req, res) {
     try {
-      const result = await consultationCategoryService.getAll();
+      const roleCode = req.user?.roleCode || null;
+      console.log(roleCode);
+      const result = await consultationCategoryService.getAll(roleCode);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);

@@ -109,7 +109,7 @@ module.exports = {
             isOnPayment: cart.isOnPayment,
             cartId: cart.id,
             quantity: cart.qty,
-            weight: cart.product.weight,
+            weight: cart.product.weightGram,
           });
         }
         if (cart.package) {

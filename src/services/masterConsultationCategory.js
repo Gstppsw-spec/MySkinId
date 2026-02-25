@@ -1,10 +1,14 @@
 const { masterConsultationCategory } = require("../models");
 
 module.exports = {
-  async getAll() {
+  async getAll(roleCode = null) {
     try {
+      // Customer has no roleCode (null) → only see active categories
+      // Any role (admin, doctor, etc.) → see all categories
+      const whereClause = !roleCode ? { isActive: true } : {};
+
       const categories = await masterConsultationCategory.findAll({
-        where: { isActive: true },
+        where: whereClause,
         order: [["name", "ASC"]],
       });
       return { status: true, message: "Success", data: categories };

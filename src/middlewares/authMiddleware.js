@@ -123,3 +123,29 @@ module.exports.verifyToken = async (req, res, next) => {
     });
   }
 };
+
+/**
+ * Optional auth: if token present, decode and attach req.user.
+ * If no token or invalid, continue without req.user (req.user = null).
+ */
+module.exports.optionalAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return next();
+
+  const token = authHeader.split(" ")[1];
+  if (!token) return next();
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = {
+      id: decoded.id,
+      roleId: decoded.roleId,
+      roleCode: decoded.roleCode,
+    };
+  } catch {
+    // Token invalid / expired — treat as unauthenticated
+    req.user = null;
+  }
+
+  next();
+};

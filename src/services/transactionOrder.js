@@ -21,6 +21,8 @@ const {
 const { nanoid } = require("nanoid");
 const axios = require("axios");
 const rajaongkirService = require("./rajaongkir.service");
+const socketInstance = require("../socket/socketInstance");
+const { schedulePaymentTimeout, cancelPaymentTimeout } = require("../utils/paymentTimeout");
 
 module.exports = {
     async _createXenditPayment(orderNumber, amount, customer, paymentMethodCode) {
@@ -417,7 +419,7 @@ module.exports = {
                                 packageId: i.itemId,
                                 transactionItemId: newTrxItem.id,
                                 voucherCode: voucherCode,
-                                status: "ACTIVE",
+                                status: "NOT_ACTIVE",
                             },
                             { transaction: t }
                         );
@@ -470,6 +472,10 @@ module.exports = {
             });
 
             await t.commit();
+
+            // Schedule auto-expiry after 10 minutes if unpaid
+            schedulePaymentTimeout(newOrder.id, newOrder.orderNumber, this._expireOrder.bind(this));
+
             return {
                 status: true,
                 message: "Checkout successful",
@@ -665,7 +671,7 @@ module.exports = {
                                 packageId: i.itemId,
                                 transactionItemId: newTrxItem.id,
                                 voucherCode: voucherCode,
-                                status: "ACTIVE",
+                                status: "NOT_ACTIVE",
                             },
                             { transaction: t }
                         );
@@ -712,6 +718,10 @@ module.exports = {
             );
 
             await t.commit();
+
+            // Schedule auto-expiry after 10 minutes if unpaid
+            schedulePaymentTimeout(newOrder.id, newOrder.orderNumber, this._expireOrder.bind(this));
+
             return {
                 status: true,
                 message: "Direct checkout successful",
@@ -723,6 +733,53 @@ module.exports = {
         } catch (error) {
             await t.rollback();
             return { status: false, message: error.message };
+        }
+    },
+
+    // Auto-expire an order that is still UNPAID after timeout
+    async _expireOrder(orderId, orderNumber) {
+        const t = await sequelize.transaction();
+        try {
+            const orderData = await order.findOne({
+                where: { id: orderId, paymentStatus: "UNPAID" },
+                include: [{ model: transaction, as: "transactions" }],
+            });
+
+            if (!orderData) return; // Already paid or cancelled
+
+            await orderData.update({ paymentStatus: "EXPIRED" }, { transaction: t });
+
+            for (const trx of orderData.transactions) {
+                await trx.update({ orderStatus: "CANCELLED" }, { transaction: t });
+            }
+
+            await orderPayment.update(
+                { paymentStatus: "EXPIRED" },
+                { where: { orderId }, transaction: t }
+            );
+
+            // Deactivate any vouchers that were pending payment
+            const trxItems = await transactionItem.findAll({
+                where: {
+                    transactionId: orderData.transactions.map(trx => trx.id),
+                    voucherCode: { [Op.ne]: null },
+                },
+            });
+            if (trxItems.length > 0) {
+                await customerVoucher.update(
+                    { status: "EXPIRED" },
+                    { where: { voucherCode: trxItems.map(item => item.voucherCode), status: "NOT_ACTIVE" } }
+                );
+            }
+
+            await t.commit();
+
+            // Notify frontend via WebSocket
+            socketInstance.emitPaymentUpdate(orderNumber, "EXPIRED", { orderId });
+            console.log(`[PaymentTimeout] Order ${orderNumber} expired (unpaid after 10 minutes)`);
+        } catch (err) {
+            await t.rollback();
+            console.error(`[PaymentTimeout] Failed to expire order ${orderNumber}:`, err.message);
         }
     },
 
@@ -846,6 +903,9 @@ module.exports = {
                 }
 
                 if (orderData.paymentStatus !== "PAID") {
+                    // Cancel auto-expiry timer since payment is now confirmed
+                    cancelPaymentTimeout(orderData.id);
+
                     await orderData.update({ paymentStatus: "PAID" }, { transaction: t });
 
                     // Update all transactions in this order to PAID
@@ -862,6 +922,27 @@ module.exports = {
                         },
                         { where: { orderId: orderData.id }, transaction: t }
                     );
+
+                    // Notify frontend via WebSocket
+                    socketInstance.emitPaymentUpdate(orderData.orderNumber, "PAID", {
+                        orderId: orderData.id,
+                        paymentChannel: _payment_channel,
+                    });
+
+                    // Activate vouchers linked to this order's transactions
+                    const transactionIds = orderData.transactions.map(trx => trx.id);
+                    if (transactionIds.length > 0) {
+                        const trxItems = await transactionItem.findAll({
+                            where: { transactionId: transactionIds, voucherCode: { [Op.ne]: null } },
+                        });
+                        if (trxItems.length > 0) {
+                            const voucherCodes = trxItems.map(item => item.voucherCode);
+                            await customerVoucher.update(
+                                { status: "ACTIVE" },
+                                { where: { voucherCode: voucherCodes, status: "NOT_ACTIVE" } }
+                            );
+                        }
+                    }
                 }
             } else if (_status === "EXPIRED" || _status === "FAILED") {
                 const orderData = await order.findOne({
@@ -879,6 +960,11 @@ module.exports = {
                         { paymentStatus: "FAILED", gatewayResponse: payload },
                         { where: { orderId: orderData.id }, transaction: t }
                     );
+
+                    // Notify frontend via WebSocket
+                    socketInstance.emitPaymentUpdate(orderData.orderNumber, _status, {
+                        orderId: orderData.id,
+                    });
                 }
             }
 
@@ -1013,7 +1099,7 @@ module.exports = {
     async getMyVouchers(customerId) {
         try {
             const vouchers = await customerVoucher.findAll({
-                where: { customerId },
+                where: { customerId, status: "ACTIVE" },
                 include: [
                     {
                         model: masterPackage,
