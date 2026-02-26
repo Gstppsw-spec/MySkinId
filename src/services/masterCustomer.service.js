@@ -665,6 +665,75 @@ class masterCustomerService {
     }
   }
 
+  async googleLogin(profile) {
+    try {
+      const { id, displayName, emails, photos } = profile;
+      const email = emails && emails.length > 0 ? emails[0].value : null;
+      const profileImageUrl = photos && photos.length > 0 ? photos[0].value : null;
+
+      let customer = await masterCustomer.findOne({
+        where: { googleId: id },
+      });
+
+      if (!customer && email) {
+        // If googleId not found, check by email (existing account linking)
+        customer = await masterCustomer.findOne({
+          where: { email },
+        });
+
+        if (customer) {
+          // Link existing account with googleId
+          await customer.update({
+            googleId: id,
+            loginMethod: "google",
+            isActive: true,
+            emailVerified: true,
+          });
+        }
+      }
+
+      if (!customer) {
+        // Create new customer
+        customer = await masterCustomer.create({
+          name: displayName,
+          email: email,
+          googleId: id,
+          loginMethod: "google",
+          isActive: true, // Auto-active for Google login
+          emailVerified: true,
+          profileImageUrl: profileImageUrl,
+        });
+      }
+
+      const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
+        expiresIn: "7d",
+      });
+
+      const customerData = customer.toJSON();
+      customerData.jwtToken = jwtToken;
+
+      // Clean sensitive data
+      delete customerData.googleId;
+      delete customerData.loginMethod;
+      delete customerData.password;
+      delete customerData.otpCode;
+      delete customerData.otpType;
+      delete customerData.otpExpiresAt;
+
+      return {
+        status: true,
+        message: "Google login successful",
+        data: customerData,
+      };
+    } catch (error) {
+      console.error("Google login error:", error);
+      return {
+        status: false,
+        message: error.message || "Error during Google login",
+      };
+    }
+  }
+
   static normalizeNumber(phoneNumber, countryCode = "62") {
     phoneNumber = phoneNumber.toString().replace(/[^0-9]/g, "");
     countryCode = countryCode.toString().replace(/[^0-9]/g, "");
