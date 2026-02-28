@@ -436,6 +436,20 @@ module.exports = {
 
       const include = [
         {
+          model: masterLocation,
+          as: "location",
+          attributes: ["id"],
+          include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+              attributes: ["imageUrl"],
+              limit: 1,
+              separate: true,
+            },
+          ],
+        },
+        {
           model: masterPackageItems,
           as: "items",
           attributes: ["packageId", "qty", "serviceId", "id"],
@@ -478,10 +492,12 @@ module.exports = {
         const plain = prod.get({ plain: true });
         return {
           ...plain,
+          image: plain.location?.images?.[0]?.imageUrl || null,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
           favorites: undefined,
+          location: undefined,
         };
       });
 

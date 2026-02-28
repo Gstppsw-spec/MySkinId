@@ -127,7 +127,7 @@ module.exports = {
                     {
                         external_id: orderNumber,
                         type: "DYNAMIC",
-                        callback_url: `${process.env.BACKEND_URL || 'https://api.myskinid.com'}/api/v2/transaction/order/callback/xendit`,
+                        callback_url: `${process.env.BACKEND_URL || 'https://api.myskin.blog'}/api/v2/transaction/order/callback/xendit`,
                         amount: amount,
                     },
                     { headers: { Authorization: `Basic ${authHeader}` } }
@@ -838,7 +838,65 @@ module.exports = {
                 return { status: false, message: "Order not found" };
             }
 
-            return { status: true, message: "Status found", data: orderData };
+            const plain = orderData.get({ plain: true });
+
+            // Get the primary payment record
+            const latestPayment = plain.payments?.[0];
+            let paymentDetail = null;
+
+            if (latestPayment) {
+                paymentDetail = {
+                    method: latestPayment.paymentMethod,
+                    status: latestPayment.paymentStatus,
+                    amount: latestPayment.amount,
+                };
+
+                // Add instructions/URL if UNPAID
+                if (plain.paymentStatus === "UNPAID" && latestPayment.gatewayResponse) {
+                    const gr = latestPayment.gatewayResponse;
+
+                    // Simple logic to extract IDs/URLs
+                    if (gr.account_number) paymentDetail.accountNumber = gr.account_number;
+                    if (gr.bank_code) paymentDetail.bankCode = gr.bank_code;
+                    if (gr.qr_string) paymentDetail.qrString = gr.qr_string;
+
+                    if (gr.actions) {
+                        const webLink = gr.actions.find(a => a.url_type.includes("WEB"));
+                        if (webLink) paymentDetail.checkoutUrl = webLink.url;
+                    }
+                    if (gr.invoice_url) paymentDetail.checkoutUrl = gr.invoice_url;
+
+                    // Get user-friendly instructions
+                    let pType = "EWALLET";
+                    if (latestPayment.paymentMethod.includes("VA")) pType = "VIRTUAL_ACCOUNT";
+                    else if (latestPayment.paymentMethod.includes("QR")) pType = "QR_CODE";
+                    else if (gr.invoice_url) pType = "INVOICE";
+
+                    paymentDetail.instructions = this._getPaymentInstructions(pType, latestPayment.paymentMethod, gr);
+                }
+            }
+
+            const resultArr = {
+                orderId: plain.id,
+                orderNumber: plain.orderNumber,
+                totalAmount: plain.totalAmount,
+                paymentStatus: plain.paymentStatus,
+                paymentDetail,
+                transactions: plain.transactions.map(t => ({
+                    transactionId: t.id,
+                    transactionNumber: t.transactionNumber,
+                    locationName: t.location?.name,
+                    orderStatus: t.orderStatus,
+                    items: t.items.map(i => ({
+                        itemName: i.itemName,
+                        quantity: i.quantity,
+                        totalPrice: i.totalPrice
+                    }))
+                })),
+                createdAt: plain.createdAt
+            };
+
+            return { status: true, message: "Status found", data: resultArr };
         } catch (error) {
             return { status: false, message: error.message };
         }
@@ -1433,4 +1491,5 @@ module.exports = {
             return { status: false, message: error.message };
         }
     },
+
 };
