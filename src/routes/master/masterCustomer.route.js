@@ -8,8 +8,8 @@ const uploadProfileImage = require("../../middlewares/uploadProfileImage.middlew
 router.post("/register", masterCustomerController.registerCustomer);
 router.post("/login", masterCustomerController.loginCustomer);
 router.get("/google", masterCustomerController.googleRedirect);
+router.post("/google/android", masterCustomerController.googleMobileLogin);
 router.get("/google/callback", masterCustomerController.googleCallback);
-router.post("/google/mobile", masterCustomerController.googleMobileLogin);
 router.post("/verifyOtp", masterCustomerController.verifyOTP);
 router.post("/resendOtpAuthentication", masterCustomerController.resendOtpAuthentication);
 
