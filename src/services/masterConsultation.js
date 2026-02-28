@@ -22,6 +22,7 @@ const { Op, Sequelize, where } = require("sequelize");
 const fs = require("fs");
 const path = require("path");
 const { nanoid } = require("nanoid");
+const socketInstance = require("../socket/socketInstance");
 
 module.exports = {
   async getRoomByUser(userId) {
@@ -149,6 +150,9 @@ module.exports = {
       room.doctorId = doctorId;
       room.status = "open";
       await room.save();
+
+      socketInstance.emitRoomStatusUpdate(roomId, "open", { doctorId });
+
       return {
         status: true,
         message: "Berhasil masuk ke room chat",
@@ -168,6 +172,9 @@ module.exports = {
 
       room.status = "closed";
       await room.save();
+
+      socketInstance.emitRoomStatusUpdate(roomId, "closed");
+
       return {
         status: true,
         message: "Berhasil masuk ke room chat",
@@ -236,7 +243,7 @@ module.exports = {
         senderRole,
       });
 
-      if (files || files.length > 0) {
+      if (files && files.length > 0) {
         const imageRecords = files.map((file) => ({
           messageId: newMessage.id,
           roomId: roomId,
@@ -248,6 +255,8 @@ module.exports = {
         messageContent = imageRecords.map((img) => img.imageUrl);
         newMessage.message = JSON.stringify(messageContent);
       }
+
+      socketInstance.emitConsultationMessage(roomId, newMessage);
 
       return { status: true, message: "Success", data: newMessage };
     } catch (error) {
@@ -266,6 +275,9 @@ module.exports = {
           },
         }
       );
+
+      socketInstance.emitRoomStatusUpdate(roomId, "messages_read");
+
       return { status: true, message: "Success", data: null };
     } catch (error) {
       return { status: false, message: error.message, data: null };

@@ -16,4 +16,18 @@ module.exports = {
             });
         }
     },
+    emitConsultationMessage(roomId, messageData) {
+        if (_io) {
+            _io.to(roomId).emit("message", messageData);
+        }
+    },
+    emitRoomStatusUpdate(roomId, status, data = {}) {
+        if (_io) {
+            _io.to(roomId).emit("room_status_update", {
+                roomId,
+                status,
+                ...data,
+            });
+        }
+    },
 };
