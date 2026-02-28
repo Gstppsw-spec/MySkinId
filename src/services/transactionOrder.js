@@ -68,7 +68,7 @@ module.exports = {
                     accountNumber: response.data.account_number,
                     expectedAmount: response.data.expected_amount,
                     expirationDate: response.data.expiration_date,
-                    rawPayload: response.data
+                    instructions: this._getPaymentInstructions("VIRTUAL_ACCOUNT", paymentMethodCode, { accountNumber: response.data.account_number })
                 };
 
             } else if (paymentType === "EWALLET") {
@@ -84,25 +84,18 @@ module.exports = {
 
                         payment_method: {
                             type: "EWALLET",
+                            reusability: "ONE_TIME_USE",
                             ewallet: {
-                                channel_code: paymentMethodCode.startsWith("ID_")
-                                    ? paymentMethodCode
-                                    : `ID_${paymentMethodCode}`,
+                                channel_code: paymentMethodCode,
 
-                                channel_properties: {
-                                    mobile_number: formattedPhone || "+6281234567890",
-                                    success_redirect_url: process.env.FRONTEND_URL
-                                        ? `${process.env.FRONTEND_URL}/payment/success`
-                                        : "https://myskinid.com/payment/success",
-                                    failure_redirect_url: process.env.FRONTEND_URL
-                                        ? `${process.env.FRONTEND_URL}/payment/failure`
-                                        : "https://myskinid.com/payment/failure"
-                                }
+                                channel_properties: paymentMethodCode === "OVO"
+                                    ? { mobile_number: formattedPhone || "+6281234567890" }
+                                    : {
+                                        success_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_success`,
+                                        failure_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_failure`
+                                    }
                             }
-                        },
-
-                        callback_url: `${process.env.BACKEND_URL || "https://api.myskinid.com"
-                            }/api/v2/transaction/order/callback/xendit`
+                        }
                     },
                     {
                         headers: {
@@ -113,10 +106,9 @@ module.exports = {
 
                 let checkoutUrl = null;
                 if (response.data.actions) {
-                    const desktopWeb = response.data.actions.find(a => a.url_type === "DESKTOP_WEB");
-                    const mobileWeb = response.data.actions.find(a => a.url_type === "MOBILE_WEB");
-                    const appDeeplink = response.data.actions.find(a => a.url_type === "DEEPLINK");
-                    checkoutUrl = appDeeplink ? appDeeplink.url : (mobileWeb ? mobileWeb.url : (desktopWeb ? desktopWeb.url : null));
+                    const appDeeplink = response.data.actions.find(a => a.url_type === "DEEPLINK" || a.url_type === "MOBILE");
+                    const webLink = response.data.actions.find(a => a.url_type === "DESKTOP_WEB" || a.url_type === "MOBILE_WEB" || a.url_type === "WEB");
+                    checkoutUrl = appDeeplink ? appDeeplink.url : (webLink ? webLink.url : null);
                 }
 
                 return {
@@ -126,7 +118,7 @@ module.exports = {
                     channelCode: response.data.channel_code,
                     chargeAmount: response.data.charge_amount,
                     checkoutUrl: checkoutUrl,
-                    rawPayload: response.data
+                    instructions: this._getPaymentInstructions("EWALLET", paymentMethodCode, { checkoutUrl })
                 };
             } else if (paymentType === "QR_CODE") {
                 // QR Code (QRIS)
@@ -135,7 +127,7 @@ module.exports = {
                     {
                         external_id: orderNumber,
                         type: "DYNAMIC",
-                        callback_url: `${process.env.BACKEND_URL || 'https://api.myskinid.com'}/api/v2/transaction/order/xendit-callback`,
+                        callback_url: `${process.env.BACKEND_URL || 'https://api.myskinid.com'}/api/v2/transaction/order/callback/xendit`,
                         amount: amount,
                     },
                     { headers: { Authorization: `Basic ${authHeader}` } }
@@ -148,7 +140,7 @@ module.exports = {
                     qrString: response.data.qr_string,
                     amount: response.data.amount,
                     status: response.data.status,
-                    rawPayload: response.data
+                    instructions: this._getPaymentInstructions("QR_CODE", paymentMethodCode, response.data)
                 };
             } else {
                 // Fallback to Invoice for other types like RETAIL_OUTLET or unsupported types
@@ -171,7 +163,7 @@ module.exports = {
                     externalId: response.data.external_id,
                     invoiceUrl: response.data.invoice_url,
                     expiryDate: response.data.expiry_date,
-                    rawPayload: response.data
+                    instructions: this._getPaymentInstructions("INVOICE", paymentMethodCode, response.data)
                 };
             }
         } catch (error) {
@@ -191,6 +183,46 @@ module.exports = {
             cleaned = "+" + cleaned;
         }
         return cleaned;
+    },
+
+    _getPaymentInstructions(paymentType, paymentMethodCode, data) {
+        if (paymentType === "VIRTUAL_ACCOUNT") {
+            return [
+                `Buka aplikasi ${paymentMethodCode} atau Internet Banking Anda`,
+                `Pilih menu Transfer atau Pembayaran Virtual Account`,
+                `Masukkan Nomor Virtual Account: ${data.accountNumber}`,
+                `Pastikan nominal sesuai dan konfirmasi pembayaran`
+            ];
+        } else if (paymentType === "EWALLET") {
+            if (paymentMethodCode === "OVO") {
+                return [
+                    "Buka aplikasi OVO di handphone Anda",
+                    "Cek notifikasi atau halaman utama aplikasi OVO",
+                    "Klik bayar pada tagihan dari MySkinId",
+                    "Selesaikan pembayaran dalam waktu 30 detik untuk menghindari expire"
+                ];
+            } else {
+                return [
+                    "Buka link pembayaran yang tersedia (Checkout URL)",
+                    "Anda akan diarahkan otomatis ke aplikasi atau halaman pembayaran",
+                    "Selesaikan pembayaran sesuai instruksi di aplikasi tersebut",
+                    "Pastikan saldo Anda cukup sebelum melakukan pembayaran"
+                ];
+            }
+        } else if (paymentType === "QR_CODE") {
+            return [
+                "Scan kode QR yang muncul menggunakan aplikasi (Gopay, OVO, Dana, atau Mobile Banking)",
+                "Pastikan nominal pembayaran sudah sesuai",
+                "Klik bayar dan masukkan PIN Anda",
+                "Jangan tutup halaman ini sampai pembayaran berhasil dikonfirmasi"
+            ];
+        }
+        return [
+            "Buka link invoice yang tersedia",
+            "Pilih metode pembayaran yang diinginkan",
+            "Ikuti instruksi sesuai metode yang dipilih",
+            "Bayar sebelum batas waktu berakhir"
+        ];
     },
 
     async getAvailablePaymentMethods() {
@@ -434,7 +466,7 @@ module.exports = {
                             receiverPhone: calcInfo.finalReceiverPhone,
                             address: calcInfo.finalAddress,
                             originCityId: calcInfo.location ? (calcInfo.location.districtId || calcInfo.location.cityId || 0) : 0,
-                            destinationId: calcInfo.destinationId,
+                            destinationCityId: calcInfo.destinationId,
                             totalWeight: items.reduce((sum, i) => sum + (i.totalWeight || 0), 0),
                             courierCode: calcInfo.shippingOpt.courierCode,
                             courierService: calcInfo.shippingOpt.courierService,
@@ -579,7 +611,8 @@ module.exports = {
                     if (items.some(i => i.isShippingRequired)) {
                         if (!destinationId) throw new Error(`Destination city ID is missing for shipping`);
                         const totalWeight = items.reduce((sum, i) => sum + (i.totalWeight || 0), 0);
-                        console.log(`RajaOngkir DEBUG (${shippingOpt.courierCode}): Origin=${location.cityId}, Dest=${destinationId}, Weight=${totalWeight}`);
+                        const originId = location.districtId || location.cityId || 0;
+                        console.log(`RajaOngkir DEBUG (${shippingOpt.courierCode}): Origin=${originId}, Dest=${destinationId}, Weight=${totalWeight}`);
                         const rates = await rajaongkirService.calculateCost({
                             origin: originId,
                             destination: destinationId,
@@ -686,7 +719,7 @@ module.exports = {
                             receiverPhone: calcInfo.finalReceiverPhone,
                             address: calcInfo.finalAddress,
                             originCityId: calcInfo.location ? (calcInfo.location.districtId || calcInfo.location.cityId || 0) : 0,
-                            destinationId: calcInfo.destinationId,
+                            destinationCityId: calcInfo.destinationId,
                             totalWeight: items.reduce((sum, i) => sum + (i.totalWeight || 0), 0),
                             courierCode: calcInfo.shippingOpt.courierCode,
                             courierService: calcInfo.shippingOpt.courierService,
@@ -852,6 +885,7 @@ module.exports = {
     },
 
     async handleXenditCallback(payload, callbackTokenHeader) {
+        console.log("Xendit Callback RAW Payload:", JSON.stringify(payload, null, 2));
         const t = await sequelize.transaction();
         try {
             // Security: Verify Xendit Callback Token
@@ -866,8 +900,14 @@ module.exports = {
             let _payment_channel = null;
 
             // Detect Payload Type
-            if (payload.event && payload.event.startsWith("ewallet.")) {
-                // E-Wallet Charge Callback
+            if (payload.event && (payload.event.startsWith("payment_request.") || payload.event.startsWith("payment."))) {
+                // Payment Request Callback (V2)
+                _external_id = payload.data.reference_id;
+                _status = payload.data.status === "SUCCEEDED" ? "PAID" : payload.data.status;
+                const pm = payload.data.payment_method;
+                _payment_channel = pm ? (pm.ewallet ? pm.ewallet.channel_code : (pm.virtual_account ? pm.virtual_account.bank_code : pm.type)) : null;
+            } else if (payload.event && payload.event.startsWith("ewallet.")) {
+                // E-Wallet Charge Callback (Legacy/V1)
                 _external_id = payload.data.reference_id;
                 _status = payload.data.status === "SUCCEEDED" ? "PAID" : "FAILED";
                 _payment_channel = payload.data.channel_code;
@@ -883,16 +923,18 @@ module.exports = {
                 _payment_channel = payload.bank_code;
             } else {
                 // Fallback / Standard Invoice / Retail Outlet Callback
-                _external_id = payload.external_id;
+                _external_id = payload.external_id || payload.reference_id || payload.id;
                 _status = payload.status;
-                _payment_channel = payload.payment_channel;
+                _payment_channel = payload.payment_channel || payload.payment_method;
             }
+
+            console.log(`Xendit Callback Processed: ID=${_external_id}, Status=${_status}, Channel=${_payment_channel}`);
 
             if (!_external_id) {
                 throw new Error("Missing reference/external ID in callback");
             }
 
-            if (_status === "PAID" || _status === "COMPLETED" || _status === "SETTLED") {
+            if (_status === "PAID" || _status === "COMPLETED" || _status === "SETTLED" || _status === "SUCCEEDED") {
                 const orderData = await order.findOne({
                     where: { orderNumber: _external_id },
                     include: [{ model: transaction, as: "transactions" }],
