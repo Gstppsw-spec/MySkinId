@@ -60,6 +60,9 @@ module.exports = (sequelize, DataTypes) => {
             rajaOngkirResponse: {
                 type: DataTypes.JSON,
             },
+            trackingNumber: {
+                type: DataTypes.STRING(100),
+            },
             createdAt: { type: DataTypes.DATE },
             updatedAt: { type: DataTypes.DATE },
         },

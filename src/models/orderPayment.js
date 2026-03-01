@@ -45,6 +45,12 @@ module.exports = (sequelize, DataTypes) => {
             paymentDate: {
                 type: DataTypes.DATE,
             },
+            checkoutUrl: {
+                type: DataTypes.TEXT,
+            },
+            instructions: {
+                type: DataTypes.TEXT,
+            },
             createdAt: { type: DataTypes.DATE },
             updatedAt: { type: DataTypes.DATE },
         },

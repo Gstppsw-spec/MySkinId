@@ -80,9 +80,9 @@ module.exports = {
 
     async shipTransaction(req, res) {
         try {
-            const merchantId = req.user.id;
-            const { transactionId } = req.body;
-            const result = await transactionOrder.updateTransactionToShipped(transactionId, merchantId);
+            const adminId = req.user.id;
+            const { transactionId, trackingNumber } = req.body;
+            const result = await transactionOrder.updateTransactionToShipped(transactionId, adminId, trackingNumber);
             if (!result.status)
                 return response.error(res, result.message);
             return response.success(res, result.message);
@@ -91,11 +91,12 @@ module.exports = {
         }
     },
 
+
     async deliverTransaction(req, res) {
         try {
-            const merchantId = req.user.id;
+            const adminId = req.user.id;
             const { transactionId } = req.body;
-            const result = await transactionOrder.updateTransactionToDelivered(transactionId, merchantId);
+            const result = await transactionOrder.updateTransactionToDelivered(transactionId, adminId);
             if (!result.status)
                 return response.error(res, result.message);
             return response.success(res, result.message);
@@ -189,13 +190,13 @@ module.exports = {
         }
     },
 
-    async getCustomerTransactions(req, res) {
+    async getCustomerTransactionHistory(req, res) {
         try {
             const customerId = req.user.id;
             const page = parseInt(req.query.page) || 1;
             const pageSize = parseInt(req.query.pageSize) || 10;
 
-            const result = await transactionOrder.getCustomerTransactions(customerId, { page, pageSize });
+            const result = await transactionOrder.getCustomerTransactionHistory(customerId, { page, pageSize });
 
             if (!result.status)
                 return response.error(res, result.message);
@@ -206,6 +207,107 @@ module.exports = {
                 data: result.data,
                 pagination: formatPagination(result.totalCount, page, pageSize),
             });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getCustomerPurchasedProducts(req, res) {
+        try {
+            const customerId = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+
+            const result = await transactionOrder.getCustomerPurchasedProducts(customerId, { page, pageSize });
+
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result.data,
+                pagination: formatPagination(result.totalCount, page, pageSize),
+            });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getCustomerUnpaidOrders(req, res) {
+        try {
+            const customerId = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+
+            const result = await transactionOrder.getCustomerUnpaidOrders(customerId, { page, pageSize });
+
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result.data,
+                pagination: formatPagination(result.totalCount, page, pageSize),
+            });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getCustomerCompletedTransactions(req, res) {
+        try {
+            const customerId = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+
+            const result = await transactionOrder.getCustomerCompletedTransactions(customerId, { page, pageSize });
+
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result.data,
+                pagination: formatPagination(result.totalCount, page, pageSize),
+            });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getCustomerShippingTransactions(req, res) {
+        try {
+            const customerId = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+
+            const result = await transactionOrder.getCustomerShippingTransactions(customerId, { page, pageSize });
+
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result.data,
+                pagination: formatPagination(result.totalCount, page, pageSize),
+            });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getCustomerOrderTrackingDetail(req, res) {
+        try {
+            const userId = req.user.id;
+            const { transactionId } = req.params;
+            const result = await transactionOrder.getCustomerOrderTrackingDetail(transactionId, userId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
         } catch (error) {
             return response.serverError(res, error);
         }

@@ -8,6 +8,16 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "transactionId",
                 as: "transaction",
             });
+            transactionItem.belongsTo(models.masterProduct, {
+                foreignKey: "itemId",
+                as: "product",
+                constraints: false,
+            });
+            transactionItem.belongsTo(models.masterPackage, {
+                foreignKey: "itemId",
+                as: "package",
+                constraints: false,
+            });
         }
     }
 

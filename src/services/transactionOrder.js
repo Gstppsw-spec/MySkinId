@@ -16,6 +16,8 @@ const {
     masterPaymentMethod,
     masterService,
     masterPackageItems,
+    masterLocationImage,
+    masterProductImage,
     sequelize,
 } = require("../models");
 const { nanoid } = require("nanoid");
@@ -1077,9 +1079,18 @@ module.exports = {
         }
     },
 
-    async updateTransactionToShipped(transactionId, merchantId) {
+    async updateTransactionToShipped(transactionId, adminId, trackingNumber) {
         const t = await sequelize.transaction();
         try {
+            // 1. Get Admin's Location
+            const userLocation = await relationshipUserLocation.findOne({
+                where: { userId: adminId, isactive: true },
+            });
+
+            if (!userLocation) {
+                throw new Error("Admin not assigned to any location");
+            }
+
             const trx = await transaction.findOne({
                 where: { id: transactionId },
                 include: [
@@ -1089,9 +1100,8 @@ module.exports = {
                         where: { paymentStatus: "PAID" }
                     },
                     {
-                        model: masterLocation,
-                        as: "location",
-                        attributes: ["id", "merchantId"]
+                        model: transactionShipping,
+                        as: "shipping"
                     }
                 ]
             });
@@ -1100,9 +1110,9 @@ module.exports = {
                 throw new Error("Transaction not found or order not paid");
             }
 
-            // Verify merchant owns this location
-            if (trx.location.merchantId !== merchantId) {
-                throw new Error("Unauthorized: You don't own this transaction");
+            // 2. Security Check: Admin location must match transaction location
+            if (trx.locationId !== userLocation.locationId) {
+                throw new Error("Unauthorized: You are not assigned to this outlet");
             }
 
             // Can only ship items that are PAID
@@ -1112,6 +1122,13 @@ module.exports = {
 
             await trx.update({ orderStatus: "SHIPPED" }, { transaction: t });
 
+            if (trx.shipping) {
+                await trx.shipping.update({
+                    shippingStatus: "SHIPPED",
+                    trackingNumber: trackingNumber || trx.shipping.trackingNumber
+                }, { transaction: t });
+            }
+
             await t.commit();
             return { status: true, message: "Transaction marked as shipped" };
         } catch (error) {
@@ -1120,40 +1137,48 @@ module.exports = {
         }
     },
 
-    async updateTransactionToDelivered(transactionId, merchantId) {
+
+    async updateTransactionToDelivered(transactionId, adminId) {
         const t = await sequelize.transaction();
         try {
+            // 1. Get Admin's Location
+            const userLocation = await relationshipUserLocation.findOne({
+                where: { userId: adminId, isactive: true },
+            });
+
+            if (!userLocation) {
+                throw new Error("Admin not assigned to any location");
+            }
+
             const trx = await transaction.findOne({
                 where: { id: transactionId },
                 include: [
                     {
-                        model: order,
-                        as: "order",
-                        where: { paymentStatus: "PAID" }
-                    },
-                    {
-                        model: masterLocation,
-                        as: "location",
-                        attributes: ["id", "merchantId"]
+                        model: transactionShipping,
+                        as: "shipping"
                     }
                 ]
             });
 
             if (!trx) {
-                throw new Error("Transaction not found or order not paid");
+                throw new Error("Transaction not found");
             }
 
-            // Verify merchant owns this location
-            if (trx.location.merchantId !== merchantId) {
-                throw new Error("Unauthorized: You don't own this transaction");
+            // 2. Security Check: Admin location must match transaction location
+            if (trx.locationId !== userLocation.locationId) {
+                throw new Error("Unauthorized: You are not assigned to this outlet");
             }
 
-            // Can only mark as delivered if already shipped
-            if (trx.orderStatus !== "SHIPPED") {
-                throw new Error(`Cannot deliver transaction with status ${trx.orderStatus}. Must be SHIPPED first.`);
+            // Can only mark as delivered if currently SHIPPED or PAID
+            if (!["PAID", "SHIPPED"].includes(trx.orderStatus)) {
+                throw new Error(`Cannot deliver transaction with status ${trx.orderStatus}`);
             }
 
             await trx.update({ orderStatus: "DELIVERED" }, { transaction: t });
+
+            if (trx.shipping) {
+                await trx.shipping.update({ shippingStatus: "DELIVERED" }, { transaction: t });
+            }
 
             await t.commit();
             return { status: true, message: "Transaction marked as delivered" };
@@ -1209,6 +1234,15 @@ module.exports = {
                                 model: masterLocation,
                                 as: "location",
                                 attributes: ["id", "name", "address"],
+                                include: [
+                                    {
+                                        model: masterLocationImage,
+                                        as: "images",
+                                        attributes: ["imageUrl"],
+                                        limit: 1,
+                                        separate: true,
+                                    },
+                                ],
                             },
                             {
                                 model: masterPackageItems,
@@ -1227,10 +1261,21 @@ module.exports = {
                 order: [["createdAt", "DESC"]],
             });
 
+            const result = vouchers.map((v) => {
+                const plain = v.get({ plain: true });
+                const imageLocation = plain.package?.location?.images?.[0]?.imageUrl || null;
+
+                // Cleanup internal objects if preferred, or just add the field
+                return {
+                    ...plain,
+                    imageLocation,
+                };
+            });
+
             return {
                 status: true,
                 message: "Vouchers fetched successfully",
-                data: vouchers,
+                data: result,
             };
         } catch (error) {
             return { status: false, message: error.message };
@@ -1311,6 +1356,15 @@ module.exports = {
                                 model: masterLocation,
                                 as: "location",
                                 attributes: ["id", "name", "address"],
+                                include: [
+                                    {
+                                        model: masterLocationImage,
+                                        as: "images",
+                                        attributes: ["imageUrl"],
+                                        limit: 1,
+                                        separate: true,
+                                    },
+                                ],
                             },
                             {
                                 model: masterPackageItems,
@@ -1337,28 +1391,35 @@ module.exports = {
                 throw new Error("Voucher not found");
             }
 
-            if (voucher.status !== "ACTIVE") {
+            const plainVoucher = voucher.get({ plain: true });
+            const imageLocation = plainVoucher.package?.location?.images?.[0]?.imageUrl || null;
+
+            if (plainVoucher.status !== "ACTIVE") {
                 return {
                     status: false,
-                    message: `Voucher is already ${voucher.status}`,
-                    data: voucher
+                    message: `Voucher is already ${plainVoucher.status}`,
+                    data: { ...plainVoucher, imageLocation }
                 };
             }
 
             // 3. Security Check: Admin location must match package location
-            if (voucher.package.locationId !== userLocation.locationId) {
+            if (plainVoucher.package.locationId !== userLocation.locationId) {
                 throw new Error("Voucher cannot be claimed at this location");
             }
 
             return {
                 status: true,
                 message: "Voucher is valid and claimable",
-                data: voucher,
+                data: {
+                    ...plainVoucher,
+                    imageLocation,
+                },
             };
         } catch (error) {
             return { status: false, message: error.message };
         }
     },
+
 
     async addPaymentMethod(data) {
         try {
@@ -1444,7 +1505,7 @@ module.exports = {
         }
     },
 
-    async getCustomerTransactions(customerId, { page = 1, pageSize = 10 }) {
+    async getCustomerTransactionHistory(customerId, { page = 1, pageSize = 10 }) {
         try {
             const limit = parseInt(pageSize);
             const offset = (page - 1) * limit;
@@ -1467,11 +1528,24 @@ module.exports = {
                         model: transactionItem,
                         as: "items",
                         attributes: ["itemName", "quantity", "totalPrice"],
+                        include: [
+                            {
+                                model: masterProduct,
+                                as: "product",
+                                attributes: ["id", "name"],
+                                include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
+                            },
+                            {
+                                model: masterPackage,
+                                as: "package",
+                                attributes: ["id", "name"],
+                            }
+                        ]
                     },
                     {
                         model: masterLocation,
                         as: "location",
-                        attributes: ["id", "name", "address"],
+                        attributes: ["id", "name"],
                     }
                 ],
                 limit: limit,
@@ -1483,9 +1557,363 @@ module.exports = {
 
             return {
                 status: true,
-                message: "Transactions fetched successfully",
+                message: "Transaction history fetched successfully",
                 data: rows,
                 totalCount: count
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getCustomerPurchasedProducts(customerId, { page = 1, pageSize = 10 }) {
+        try {
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
+            // This is for Image 2 "Produk yang Dibeli" (Paid transactions)
+            const { count, rows } = await transaction.findAndCountAll({
+                where: { orderStatus: "PAID" },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        where: { customerId },
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        include: [
+                            {
+                                model: masterProduct,
+                                as: "product",
+                                attributes: ["id", "name", "price"],
+                                include: [
+                                    {
+                                        model: masterProductImage,
+                                        as: "images",
+                                        attributes: ["imageUrl"],
+                                        limit: 1
+                                    }
+                                ]
+                            },
+                            {
+                                model: masterPackage,
+                                as: "package",
+                                attributes: ["id", "name", "price"],
+                            }
+                        ]
+                    },
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["updatedAt", "DESC"]],
+                distinct: true,
+                subQuery: false,
+            });
+
+            return {
+                status: true,
+                message: "Purchased products fetched successfully",
+                data: rows,
+                totalCount: count
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getCustomerCompletedTransactions(customerId, { page = 1, pageSize = 10 }) {
+        try {
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
+            // Finished transactions
+            const { count, rows } = await transaction.findAndCountAll({
+                where: { orderStatus: "COMPLETED" },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        where: { customerId },
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        include: [
+                            {
+                                model: masterProduct,
+                                as: "product",
+                                attributes: ["id", "name", "price"],
+                                include: [
+                                    {
+                                        model: masterProductImage,
+                                        as: "images",
+                                        attributes: ["imageUrl"],
+                                        limit: 1
+                                    }
+                                ]
+                            },
+                            {
+                                model: masterPackage,
+                                as: "package",
+                                attributes: ["id", "name", "price"],
+                            }
+                        ]
+                    },
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["updatedAt", "DESC"]],
+                distinct: true,
+                subQuery: false,
+            });
+
+            return {
+                status: true,
+                message: "Completed transactions fetched successfully",
+                data: rows,
+                totalCount: count
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getCustomerUnpaidOrders(customerId, { page = 1, pageSize = 10 }) {
+        try {
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
+            // Image 3 "Menunggu Pembayaran"
+            const { count, rows } = await order.findAndCountAll({
+                where: { customerId, paymentStatus: "PENDING" },
+                include: [
+                    {
+                        model: transaction,
+                        as: "transactions",
+                        include: [
+                            {
+                                model: transactionItem,
+                                as: "items",
+                                include: [
+                                    {
+                                        model: masterProduct,
+                                        as: "product",
+                                        attributes: ["id", "name"],
+                                        include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
+                                    },
+                                    {
+                                        model: masterPackage,
+                                        as: "package",
+                                        attributes: ["id", "name"],
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        model: orderPayment,
+                        as: "payments",
+                    }
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["createdAt", "DESC"]],
+                distinct: true,
+            });
+
+            return {
+                status: true,
+                message: "Unpaid orders fetched successfully",
+                data: rows,
+                totalCount: count
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getCustomerShippingTransactions(customerId, { page = 1, pageSize = 10 }) {
+        try {
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
+            // Image 4 "Dalam Pengiriman"
+            const { count, rows } = await transaction.findAndCountAll({
+                where: { orderStatus: "SHIPPED" },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        where: { customerId },
+                    },
+                    {
+                        model: transactionShipping,
+                        as: "shipping",
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        include: [
+                            {
+                                model: masterProduct,
+                                as: "product",
+                                attributes: ["id", "name"],
+                                include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
+                            },
+                            {
+                                model: masterPackage,
+                                as: "package",
+                                attributes: ["id", "name"],
+                            }
+                        ]
+                    }
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["updatedAt", "DESC"]],
+                distinct: true,
+                subQuery: false,
+            });
+
+            return {
+                status: true,
+                message: "Shipping transactions fetched successfully",
+                data: rows,
+                totalCount: count
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getCustomerOrderTrackingDetail(transactionId, userId) {
+        try {
+            const trx = await transaction.findOne({
+                where: { id: transactionId },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                    },
+                    {
+                        model: transactionShipping,
+                        as: "shipping",
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        include: [
+                            {
+                                model: masterProduct,
+                                as: "product",
+                                attributes: ["id", "name", "price"],
+                                include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
+                            },
+                            {
+                                model: masterPackage,
+                                as: "package",
+                                attributes: ["id", "name", "price"],
+                            }
+                        ]
+                    }
+                ],
+            });
+
+            if (!trx) {
+                throw new Error("Transaction not found");
+            }
+
+            // Security: Owner OR Admin of the outlet
+            const isAdmin = await relationshipUserLocation.findOne({
+                where: { userId: userId, locationId: trx.locationId, isactive: true }
+            });
+
+            if (trx.order.customerId !== userId && !isAdmin) {
+                throw new Error("Unauthorized: You don't have access to this tracking detail");
+            }
+
+            // Timeline logic as seen in Image 5
+            const timeline = [
+                {
+                    title: "Pesanan Dibuat",
+                    description: "Kami telah menerima pesanan Anda",
+                    time: trx.createdAt,
+                    completed: true
+                }
+            ];
+
+            // Paid
+            if (trx.order.paymentStatus === "PAID" || ["SHIPPED", "DELIVERED", "COMPLETED"].includes(trx.orderStatus)) {
+                timeline.push({
+                    title: "Pembayaran Dikonfirmasi",
+                    description: "Pembayaran telah berhasil dikonfirmasi",
+                    time: trx.order.updatedAt,
+                    completed: true
+                });
+            } else {
+                timeline.push({
+                    title: "Pembayaran Dikonfirmasi",
+                    description: "Pembayaran belum dikonfirmasi",
+                    time: null,
+                    completed: false
+                });
+            }
+
+            // Processed (Status PAID usually means it's being packed/prepared)
+            if (["PAID", "SHIPPED", "DELIVERED", "COMPLETED"].includes(trx.orderStatus)) {
+                timeline.push({
+                    title: "Pesanan Diproses",
+                    description: "Produk skincare sedang disiapkan oleh apoteker kami",
+                    time: trx.updatedAt,
+                    completed: true
+                });
+            } else {
+                timeline.push({
+                    title: "Pesanan Diproses",
+                    description: "Akan segera diproses",
+                    time: null,
+                    completed: false
+                });
+            }
+
+            // Ready to Ship
+            timeline.push({
+                title: "Siap Dikirim",
+                description: "Pesanan sudah dikemas dan menunggu kurir",
+                time: trx.orderStatus === "SHIPPED" || ["DELIVERED", "COMPLETED"].includes(trx.orderStatus) ? trx.updatedAt : null,
+                completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(trx.orderStatus)
+            });
+
+            // In Shipping
+            timeline.push({
+                title: "Dalam Pengiriman",
+                description: "Pesanan sedang dalam perjalanan ke lokasi Anda",
+                time: trx.orderStatus === "SHIPPED" ? trx.updatedAt : null,
+                completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(trx.orderStatus)
+            });
+
+            let trackingRealtime = null;
+            if (trx.shipping?.trackingNumber) {
+                try {
+                    trackingRealtime = await rajaongkirService.trackWaybill(
+                        trx.shipping.trackingNumber,
+                        trx.shipping.courierCode
+                    );
+                } catch (e) {
+                    console.error("Realtime Tracking Error:", e.message);
+                }
+            }
+
+            return {
+                status: true,
+                message: "Order tracking detail fetched successfully",
+                data: {
+                    transaction: trx,
+                    timeline,
+                    trackingRealtime
+                }
             };
         } catch (error) {
             return { status: false, message: error.message };

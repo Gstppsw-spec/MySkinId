@@ -15,11 +15,18 @@ router.post("/cancel", transactionOrder.cancelOrder);
 router.get("/payment-methods", transactionOrder.getPaymentMethods);
 router.post("/add-payment-method", allowRoles("SUPER_ADMIN"), transactionOrder.addPaymentMethod);
 
-// Merchant only: Update order status to shipped/delivered
-router.post("/ship", allowRoles("MERCHANT"), transactionOrder.shipTransaction);
-router.post("/deliver", allowRoles("MERCHANT"), transactionOrder.deliverTransaction);
+// Outlet Admin & Super Admin: Update order status to shipped/delivered
+router.post("/ship", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.shipTransaction);
+router.post("/deliver", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.deliverTransaction);
 router.get("/outlet/transactions", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletTransactions);
-router.get("/customer/transactions", transactionOrder.getCustomerTransactions);
+
+// Customer Transaction Views
+router.get("/customer/transactions/history", transactionOrder.getCustomerTransactionHistory);
+router.get("/customer/transactions/purchased", transactionOrder.getCustomerPurchasedProducts);
+router.get("/customer/orders/unpaid", transactionOrder.getCustomerUnpaidOrders);
+router.get("/customer/transactions/shipping", transactionOrder.getCustomerShippingTransactions);
+router.get("/customer/transactions/completed", transactionOrder.getCustomerCompletedTransactions);
+router.get("/customer/transactions/tracking-detail/:transactionId", transactionOrder.getCustomerOrderTrackingDetail);
 
 // Customer: Confirm order completion
 router.post("/complete", transactionOrder.completeTransaction);

@@ -128,6 +128,25 @@ async function calculateAllCosts(data) {
     return results.filter((res) => res.status === "success");
 }
 
+async function trackWaybill(awb, courier) {
+    try {
+        const params = new URLSearchParams();
+        params.append("awb", awb);
+        params.append("courier", courier.toLowerCase());
+
+        const res = await api.post("/track/waybill", params, {
+            headers: {
+                "content-type": "application/x-www-form-urlencoded"
+            }
+        });
+
+        return res.data;
+    } catch (error) {
+        console.error("Tracking Error:", error.response?.data || error.message);
+        throw new Error(error.response?.data?.meta?.message || "Failed to fetch tracking info");
+    }
+}
+
 module.exports = {
     fetchProvinces,
     fetchCities,
@@ -135,4 +154,5 @@ module.exports = {
     calculateCost,
     calculateAllCosts,
     fetchCouriers,
+    trackWaybill,
 };
