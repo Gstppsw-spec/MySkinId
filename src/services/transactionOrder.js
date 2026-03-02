@@ -1776,7 +1776,6 @@ module.exports = {
             const limit = parseInt(pageSize);
             const offset = (page - 1) * limit;
 
-            // Image 3 "Menunggu Pembayaran"
             const { count, rows } = await order.findAndCountAll({
                 where: { customerId, paymentStatus: "UNPAID" },
                 include: [
@@ -1806,6 +1805,8 @@ module.exports = {
                     {
                         model: orderPayment,
                         as: "payments",
+                        attributes: ["id", "paymentMethod", "paymentStatus", "amount", "checkoutUrl"],
+                        limit: 1,
                     }
                 ],
                 limit: limit,
@@ -1814,10 +1815,43 @@ module.exports = {
                 distinct: true,
             });
 
+            const processedRows = rows.map((o) => {
+                const plainOrder = o.get({ plain: true });
+                const latestPayment = plainOrder.payments?.[0] || null;
+
+                const items = (plainOrder.transactions || []).flatMap(trx =>
+                    (trx.items || []).map(item => {
+                        let imageUrl = null;
+                        if (item.product?.images?.length > 0) {
+                            imageUrl = item.product.images[0].imageUrl;
+                        }
+                        return {
+                            title: item.itemName,
+                            imageUrl,
+                            productId: item.itemId,
+                            quantity: item.quantity,
+                            unitPrice: item.unitPrice,
+                            totalPrice: item.totalPrice,
+                        };
+                    })
+                );
+
+                return {
+                    orderId: plainOrder.id,
+                    orderNumber: plainOrder.orderNumber,
+                    paymentStatus: plainOrder.paymentStatus,
+                    totalAmount: plainOrder.totalAmount,
+                    createdAt: plainOrder.createdAt,
+                    paymentMethod: latestPayment?.paymentMethod || null,
+                    checkoutUrl: latestPayment?.checkoutUrl || null,
+                    items,
+                };
+            });
+
             return {
                 status: true,
                 message: "Unpaid orders fetched successfully",
-                data: rows,
+                data: processedRows,
                 totalCount: count
             };
         } catch (error) {
@@ -2121,112 +2155,5 @@ module.exports = {
         }
     },
 
-    async getCustomerUnpaidOrders(customerId, { page = 1, pageSize = 10 }) {
-        try {
-            const limit = parseInt(pageSize);
-            const offset = (page - 1) * limit;
-
-            // Image 3 "Menunggu Pembayaran"
-            const { count, rows } = await order.findAndCountAll({
-                where: { customerId, paymentStatus: "PENDING" },
-                include: [
-                    {
-                        model: transaction,
-                        as: "transactions",
-                        include: [
-                            {
-                                model: transactionItem,
-                                as: "items",
-                                include: [
-                                    {
-                                        model: masterProduct,
-                                        as: "product",
-                                        attributes: ["id", "name"],
-                                        include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
-                                    },
-                                    {
-                                        model: masterPackage,
-                                        as: "package",
-                                        attributes: ["id", "name"],
-                                    }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        model: orderPayment,
-                        as: "payments",
-                    }
-                ],
-                limit: limit,
-                offset: offset,
-                order: [["createdAt", "DESC"]],
-                distinct: true,
-            });
-
-            return {
-                status: true,
-                message: "Unpaid orders fetched successfully",
-                data: rows,
-                totalCount: count
-            };
-        } catch (error) {
-            return { status: false, message: error.message };
-        }
-    },
-
-    async getCustomerShippingTransactions(customerId, { page = 1, pageSize = 10 }) {
-        try {
-            const limit = parseInt(pageSize);
-            const offset = (page - 1) * limit;
-
-            // Image 4 "Dalam Pengiriman"
-            const { count, rows } = await transaction.findAndCountAll({
-                where: { orderStatus: "SHIPPED" },
-                include: [
-                    {
-                        model: order,
-                        as: "order",
-                        where: { customerId },
-                    },
-                    {
-                        model: transactionShipping,
-                        as: "shipping",
-                    },
-                    {
-                        model: transactionItem,
-                        as: "items",
-                        include: [
-                            {
-                                model: masterProduct,
-                                as: "product",
-                                attributes: ["id", "name"],
-                                include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
-                            },
-                            {
-                                model: masterPackage,
-                                as: "package",
-                                attributes: ["id", "name"],
-                            }
-                        ]
-                    }
-                ],
-                limit: limit,
-                offset: offset,
-                order: [["updatedAt", "DESC"]],
-                distinct: true,
-                subQuery: false,
-            });
-
-            return {
-                status: true,
-                message: "Shipping transactions fetched successfully",
-                data: rows,
-                totalCount: count
-            };
-        } catch (error) {
-            return { status: false, message: error.message };
-        }
-    },
-
 };
+
