@@ -18,6 +18,7 @@ const {
     masterPackageItems,
     masterLocationImage,
     masterProductImage,
+    Rating,
     sequelize,
 } = require("../models");
 const { nanoid } = require("nanoid");
@@ -70,7 +71,8 @@ module.exports = {
                     accountNumber: response.data.account_number,
                     expectedAmount: response.data.expected_amount,
                     expirationDate: response.data.expiration_date,
-                    instructions: this._getPaymentInstructions("VIRTUAL_ACCOUNT", paymentMethodCode, { accountNumber: response.data.account_number })
+                    instructions: this._getPaymentInstructions("VIRTUAL_ACCOUNT", paymentMethodCode, { accountNumber: response.data.account_number }),
+                    rawPayload: response.data
                 };
 
             } else if (paymentType === "EWALLET") {
@@ -120,7 +122,8 @@ module.exports = {
                     channelCode: response.data.channel_code,
                     chargeAmount: response.data.charge_amount,
                     checkoutUrl: checkoutUrl,
-                    instructions: this._getPaymentInstructions("EWALLET", paymentMethodCode, { checkoutUrl })
+                    instructions: this._getPaymentInstructions("EWALLET", paymentMethodCode, { checkoutUrl }),
+                    rawPayload: response.data
                 };
             } else if (paymentType === "QR_CODE") {
                 // QR Code (QRIS)
@@ -142,7 +145,8 @@ module.exports = {
                     qrString: response.data.qr_string,
                     amount: response.data.amount,
                     status: response.data.status,
-                    instructions: this._getPaymentInstructions("QR_CODE", paymentMethodCode, response.data)
+                    instructions: this._getPaymentInstructions("QR_CODE", paymentMethodCode, response.data),
+                    rawPayload: response.data
                 };
             } else {
                 // Fallback to Invoice for other types like RETAIL_OUTLET or unsupported types
@@ -165,7 +169,8 @@ module.exports = {
                     externalId: response.data.external_id,
                     invoiceUrl: response.data.invoice_url,
                     expiryDate: response.data.expiry_date,
-                    instructions: this._getPaymentInstructions("INVOICE", paymentMethodCode, response.data)
+                    instructions: this._getPaymentInstructions("INVOICE", paymentMethodCode, response.data),
+                    rawPayload: response.data
                 };
             }
         } catch (error) {
@@ -496,6 +501,8 @@ module.exports = {
                     paymentStatus: "PENDING",
                     referenceNumber: xenditPayment.id,
                     gatewayResponse: xenditPayment.rawPayload,
+                    checkoutUrl: xenditPayment.checkoutUrl || xenditPayment.invoiceUrl,
+                    instructions: Array.isArray(xenditPayment.instructions) ? xenditPayment.instructions.join("\n") : xenditPayment.instructions,
                 },
                 { transaction: t }
             );
@@ -748,6 +755,8 @@ module.exports = {
                     paymentStatus: "PENDING",
                     referenceNumber: xenditPayment.id,
                     gatewayResponse: xenditPayment.rawPayload,
+                    checkoutUrl: xenditPayment.checkoutUrl || xenditPayment.invoiceUrl,
+                    instructions: Array.isArray(xenditPayment.instructions) ? xenditPayment.instructions.join("\n") : xenditPayment.instructions,
                 },
                 { transaction: t }
             );
@@ -1914,6 +1923,222 @@ module.exports = {
                     timeline,
                     trackingRealtime
                 }
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getTransactionDetail(transactionId, userId) {
+        try {
+            const trx = await transaction.findOne({
+                where: { id: transactionId },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                    },
+                    {
+                        model: transactionShipping,
+                        as: "shipping",
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        include: [
+                            {
+                                model: masterProduct,
+                                as: "product",
+                                attributes: ["id", "name", "price"],
+                                include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
+                            },
+                            {
+                                model: masterPackage,
+                                as: "package",
+                                attributes: ["id", "name", "price"],
+                            }
+                        ]
+                    }
+                ],
+            });
+
+            if (!trx) {
+                throw new Error("Transaction not found");
+            }
+
+            // Security: Owner OR Admin of the outlet
+            const isAdmin = await relationshipUserLocation.findOne({
+                where: { userId: userId, locationId: trx.locationId, isactive: true }
+            });
+
+            if (trx.order.customerId !== userId && !isAdmin) {
+                throw new Error("Unauthorized: You don't have access to this transaction detail");
+            }
+
+            return {
+                status: true,
+                message: "Transaction detail fetched successfully",
+                data: trx
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getPaymentDetail(orderId, customerId) {
+        try {
+            const orderData = await order.findOne({
+                where: { id: orderId, customerId },
+                include: [
+                    { model: orderPayment, as: "payments" },
+                ],
+            });
+
+            if (!orderData) {
+                return { status: false, message: "Order not found" };
+            }
+
+            const latestPayment = orderData.payments?.[0];
+            if (!latestPayment) {
+                return { status: false, message: "Payment info not found" };
+            }
+
+            const paymentStatus = orderData.paymentStatus;
+            const gr = latestPayment.gatewayResponse || {};
+
+            // Calculate remaining time (expiry is usually 24h for VA/QR, 10m for our internal timeout)
+            // But let's use our internal 10 minute timeout as the target for the UI timer if it's UNPAID
+            const createdAt = new Date(orderData.createdAt);
+            const expiryDate = new Date(createdAt.getTime() + 10 * 60 * 1000); // 10 minutes
+            const now = new Date();
+            const remainingMs = Math.max(0, expiryDate - now);
+            const remainingSeconds = Math.floor(remainingMs / 1000);
+
+            const paymentDetail = {
+                orderNumber: orderData.orderNumber,
+                totalAmount: orderData.totalAmount,
+                paymentStatus: orderData.paymentStatus,
+                paymentMethod: latestPayment.paymentMethod,
+                remainingSeconds,
+                instructions: latestPayment.instructions ? latestPayment.instructions.split("\n") : [],
+                checkoutUrl: latestPayment.checkoutUrl,
+            };
+
+            // Extract specific IDs based on payment method
+            if (gr.account_number) paymentDetail.accountNumber = gr.account_number;
+            if (gr.bank_code) paymentDetail.bankCode = gr.bank_code;
+            if (gr.qr_string) paymentDetail.qrString = gr.qr_string;
+
+            return {
+                status: true,
+                message: "Payment detail fetched successfully",
+                data: paymentDetail
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getCustomerCompletedTransactionsV2(customerId, { page = 1, pageSize = 10 }) {
+        try {
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
+            const { count, rows } = await transaction.findAndCountAll({
+                where: { orderStatus: "COMPLETED" },
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        where: { customerId },
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "name"],
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        include: [
+                            {
+                                model: masterProduct,
+                                as: "product",
+                                attributes: ["id", "name", "price"],
+                                include: [
+                                    {
+                                        model: masterProductImage,
+                                        as: "images",
+                                        attributes: ["imageUrl"],
+                                        limit: 1
+                                    }
+                                ]
+                            },
+                            {
+                                model: masterPackage,
+                                as: "package",
+                                attributes: ["id", "name", "price"],
+                            }
+                        ]
+                    },
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["updatedAt", "DESC"]],
+                distinct: true,
+                subQuery: false,
+            });
+
+            const processedRows = await Promise.all(rows.map(async (trx) => {
+                const plainTrx = trx.get({ plain: true });
+
+                const items = await Promise.all(plainTrx.items.map(async (item) => {
+                    const entityType = item.itemType === "PRODUCT" ? "PRODUCT" : "PACKAGE";
+                    const entityId = item.itemId;
+
+                    // Fetch user rating for this item
+                    const itemRating = await Rating.findOne({
+                        where: {
+                            customerId,
+                            entityType,
+                            entityId
+                        }
+                    });
+
+                    let imageUrl = null;
+                    if (item.product && item.product.images && item.product.images.length > 0) {
+                        imageUrl = item.product.images[0].imageUrl;
+                    }
+                    // Note: Package image handling can be added here if a source is identified
+
+                    return {
+                        title: item.itemName,
+                        imageUrl: imageUrl,
+                        productId: item.itemId,
+                        rating: itemRating ? itemRating.rating : 0,
+                        isRating: !!itemRating,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice,
+                        totalPrice: item.totalPrice
+                    };
+                }));
+
+                return {
+                    orderId: plainTrx.orderId,
+                    transactionId: plainTrx.id, // Included for context
+                    status: plainTrx.orderStatus,
+                    completedAt: plainTrx.updatedAt,
+                    locationId: plainTrx.locationId,
+                    locationName: plainTrx.location?.name,
+                    items: items
+                };
+            }));
+
+            return {
+                status: true,
+                message: "Completed transactions fetched successfully (V2)",
+                data: processedRows,
+                totalCount: count
             };
         } catch (error) {
             return { status: false, message: error.message };

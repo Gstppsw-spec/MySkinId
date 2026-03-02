@@ -313,4 +313,51 @@ module.exports = {
         }
     },
 
+    async getTransactionDetail(req, res) {
+        try {
+            const userId = req.user.id;
+            const { transactionId } = req.params;
+            const result = await transactionOrder.getTransactionDetail(transactionId, userId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+    async getPaymentDetail(req, res) {
+        try {
+            const userId = req.user.id;
+            const { orderId } = req.params;
+            const result = await transactionOrder.getPaymentDetail(orderId, userId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getCustomerCompletedTransactionsV2(req, res) {
+        try {
+            const customerId = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+
+            const result = await transactionOrder.getCustomerCompletedTransactionsV2(customerId, { page, pageSize });
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return response.success(res, result.message, {
+                list: result.data,
+                pagination: formatPagination(
+                    result.totalCount,
+                    page,
+                    pageSize
+                )
+            });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
 };
