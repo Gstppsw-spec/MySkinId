@@ -1580,7 +1580,6 @@ module.exports = {
             const limit = parseInt(pageSize);
             const offset = (page - 1) * limit;
 
-            // This is for Image 2 "Produk yang Dibeli" (Paid transactions)
             const { count, rows } = await transaction.findAndCountAll({
                 where: { orderStatus: "PAID" },
                 include: [
@@ -1588,6 +1587,11 @@ module.exports = {
                         model: order,
                         as: "order",
                         where: { customerId },
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "name"],
                     },
                     {
                         model: transactionItem,
@@ -1621,10 +1625,40 @@ module.exports = {
                 subQuery: false,
             });
 
+            const processedRows = rows.map((trx) => {
+                const plainTrx = trx.get({ plain: true });
+
+                const items = plainTrx.items.map((item) => {
+                    let imageUrl = null;
+                    if (item.product && item.product.images && item.product.images.length > 0) {
+                        imageUrl = item.product.images[0].imageUrl;
+                    }
+
+                    return {
+                        title: item.itemName,
+                        imageUrl: imageUrl,
+                        productId: item.itemId,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice,
+                        totalPrice: item.totalPrice
+                    };
+                });
+
+                return {
+                    orderId: plainTrx.orderId,
+                    transactionId: plainTrx.id,
+                    status: plainTrx.orderStatus,
+                    purchasedAt: plainTrx.updatedAt,
+                    locationId: plainTrx.locationId,
+                    locationName: plainTrx.location?.name,
+                    items: items
+                };
+            });
+
             return {
                 status: true,
                 message: "Purchased products fetched successfully",
-                data: rows,
+                data: processedRows,
                 totalCount: count
             };
         } catch (error) {
@@ -1637,7 +1671,6 @@ module.exports = {
             const limit = parseInt(pageSize);
             const offset = (page - 1) * limit;
 
-            // Finished transactions
             const { count, rows } = await transaction.findAndCountAll({
                 where: { orderStatus: "COMPLETED" },
                 include: [
@@ -1645,6 +1678,11 @@ module.exports = {
                         model: order,
                         as: "order",
                         where: { customerId },
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "name"],
                     },
                     {
                         model: transactionItem,
@@ -1678,10 +1716,54 @@ module.exports = {
                 subQuery: false,
             });
 
+            const processedRows = await Promise.all(rows.map(async (trx) => {
+                const plainTrx = trx.get({ plain: true });
+
+                const items = await Promise.all(plainTrx.items.map(async (item) => {
+                    const entityType = item.itemType === "PRODUCT" ? "PRODUCT" : "PACKAGE";
+                    const entityId = item.itemId;
+
+                    // Fetch user rating for this item
+                    const itemRating = await Rating.findOne({
+                        where: {
+                            customerId,
+                            entityType,
+                            entityId
+                        }
+                    });
+
+                    let imageUrl = null;
+                    if (item.product && item.product.images && item.product.images.length > 0) {
+                        imageUrl = item.product.images[0].imageUrl;
+                    }
+
+                    return {
+                        title: item.itemName,
+                        imageUrl: imageUrl,
+                        productId: item.itemId,
+                        rating: itemRating ? itemRating.rating : 0,
+                        isRating: !!itemRating,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice,
+                        totalPrice: item.totalPrice
+                    };
+                }));
+
+                return {
+                    orderId: plainTrx.orderId,
+                    transactionId: plainTrx.id,
+                    status: plainTrx.orderStatus,
+                    completedAt: plainTrx.updatedAt,
+                    locationId: plainTrx.locationId,
+                    locationName: plainTrx.location?.name,
+                    items: items
+                };
+            }));
+
             return {
                 status: true,
                 message: "Completed transactions fetched successfully",
-                data: rows,
+                data: processedRows,
                 totalCount: count
             };
         } catch (error) {
@@ -1696,7 +1778,7 @@ module.exports = {
 
             // Image 3 "Menunggu Pembayaran"
             const { count, rows } = await order.findAndCountAll({
-                where: { customerId, paymentStatus: "PENDING" },
+                where: { customerId, paymentStatus: "UNPAID" },
                 include: [
                     {
                         model: transaction,
@@ -2039,13 +2121,68 @@ module.exports = {
         }
     },
 
-    async getCustomerCompletedTransactionsV2(customerId, { page = 1, pageSize = 10 }) {
+    async getCustomerUnpaidOrders(customerId, { page = 1, pageSize = 10 }) {
         try {
             const limit = parseInt(pageSize);
             const offset = (page - 1) * limit;
 
+            // Image 3 "Menunggu Pembayaran"
+            const { count, rows } = await order.findAndCountAll({
+                where: { customerId, paymentStatus: "PENDING" },
+                include: [
+                    {
+                        model: transaction,
+                        as: "transactions",
+                        include: [
+                            {
+                                model: transactionItem,
+                                as: "items",
+                                include: [
+                                    {
+                                        model: masterProduct,
+                                        as: "product",
+                                        attributes: ["id", "name"],
+                                        include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
+                                    },
+                                    {
+                                        model: masterPackage,
+                                        as: "package",
+                                        attributes: ["id", "name"],
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        model: orderPayment,
+                        as: "payments",
+                    }
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["createdAt", "DESC"]],
+                distinct: true,
+            });
+
+            return {
+                status: true,
+                message: "Unpaid orders fetched successfully",
+                data: rows,
+                totalCount: count
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getCustomerShippingTransactions(customerId, { page = 1, pageSize = 10 }) {
+        try {
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
+            // Image 4 "Dalam Pengiriman"
             const { count, rows } = await transaction.findAndCountAll({
-                where: { orderStatus: "COMPLETED" },
+                where: { orderStatus: "SHIPPED" },
                 include: [
                     {
                         model: order,
@@ -2053,9 +2190,8 @@ module.exports = {
                         where: { customerId },
                     },
                     {
-                        model: masterLocation,
-                        as: "location",
-                        attributes: ["id", "name"],
+                        model: transactionShipping,
+                        as: "shipping",
                     },
                     {
                         model: transactionItem,
@@ -2064,23 +2200,16 @@ module.exports = {
                             {
                                 model: masterProduct,
                                 as: "product",
-                                attributes: ["id", "name", "price"],
-                                include: [
-                                    {
-                                        model: masterProductImage,
-                                        as: "images",
-                                        attributes: ["imageUrl"],
-                                        limit: 1
-                                    }
-                                ]
+                                attributes: ["id", "name"],
+                                include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
                             },
                             {
                                 model: masterPackage,
                                 as: "package",
-                                attributes: ["id", "name", "price"],
+                                attributes: ["id", "name"],
                             }
                         ]
-                    },
+                    }
                 ],
                 limit: limit,
                 offset: offset,
@@ -2089,55 +2218,10 @@ module.exports = {
                 subQuery: false,
             });
 
-            const processedRows = await Promise.all(rows.map(async (trx) => {
-                const plainTrx = trx.get({ plain: true });
-
-                const items = await Promise.all(plainTrx.items.map(async (item) => {
-                    const entityType = item.itemType === "PRODUCT" ? "PRODUCT" : "PACKAGE";
-                    const entityId = item.itemId;
-
-                    // Fetch user rating for this item
-                    const itemRating = await Rating.findOne({
-                        where: {
-                            customerId,
-                            entityType,
-                            entityId
-                        }
-                    });
-
-                    let imageUrl = null;
-                    if (item.product && item.product.images && item.product.images.length > 0) {
-                        imageUrl = item.product.images[0].imageUrl;
-                    }
-                    // Note: Package image handling can be added here if a source is identified
-
-                    return {
-                        title: item.itemName,
-                        imageUrl: imageUrl,
-                        productId: item.itemId,
-                        rating: itemRating ? itemRating.rating : 0,
-                        isRating: !!itemRating,
-                        quantity: item.quantity,
-                        unitPrice: item.unitPrice,
-                        totalPrice: item.totalPrice
-                    };
-                }));
-
-                return {
-                    orderId: plainTrx.orderId,
-                    transactionId: plainTrx.id, // Included for context
-                    status: plainTrx.orderStatus,
-                    completedAt: plainTrx.updatedAt,
-                    locationId: plainTrx.locationId,
-                    locationName: plainTrx.location?.name,
-                    items: items
-                };
-            }));
-
             return {
                 status: true,
-                message: "Completed transactions fetched successfully (V2)",
-                data: processedRows,
+                message: "Shipping transactions fetched successfully",
+                data: rows,
                 totalCount: count
             };
         } catch (error) {

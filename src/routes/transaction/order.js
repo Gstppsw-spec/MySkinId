@@ -26,7 +26,6 @@ router.get("/customer/transactions/purchased", transactionOrder.getCustomerPurch
 router.get("/customer/orders/unpaid", transactionOrder.getCustomerUnpaidOrders);
 router.get("/customer/transactions/shipping", transactionOrder.getCustomerShippingTransactions);
 router.get("/customer/transactions/completed", transactionOrder.getCustomerCompletedTransactions);
-router.get("/customer/transactions/completed-v2", transactionOrder.getCustomerCompletedTransactionsV2);
 router.get("/customer/transactions/tracking-detail/:transactionId", transactionOrder.getCustomerOrderTrackingDetail);
 router.get("/getTransactionDetail/:transactionId", transactionOrder.getTransactionDetail);
 router.get("/getPaymentDetail/:orderId", transactionOrder.getPaymentDetail);
