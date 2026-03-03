@@ -341,4 +341,60 @@ module.exports = {
             return response.serverError(res, error);
         }
     },
+
+    async getOrderDetail(req, res) {
+        try {
+            const userId = req.user.id;
+            const { id } = req.params;
+            const result = await transactionOrder.getOrderDetail(id, userId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getCustomerOrderHistory(req, res) {
+        try {
+            const userId = req.user.id;
+            const { page = 1, pageSize = 10 } = req.query;
+            const result = await transactionOrder.getCustomerOrderHistory(userId, { page, pageSize });
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result.data,
+                pagination: formatPagination(
+                    result.totalCount,
+                    parseInt(page),
+                    parseInt(pageSize)
+                ),
+            });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async exportTransactions(req, res) {
+        try {
+            const adminId = req.user.id;
+            const { startDate, endDate, format } = req.query;
+
+            const result = await transactionOrder.exportTransactions(adminId, { startDate, endDate, format });
+
+            if (!result.status) {
+                return response.error(res, result.message);
+            }
+
+            res.setHeader('Content-Type', result.contentType);
+            res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
+
+            return res.send(result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
 };

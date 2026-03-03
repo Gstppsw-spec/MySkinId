@@ -16,12 +16,14 @@ router.get("/payment-methods", transactionOrder.getPaymentMethods);
 router.post("/add-payment-method", allowRoles("SUPER_ADMIN"), transactionOrder.addPaymentMethod);
 
 // Outlet Admin & Super Admin: Update order status to shipped/delivered
-router.post("/ship", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.shipTransaction);
-router.post("/deliver", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.deliverTransaction);
-router.get("/outlet/transactions", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletTransactions);
+router.post("/ship", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.shipTransaction);
+router.post("/deliver", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.deliverTransaction);
+router.get("/outlet/transactions", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletTransactions);
+router.get("/export", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.exportTransactions);
 
 // Customer Transaction Views
 router.get("/customer/transactions/history", transactionOrder.getCustomerTransactionHistory);
+router.get("/customer/orders/history", transactionOrder.getCustomerOrderHistory);
 router.get("/customer/transactions/purchased", transactionOrder.getCustomerPurchasedProducts);
 router.get("/customer/orders/unpaid", transactionOrder.getCustomerUnpaidOrders);
 router.get("/customer/transactions/shipping", transactionOrder.getCustomerShippingTransactions);
@@ -29,6 +31,7 @@ router.get("/customer/transactions/completed", transactionOrder.getCustomerCompl
 router.get("/customer/transactions/tracking-detail/:transactionId", transactionOrder.getCustomerOrderTrackingDetail);
 router.get("/getTransactionDetail/:transactionId", transactionOrder.getTransactionDetail);
 router.get("/getPaymentDetail/:orderId", transactionOrder.getPaymentDetail);
+router.get("/getOrderDetail/:id", transactionOrder.getOrderDetail);
 
 // Customer: Confirm order completion
 router.post("/complete", transactionOrder.completeTransaction);

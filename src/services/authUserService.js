@@ -450,4 +450,20 @@ module.exports = {
       return { status: false, message: error.message, data: null };
     }
   },
+
+  async resetPassword(id) {
+    try {
+      const user = await masterUser.findByPk(id);
+      if (!user) {
+        return { status: false, message: "User tidak ditemukan", data: null };
+      }
+
+      const hashedPassword = await bcrypt.hash("123456789", 10);
+      await user.update({ password: hashedPassword });
+
+      return { status: true, message: "Password berhasil direset", data: null };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
 };

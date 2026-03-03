@@ -26,6 +26,8 @@ const axios = require("axios");
 const rajaongkirService = require("./rajaongkir.service");
 const socketInstance = require("../socket/socketInstance");
 const { schedulePaymentTimeout, cancelPaymentTimeout } = require("../utils/paymentTimeout");
+const ExcelJS = require('exceljs');
+const PDFDocument = require('pdfkit');
 
 module.exports = {
     async _createXenditPayment(orderNumber, amount, customer, paymentMethodCode) {
@@ -1575,6 +1577,92 @@ module.exports = {
         }
     },
 
+    async getCustomerOrderHistory(customerId, { page = 1, pageSize = 10 }) {
+        try {
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
+            const { count, rows } = await order.findAndCountAll({
+                where: { customerId },
+                include: [
+                    {
+                        model: orderPayment,
+                        as: "payments",
+                        attributes: ["paymentMethod", "paymentStatus", "amount", "checkoutUrl"],
+                    },
+                    {
+                        model: transaction,
+                        as: "transactions",
+                        include: [
+                            {
+                                model: transactionItem,
+                                as: "items",
+                                include: [
+                                    {
+                                        model: masterProduct,
+                                        as: "product",
+                                        attributes: ["id", "name"],
+                                        include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
+                                    },
+                                    {
+                                        model: masterPackage,
+                                        as: "package",
+                                        attributes: ["id", "name"],
+                                    }
+                                ]
+                            },
+                            {
+                                model: masterLocation,
+                                as: "location",
+                                attributes: ["id", "name"]
+                            }
+                        ]
+                    }
+                ],
+                limit: limit,
+                offset: offset,
+                order: [["createdAt", "DESC"]],
+                distinct: true,
+            });
+
+            const processedRows = rows.map(o => {
+                const plainOrder = o.get({ plain: true });
+                return {
+                    id: plainOrder.id,
+                    orderNumber: plainOrder.orderNumber,
+                    totalAmount: plainOrder.totalAmount,
+                    paymentStatus: plainOrder.paymentStatus,
+                    createdAt: plainOrder.createdAt,
+                    payments: plainOrder.payments,
+                    transactions: (plainOrder.transactions || []).map(trx => ({
+                        id: trx.id,
+                        transactionNumber: trx.transactionNumber,
+                        orderStatus: trx.orderStatus,
+                        locationName: trx.location?.name || null,
+                        grandTotal: trx.grandTotal,
+                        items: (trx.items || []).map(item => ({
+                            itemName: item.itemName,
+                            itemType: item.itemType,
+                            quantity: item.quantity,
+                            unitPrice: item.unitPrice,
+                            totalPrice: item.totalPrice,
+                            imageUrl: item.product?.images?.[0]?.imageUrl || null
+                        }))
+                    }))
+                };
+            });
+
+            return {
+                status: true,
+                message: "Order history fetched successfully",
+                data: processedRows,
+                totalCount: count
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
     async getCustomerPurchasedProducts(customerId, { page = 1, pageSize = 10 }) {
         try {
             const limit = parseInt(pageSize);
@@ -1839,6 +1927,7 @@ module.exports = {
                 return {
                     orderId: plainOrder.id,
                     orderNumber: plainOrder.orderNumber,
+                    transactionId: plainOrder.transactions?.[0]?.id || null,
                     paymentStatus: plainOrder.paymentStatus,
                     totalAmount: plainOrder.totalAmount,
                     createdAt: plainOrder.createdAt,
@@ -2101,6 +2190,101 @@ module.exports = {
         }
     },
 
+    async getOrderDetail(orderId, customerId) {
+        try {
+            const orderData = await order.findOne({
+                where: { id: orderId, customerId },
+                include: [
+                    {
+                        model: orderPayment,
+                        as: "payments",
+                    },
+                    {
+                        model: transaction,
+                        as: "transactions",
+                        include: [
+                            {
+                                model: transactionItem,
+                                as: "items",
+                                include: [
+                                    {
+                                        model: masterProduct,
+                                        as: "product",
+                                        attributes: ["id", "name", "price"],
+                                        include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"], limit: 1 }]
+                                    },
+                                    {
+                                        model: masterPackage,
+                                        as: "package",
+                                        attributes: ["id", "name", "price"],
+                                    }
+                                ]
+                            },
+                            {
+                                model: transactionShipping,
+                                as: "shipping",
+                            },
+                            {
+                                model: masterLocation,
+                                as: "location",
+                                attributes: ["id", "name", "address"],
+                            }
+                        ]
+                    }
+                ],
+            });
+
+            if (!orderData) {
+                return { status: false, message: "Order not found" };
+            }
+
+            const plainOrder = orderData.get({ plain: true });
+            const processedData = {
+                id: plainOrder.id,
+                orderNumber: plainOrder.orderNumber,
+                totalAmount: plainOrder.totalAmount,
+                paymentStatus: plainOrder.paymentStatus,
+                createdAt: plainOrder.createdAt,
+                payments: (plainOrder.payments || []).map(p => ({
+                    paymentMethod: p.paymentMethod,
+                    paymentStatus: p.paymentStatus,
+                    amount: p.amount,
+                    checkoutUrl: p.checkoutUrl,
+                    instructions: p.instructions ? p.instructions.split("\n") : []
+                })),
+                transactions: (plainOrder.transactions || []).map(trx => ({
+                    id: trx.id,
+                    transactionNumber: trx.transactionNumber,
+                    orderStatus: trx.orderStatus,
+                    locationName: trx.location?.name || null,
+                    locationAddress: trx.location?.address || null,
+                    grandTotal: trx.grandTotal,
+                    items: (trx.items || []).map(item => ({
+                        itemName: item.itemName,
+                        itemType: item.itemType,
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice,
+                        totalPrice: item.totalPrice,
+                        imageUrl: item.product?.images?.[0]?.imageUrl || null
+                    })),
+                    shipping: trx.shipping ? {
+                        courierName: trx.shipping.courierName,
+                        trackingNumber: trx.shipping.trackingNumber,
+                        shippingAddress: trx.shipping.shippingAddress
+                    } : null
+                }))
+            };
+
+            return {
+                status: true,
+                message: "Order detail fetched successfully",
+                data: processedData
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
     async getPaymentDetail(orderId, customerId) {
         try {
             const orderData = await order.findOne({
@@ -2155,5 +2339,145 @@ module.exports = {
         }
     },
 
+    async exportTransactions(adminId, { startDate, endDate, format = 'excel' }) {
+        try {
+            const userLocation = await relationshipUserLocation.findOne({
+                where: { userId: adminId, isactive: true },
+            });
+
+            if (!userLocation) {
+                throw new Error("Admin not assigned to any location");
+            }
+
+            const whereClause = {
+                locationId: userLocation.locationId,
+            };
+
+            if (startDate && endDate) {
+                whereClause.createdAt = {
+                    [Op.between]: [new Date(startDate), new Date(endDate)]
+                };
+            }
+
+            const transactions = await transaction.findAll({
+                where: whereClause,
+                include: [
+                    {
+                        model: order,
+                        as: "order",
+                        include: [
+                            {
+                                model: masterCustomer,
+                                as: "customer",
+                                attributes: ["name"],
+                            },
+                        ],
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items",
+                        attributes: ["itemName", "quantity", "totalPrice"],
+                    }
+                ],
+                order: [["createdAt", "DESC"]],
+            });
+
+            if (format === 'excel') {
+                return await this._generateExcel(transactions);
+            } else if (format === 'pdf') {
+                return await this._generatePDF(transactions);
+            } else {
+                throw new Error("Invalid export format");
+            }
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async _generateExcel(transactions) {
+        try {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Transactions');
+
+            worksheet.columns = [
+                { header: 'No', key: 'no', width: 5 },
+                { header: 'Transaction Number', key: 'transactionNumber', width: 25 },
+                { header: 'Customer Name', key: 'customerName', width: 25 },
+                { header: 'Date', key: 'date', width: 20 },
+                { header: 'Items', key: 'items', width: 40 },
+                { header: 'Grand Total', key: 'grandTotal', width: 15 },
+                { header: 'Status', key: 'orderStatus', width: 15 },
+            ];
+
+            transactions.forEach((trx, index) => {
+                const items = (trx.items || []).map(i => `${i.itemName} (x${i.quantity})`).join(', ');
+                worksheet.addRow({
+                    no: index + 1,
+                    transactionNumber: trx.transactionNumber,
+                    customerName: trx.order?.customer?.name || 'N/A',
+                    date: trx.createdAt ? trx.createdAt.toISOString().split('T')[0] : 'N/A',
+                    items: items,
+                    grandTotal: trx.grandTotal,
+                    orderStatus: trx.orderStatus,
+                });
+            });
+
+            worksheet.getRow(1).font = { bold: true };
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            return { status: true, data: buffer, filename: `transactions_${Date.now()}.xlsx`, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async _generatePDF(transactions) {
+        try {
+            return new Promise((resolve, reject) => {
+                const doc = new PDFDocument({ margin: 30, size: 'A4' });
+                let buffers = [];
+                doc.on('data', buffers.push.bind(buffers));
+                doc.on('end', () => {
+                    let pdfData = Buffer.concat(buffers);
+                    resolve({ status: true, data: pdfData, filename: `transactions_${Date.now()}.pdf`, contentType: 'application/pdf' });
+                });
+
+                doc.fontSize(20).text('Transaction Report', { align: 'center' });
+                doc.moveDown();
+
+                const tableTop = 100;
+                const colX = [30, 50, 180, 320, 420, 500];
+                const headers = ['No', 'Trx Number', 'Customer', 'Date', 'Total', 'Status'];
+
+                doc.fontSize(10).font('Helvetica-Bold');
+                headers.forEach((h, i) => doc.text(h, colX[i], tableTop));
+
+                doc.moveTo(30, tableTop + 15).lineTo(560, tableTop + 15).stroke();
+
+                let currentY = tableTop + 25;
+                doc.font('Helvetica');
+
+                transactions.forEach((trx, index) => {
+                    if (currentY > 750) {
+                        doc.addPage();
+                        currentY = 50;
+                    }
+
+                    doc.text(index + 1, colX[0], currentY);
+                    doc.text(trx.transactionNumber, colX[1], currentY);
+                    doc.text(trx.order?.customer?.name || 'N/A', colX[2], currentY, { width: 130 });
+                    doc.text(trx.createdAt ? trx.createdAt.toISOString().split('T')[0] : 'N/A', colX[3], currentY);
+                    doc.text(trx.grandTotal ? trx.grandTotal.toLocaleString() : '0', colX[4], currentY);
+                    doc.text(trx.orderStatus || 'N/A', colX[5], currentY);
+
+                    currentY += 20;
+                });
+
+                doc.end();
+            });
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
 };
 

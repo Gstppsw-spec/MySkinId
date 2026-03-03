@@ -1,5 +1,6 @@
 const response = require("../helpers/response");
 const consultation = require("../services/masterConsultation");
+const { formatPagination } = require("../utils/pagination");
 
 module.exports = {
   async getRoomByUserDoctor(req, res) {
@@ -45,16 +46,32 @@ module.exports = {
   },
 
   async readyToAssign(req, res) {
-    const user = req.user;
-    console.log(user);
+    try {
+      const user = req.user;
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 10;
 
-    const result = await consultation.getAllReadyToAssign(
-      user.id,
-      user.roleCode,
-    );
-    return result.status
-      ? response.success(res, result.message, result.data)
-      : response.error(res, result.message, null);
+      const result = await consultation.getAllReadyToAssign(
+        user.id,
+        user.roleCode,
+        page,
+        pageSize,
+      );
+
+      if (!result.status) {
+        return res.status(400).json({ success: false, message: result.message });
+      }
+
+      const { totalItems, rows } = result.data;
+
+      return res.status(200).json({
+        success: true,
+        data: rows,
+        pagination: formatPagination(totalItems, page, pageSize),
+      });
+    } catch (error) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
   },
 
   async getByRoomId(req, res) {

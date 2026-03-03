@@ -329,8 +329,10 @@ module.exports = {
     }
   },
 
-  async getAllReadyToAssign(userId, role) {
+  async getAllReadyToAssign(userId, role, page = 1, pageSize = 10) {
     try {
+      const offset = (page - 1) * pageSize;
+
       let locationIncludeOptions = {
         model: masterLocation,
         as: "location",
@@ -349,7 +351,16 @@ module.exports = {
 
         const locationIds = userLocations.map((ul) => ul.locationId);
         if (locationIds.length === 0) {
-          return { status: true, message: "Success", data: [] };
+          return {
+            status: true,
+            message: "Success",
+            data: {
+              totalItems: 0,
+              totalPages: 0,
+              currentPage: page,
+              rows: [],
+            },
+          };
         }
 
         locationIncludeOptions = {
@@ -360,16 +371,18 @@ module.exports = {
           },
         };
       }
+
       const hasMinThreeImages = Sequelize.literal(`
-      EXISTS (
-        SELECT 1
-        FROM masterConsultationImage mci
-        WHERE mci.roomId = masterRoomConsultation.id
-        GROUP BY mci.roomId
-        HAVING COUNT(1) >= 3
-      )
-    `);
-      const rooms = await masterRoomConsultation.findAll({
+        EXISTS (
+          SELECT 1
+          FROM masterConsultationImage mci
+          WHERE mci.roomId = masterRoomConsultation.id
+          GROUP BY mci.roomId
+          HAVING COUNT(1) >= 3
+        )
+      `);
+
+      const { count, rows } = await masterRoomConsultation.findAndCountAll({
         attributes: ["id", "roomCode", "customerId", "status", "createdAt"],
         where: {
           status: "pending",
@@ -394,9 +407,21 @@ module.exports = {
           },
         ],
         order: [["createdAt", "ASC"]],
+        limit: pageSize,
+        offset,
+        distinct: true,
       });
 
-      return { status: true, message: "Success", data: rooms };
+      return {
+        status: true,
+        message: "Success",
+        data: {
+          totalItems: count,
+          totalPages: Math.ceil(count / pageSize),
+          currentPage: page,
+          rows,
+        },
+      };
     } catch (error) {
       return {
         status: false,
