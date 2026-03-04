@@ -33,6 +33,28 @@ module.exports = {
         where.isActive = true;
       }
 
+      if (categoryIds) {
+        const ids = Array.isArray(categoryIds)
+          ? categoryIds
+          : categoryIds.toString().split(",").map((id) => id.trim());
+
+        if (ids.length > 0) {
+          where[Op.and] = where[Op.and] || [];
+          where[Op.and].push(
+            Sequelize.literal(`
+              EXISTS (
+                SELECT 1
+                FROM masterPackageItems mpi
+                JOIN masterServices ms ON mpi.serviceId = ms.id
+                JOIN relationshipServiceCategories rsc ON ms.id = rsc.serviceId
+                WHERE mpi.packageId = masterPackage.id
+                AND rsc.categoryId IN (${ids.join(",")})
+              )
+            `)
+          );
+        }
+      }
+
       const distanceLiteral =
         userLat && userLng
           ? Sequelize.literal(`
@@ -64,6 +86,8 @@ module.exports = {
             "name",
             "latitude",
             "longitude",
+            "cityId",
+            "districtId",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
           required: !!(userLat && userLng),
@@ -362,6 +386,8 @@ module.exports = {
             "name",
             "latitude",
             "longitude",
+            "cityId",
+            "districtId",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
           required: !!(userLat && userLng),
@@ -710,7 +736,7 @@ module.exports = {
       {
         model: masterLocation,
         as: "location",
-        attributes: ["id", "name"],
+        attributes: ["id", "name", "cityId", "districtId"],
       },
       {
         model: masterPackageItems,

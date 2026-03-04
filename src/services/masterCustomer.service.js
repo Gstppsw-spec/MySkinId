@@ -591,8 +591,8 @@ class masterCustomerService {
       const mailOptions = {
         from: `"MYSKIN.ID" <${process.env.EMAIL_USER}>`,
         to: email,
-        subject: "Kode OTP Login Anda",
-        text: `Kode OTP login Anda adalah ${otp}. Berlaku selama 5 menit.`,
+        subject: "[MYSKIN.ID] Kode Verifikasi OTP Anda",
+        text: `Halo,\n\nKode verifikasi OTP Anda adalah: ${otp}\n\nKode ini bersifat rahasia dan berlaku selama 5 menit. Jangan bagikan kode ini kepada siapa pun untuk menjaga keamanan akun Anda.\n\nTerima kasih,\nTim MYSKIN.ID`,
       };
 
       const info = await transporter.sendMail(mailOptions);

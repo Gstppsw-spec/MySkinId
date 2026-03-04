@@ -1046,14 +1046,29 @@ module.exports = {
                     const transactionIds = orderData.transactions.map(trx => trx.id);
                     if (transactionIds.length > 0) {
                         const trxItems = await transactionItem.findAll({
-                            where: { transactionId: transactionIds, voucherCode: { [Op.ne]: null } },
+                            where: { transactionId: transactionIds },
                         });
-                        if (trxItems.length > 0) {
-                            const voucherCodes = trxItems.map(item => item.voucherCode);
-                            await customerVoucher.update(
-                                { status: "ACTIVE" },
-                                { where: { voucherCode: voucherCodes, status: "NOT_ACTIVE" } }
-                            );
+
+                        for (const item of trxItems) {
+                            if (item.voucherCode) {
+                                await customerVoucher.update(
+                                    { status: "ACTIVE" },
+                                    { where: { voucherCode: item.voucherCode, status: "NOT_ACTIVE" }, transaction: t }
+                                );
+                            }
+
+                            // 🔹 Increment totalSold
+                            if (item.itemType === "PRODUCT") {
+                                await masterProduct.increment(
+                                    { totalSold: item.quantity },
+                                    { where: { id: item.itemId }, transaction: t }
+                                );
+                            } else if (item.itemType === "PACKAGE") {
+                                await masterPackage.increment(
+                                    { totalSold: item.quantity },
+                                    { where: { id: item.itemId }, transaction: t }
+                                );
+                            }
                         }
                     }
                 }

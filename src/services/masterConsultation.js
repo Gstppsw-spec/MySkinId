@@ -555,33 +555,38 @@ module.exports = {
           {
             model: masterProduct,
             as: "product",
-            attributes: ["id", "name", "description"],
+            attributes: ["id", "name", "description", "price", "discountPercent", "weightGram", "locationId"],
             required: false,
             include: [
               {
                 model: masterProductImage,
                 as: "images",
-                attributes: ["imageUrl"]
-              }
-            ]
+                attributes: ["imageUrl"],
+              },
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id", "name", "cityId", "districtId"],
+              },
+            ],
           },
           {
             model: masterPackage,
             as: "package",
-            attributes: ["id", "name", "description"],
+            attributes: ["id", "name", "description", "price", "discountPercent", "locationId"],
             required: false,
             include: [
               {
                 model: masterLocation,
                 as: "location",
-                attributes: ["id"],
+                attributes: ["id", "name", "cityId", "districtId"],
                 include: [
                   {
                     model: masterLocationImage,
                     as: "images",
-                    attributes: ["imageUrl"]
-                  }
-                ]
+                    attributes: ["imageUrl"],
+                  },
+                ],
               },
               {
                 model: masterPackageItems,
@@ -591,12 +596,12 @@ module.exports = {
                   {
                     model: masterService,
                     as: "service",
-                    attributes: ["id", "name", "description", "duration", "price"]
-                  }
-                ]
-              }
-            ]
-          }
+                    attributes: ["id", "name", "description", "duration", "price"],
+                  },
+                ],
+              },
+            ],
+          },
         ],
         order: [["createdAt", "ASC"]],
       });
@@ -606,37 +611,77 @@ module.exports = {
         const prescriptionJson = prescription.toJSON();
 
         let prescriptionData = null;
-        let media = [];
+        let media = null;
+        let location = null;
 
         if (prescriptionJson.refferenceType === "product" && prescriptionJson.product) {
+          const prod = prescriptionJson.product;
+          const price = parseFloat(prod.price) || 0;
+          const discountPercent = parseFloat(prod.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+
           prescriptionData = {
-            id: prescriptionJson.product.id,
-            name: prescriptionJson.product.name,
-            description: prescriptionJson.product.description
+            id: prod.id,
+            name: prod.name,
+            description: prod.description,
+            price: price,
+            discountPrice: discountPrice,
+            discountPercent: discountPercent,
+            weight: prod.weightGram,
           };
-          media = prescriptionJson.product.images || [];
+
+          if (prod.images && prod.images.length > 0) {
+            media = prod.images[0];
+          }
+
+          if (prod.location) {
+            location = {
+              locationId: prod.location.id,
+              locationName: prod.location.name,
+              cityId: prod.location.cityId,
+              districtId: prod.location.districtId,
+            };
+          }
         } else if (prescriptionJson.refferenceType === "package" && prescriptionJson.package) {
           const pkg = prescriptionJson.package;
+          const price = parseFloat(pkg.price) || 0;
+          const discountPercent = parseFloat(pkg.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+
           // Format items: setiap item berisi data service + qty
           const items = (pkg.items || []).map((item) => ({
             id: item.id,
             qty: item.qty,
             service: item.service || null,
           }));
-          // Ambil gambar dari location package
-          if (pkg.location && pkg.location.images) {
-            media = pkg.location.images;
-          }
+
           prescriptionData = {
             id: pkg.id,
             name: pkg.name,
             description: pkg.description,
+            price: price,
+            discountPrice: discountPrice,
+            discountPercent: discountPercent,
             items,
           };
+
+          if (pkg.location) {
+            location = {
+              locationId: pkg.location.id,
+              locationName: pkg.location.name,
+              cityId: pkg.location.cityId,
+              districtId: pkg.location.districtId,
+            };
+
+            if (pkg.location.images && pkg.location.images.length > 0) {
+              media = pkg.location.images[0];
+            }
+          }
         }
 
         if (prescriptionData) {
           prescriptionData.media = media;
+          prescriptionData.location = location;
         }
 
         // Bersihkan field mentah dari response
@@ -648,7 +693,7 @@ module.exports = {
 
         return {
           ...prescriptionJson,
-          prescription: prescriptionData
+          prescription: prescriptionData,
         };
       });
 
@@ -721,8 +766,13 @@ module.exports = {
           {
             model: masterProductImage,
             as: "images",
-            attributes: ["imageUrl"]
-          }
+            attributes: ["imageUrl"],
+          },
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id", "name", "cityId", "districtId"],
+          },
         ];
 
         if (categoryName) {
@@ -731,7 +781,7 @@ module.exports = {
             as: "categories",
             where: { name: { [Op.like]: `%${categoryName}%` } },
             attributes: [],
-            through: { attributes: [] }
+            through: { attributes: [] },
           });
         }
 
@@ -739,14 +789,14 @@ module.exports = {
           {
             model: masterLocation,
             as: "location",
-            attributes: ["id"],
+            attributes: ["id", "name", "cityId", "districtId"],
             include: [
               {
                 model: masterLocationImage,
                 as: "images",
-                attributes: ["imageUrl"]
-              }
-            ]
+                attributes: ["imageUrl"],
+              },
+            ],
           },
           {
             model: masterPackageItems,
@@ -759,19 +809,21 @@ module.exports = {
                 as: "service",
                 attributes: ["id", "name", "description", "duration", "price"],
                 required: categoryName ? true : false,
-                include: categoryName ? [
-                  {
-                    model: masterSubCategoryService,
-                    as: "categories",
-                    where: { name: { [Op.like]: `%${categoryName}%` } },
-                    attributes: [],
-                    through: { attributes: [] },
-                    required: true
-                  }
-                ] : []
-              }
-            ]
-          }
+                include: categoryName
+                  ? [
+                    {
+                      model: masterSubCategoryService,
+                      as: "categories",
+                      where: { name: { [Op.like]: `%${categoryName}%` } },
+                      attributes: [],
+                      through: { attributes: [] },
+                      required: true,
+                    },
+                  ]
+                  : [],
+              },
+            ],
+          },
         ];
 
         const [productPrescription, packagePrescription] = await Promise.all([
@@ -779,42 +831,105 @@ module.exports = {
             where: {
               locationId: locationIds,
             },
-            attributes: ["id", "name", "description"],
-            include: productInclude
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "price",
+              "discountPercent",
+              "weightGram",
+              "locationId",
+            ],
+            include: productInclude,
           }),
           masterPackage.findAll({
             where: {
               locationId: locationIds,
             },
-            attributes: ["id", "name", "description"],
-            include: packageInclude
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "price",
+              "discountPercent",
+              "locationId",
+            ],
+            include: packageInclude,
           }),
         ]);
 
         // Format the response to include media property
-        const formattedProducts = productPrescription.map(product => {
+        const formattedProducts = productPrescription.map((product) => {
           const productJson = product.toJSON();
+          const price = parseFloat(productJson.price) || 0;
+          const discountPercent = parseFloat(productJson.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+
+          let media = null;
+          if (productJson.images && productJson.images.length > 0) {
+            media = productJson.images[0];
+          }
+
+          let location = null;
+          if (productJson.location) {
+            location = {
+              locationId: productJson.location.id,
+              locationName: productJson.location.name,
+              cityId: productJson.location.cityId,
+              districtId: productJson.location.districtId,
+            };
+          }
+
           return {
             id: productJson.id,
             name: productJson.name,
             description: productJson.description,
-            media: productJson.images || []
+            price: price,
+            discountPrice: discountPrice,
+            discountPercent: discountPercent,
+            weight: productJson.weightGram,
+            media,
+            location,
           };
         });
 
-        const formattedPackages = packagePrescription.map(pkg => {
+        const formattedPackages = packagePrescription.map((pkg) => {
           const pkgJson = pkg.toJSON();
+          const price = parseFloat(pkgJson.price) || 0;
+          const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+
           const items = (pkgJson.items || []).map((item) => ({
             id: item.id,
             qty: item.qty,
             service: item.service || null,
           }));
+
+          let media = null;
+          let location = null;
+          if (pkgJson.location) {
+            location = {
+              locationId: pkgJson.location.id,
+              locationName: pkgJson.location.name,
+              cityId: pkgJson.location.cityId,
+              districtId: pkgJson.location.districtId,
+            };
+
+            if (pkgJson.location.images && pkgJson.location.images.length > 0) {
+              media = pkgJson.location.images[0];
+            }
+          }
+
           return {
             id: pkgJson.id,
             name: pkgJson.name,
             description: pkgJson.description,
+            price: price,
+            discountPrice: discountPrice,
+            discountPercent: discountPercent,
             items,
-            media: (pkgJson.location && pkgJson.location.images) ? pkgJson.location.images : []
+            media,
+            location,
           };
         });
 
@@ -830,8 +945,13 @@ module.exports = {
           {
             model: masterProductImage,
             as: "images",
-            attributes: ["imageUrl"]
-          }
+            attributes: ["imageUrl"],
+          },
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id", "name", "cityId", "districtId"],
+          },
         ];
 
         if (categoryName) {
@@ -840,7 +960,7 @@ module.exports = {
             as: "categories",
             where: { name: { [Op.like]: `%${categoryName}%` } },
             attributes: [],
-            through: { attributes: [] }
+            through: { attributes: [] },
           });
         }
 
@@ -848,14 +968,14 @@ module.exports = {
           {
             model: masterLocation,
             as: "location",
-            attributes: ["id"],
+            attributes: ["id", "name", "cityId", "districtId"],
             include: [
               {
                 model: masterLocationImage,
                 as: "images",
-                attributes: ["imageUrl"]
-              }
-            ]
+                attributes: ["imageUrl"],
+              },
+            ],
           },
           {
             model: masterPackageItems,
@@ -868,19 +988,21 @@ module.exports = {
                 as: "service",
                 attributes: ["id", "name", "description", "duration", "price"],
                 required: categoryName ? true : false,
-                include: categoryName ? [
-                  {
-                    model: masterSubCategoryService,
-                    as: "categories",
-                    where: { name: { [Op.like]: `%${categoryName}%` } },
-                    attributes: [],
-                    through: { attributes: [] },
-                    required: true
-                  }
-                ] : []
-              }
-            ]
-          }
+                include: categoryName
+                  ? [
+                    {
+                      model: masterSubCategoryService,
+                      as: "categories",
+                      where: { name: { [Op.like]: `%${categoryName}%` } },
+                      attributes: [],
+                      through: { attributes: [] },
+                      required: true,
+                    },
+                  ]
+                  : [],
+              },
+            ],
+          },
         ];
 
         // Fetch products and packages with the same locationId
@@ -889,42 +1011,105 @@ module.exports = {
             where: {
               locationId: room.locationId,
             },
-            attributes: ["id", "name", "description"],
-            include: productInclude
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "price",
+              "discountPercent",
+              "weightGram",
+              "locationId",
+            ],
+            include: productInclude,
           }),
           masterPackage.findAll({
             where: {
               locationId: room.locationId,
             },
-            attributes: ["id", "name", "description"],
-            include: packageInclude
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "price",
+              "discountPercent",
+              "locationId",
+            ],
+            include: packageInclude,
           }),
         ]);
 
         // Format the response to include media property
-        const formattedProducts = productPrescription.map(product => {
+        const formattedProducts = productPrescription.map((product) => {
           const productJson = product.toJSON();
+          const price = parseFloat(productJson.price) || 0;
+          const discountPercent = parseFloat(productJson.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+
+          let media = null;
+          if (productJson.images && productJson.images.length > 0) {
+            media = productJson.images[0];
+          }
+
+          let location = null;
+          if (productJson.location) {
+            location = {
+              locationId: productJson.location.id,
+              locationName: productJson.location.name,
+              cityId: productJson.location.cityId,
+              districtId: productJson.location.districtId,
+            };
+          }
+
           return {
             id: productJson.id,
             name: productJson.name,
             description: productJson.description,
-            media: productJson.images || []
+            price: price,
+            discountPrice: discountPrice,
+            discountPercent: discountPercent,
+            weight: productJson.weightGram,
+            media,
+            location,
           };
         });
 
-        const formattedPackages = packagePrescription.map(pkg => {
+        const formattedPackages = packagePrescription.map((pkg) => {
           const pkgJson = pkg.toJSON();
+          const price = parseFloat(pkgJson.price) || 0;
+          const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+
           const items = (pkgJson.items || []).map((item) => ({
             id: item.id,
             qty: item.qty,
             service: item.service || null,
           }));
+
+          let media = null;
+          let location = null;
+          if (pkgJson.location) {
+            location = {
+              locationId: pkgJson.location.id,
+              locationName: pkgJson.location.name,
+              cityId: pkgJson.location.cityId,
+              districtId: pkgJson.location.districtId,
+            };
+
+            if (pkgJson.location.images && pkgJson.location.images.length > 0) {
+              media = pkgJson.location.images[0];
+            }
+          }
+
           return {
             id: pkgJson.id,
             name: pkgJson.name,
             description: pkgJson.description,
+            price: price,
+            discountPrice: discountPrice,
+            discountPercent: discountPercent,
             items,
-            media: (pkgJson.location && pkgJson.location.images) ? pkgJson.location.images : []
+            media,
+            location,
           };
         });
 
