@@ -17,8 +17,18 @@ async function updateRatingAvg({
     ratingAvg = (ratingAvg * (ratingCount - 1) + newRating) / ratingCount;
   }
   // UPDATE rating
-  else {
+  else if (newRating !== undefined) {
     ratingAvg = (ratingAvg * ratingCount - oldRating + newRating) / ratingCount;
+  }
+  // DELETE rating
+  else {
+    if (ratingCount > 1) {
+      ratingAvg = (ratingAvg * ratingCount - oldRating) / (ratingCount - 1);
+      ratingCount -= 1;
+    } else {
+      ratingAvg = 0;
+      ratingCount = 0;
+    }
   }
 
   await data.update(

@@ -251,14 +251,29 @@ module.exports = {
   },
 
   async deleteRating(id) {
+    const transaction = await sequelize.transaction();
     try {
-      const rating = await Rating.findByPk(id);
+      const rating = await Rating.findByPk(id, { transaction });
 
       if (!rating) {
+        await transaction.rollback();
         return { status: false, message: "Rating not found", data: null };
       }
 
-      await rating.destroy();
+      const targetModel = getRatingTargetModel(rating.entityType);
+
+      if (targetModel) {
+        await updateRatingAvg({
+          model: targetModel,
+          entityId: rating.entityId,
+          oldRating: rating.rating,
+          transaction,
+        });
+      }
+
+      await rating.destroy({ transaction });
+
+      await transaction.commit();
 
       return {
         status: true,
@@ -266,6 +281,7 @@ module.exports = {
         data: { id },
       };
     } catch (error) {
+      await transaction.rollback();
       console.error("Delete Rating Error:", error);
       return { status: false, message: error.message, data: null };
     }
