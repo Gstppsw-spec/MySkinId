@@ -451,8 +451,8 @@ module.exports = {
       if (!room) {
         return { status: false, message: "Room not found", data: null };
       }
-      room.lat = lat;
-      room.lng = lng;
+      room.latitude = lat;
+      room.longitude = lng;
       await room.save();
       return { status: true, message: "LatLng updated successfully", data: room };
     } catch (error) {
