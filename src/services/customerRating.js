@@ -4,6 +4,7 @@ const { Rating, RatingImage, masterCustomer, RatingLike } = require("../models")
 const fs = require("fs");
 const getRatingTargetModel = require("../helpers/getRatingTargetModel");
 const updateRatingAvg = require("../helpers/updateRatingAvg");
+const checkCustomerTransaction = require("../helpers/checkCustomerTransaction");
 
 module.exports = {
   async createOrUpdateRating(customerId, data, images) {
@@ -19,19 +20,19 @@ module.exports = {
       if (!targetModel)
         return { status: false, message: "Entity type tidak valid" };
 
-      // const hasTransaction = await checkCustomerTransaction({
-      //   customerId,
-      //   entityType,
-      //   entityId,
-      // });
+      const hasTransaction = await checkCustomerTransaction({
+        customerId,
+        entityType,
+        entityId,
+      });
 
-      // if (!hasTransaction) {
-      //   await transaction.rollback();
-      //   return {
-      //     status: false,
-      //     message: "Rating hanya bisa diberikan setelah melakukan transaksi",
-      //   };
-      // }
+      if (!hasTransaction) {
+        await transaction.rollback();
+        return {
+          status: false,
+          message: "Rating hanya bisa diberikan setelah pesanan diselesaikan.",
+        };
+      }
 
       const existing = await Rating.findOne({
         where: { customerId, entityType, entityId },

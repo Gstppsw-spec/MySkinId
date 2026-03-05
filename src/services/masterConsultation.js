@@ -445,6 +445,21 @@ module.exports = {
     }
   },
 
+  async updateLatLng(lat, lng, roomId) {
+    try {
+      const room = await masterRoomConsultation.findByPk(roomId);
+      if (!room) {
+        return { status: false, message: "Room not found", data: null };
+      }
+      room.lat = lat;
+      room.lng = lng;
+      await room.save();
+      return { status: true, message: "LatLng updated successfully", data: room };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
   async addPrescription(data, roomId) {
     try {
       // Validate input

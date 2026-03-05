@@ -136,6 +136,15 @@ module.exports = {
       : response.error(res, result.message, null);
   },
 
+  async updateLatLng(req, res) {
+    const { id } = req.params;
+    const { lat, lng } = req.body;
+    const result = await consultation.updateLatLng(lat, lng, id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
   async addPrescription(req, res) {
     const { id } = req.params;
     const result = await consultation.addPrescription(req.body, id);

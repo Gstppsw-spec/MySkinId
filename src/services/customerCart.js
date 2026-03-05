@@ -98,11 +98,10 @@ module.exports = {
       const result = {
         product: [],
         package: [],
-        totalItem: 0,
+        totalItem: customerCarts.length,
       };
 
       customerCarts.forEach((cart) => {
-        result.totalItem += cart.qty || 0;
         if (cart.product) {
           result.product.push({
             id: cart.product.id,

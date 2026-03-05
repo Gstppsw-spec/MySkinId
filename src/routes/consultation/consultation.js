@@ -52,6 +52,7 @@ router.get("/room/:id/messages", consultation.getMessagesByRoomId);
 router.get("/room/:id/media", consultation.getMediaByRoomId);
 
 router.put("/room/:id/updateLocation", consultation.updateLocation);
+router.put("/room/:id/updateLatLng", consultation.updateLatLng);
 
 router.post("/room/:id/prescription", consultation.addPrescription);
 router.get("/room/:id/prescriptions", consultation.getPrescriptionByRoomId);

@@ -1224,6 +1224,10 @@ module.exports = {
                         model: order,
                         as: "order",
                         where: { customerId: customerId, paymentStatus: "PAID" }
+                    },
+                    {
+                        model: transactionItem,
+                        as: "items"
                     }
                 ]
             });
@@ -1232,9 +1236,31 @@ module.exports = {
                 throw new Error("Transaction not found or you don't have access");
             }
 
-            // Can only complete if already delivered
-            if (trx.orderStatus !== "DELIVERED") {
-                throw new Error(`Cannot complete transaction with status ${trx.orderStatus}. Must be DELIVERED first.`);
+            // Can only complete if already delivered or if it's a voucher-based transaction that's already PAID
+            const isVoucherBased = trx.items.some(item => item.voucherCode);
+
+            if (isVoucherBased) {
+                if (trx.orderStatus !== "PAID" && trx.orderStatus !== "DELIVERED") {
+                    throw new Error(`Cannot complete voucher transaction with status ${trx.orderStatus}. Must be PAID or DELIVERED.`);
+                }
+
+                // Verify all vouchers are CLAIMED
+                const vouchers = await customerVoucher.findAll({
+                    where: {
+                        voucherCode: trx.items.filter(item => item.voucherCode).map(item => item.voucherCode)
+                    },
+                    transaction: t
+                });
+
+                const allClaimed = vouchers.every(v => v.status === "CLAIMED");
+                if (!allClaimed) {
+                    throw new Error("Cannot complete transaction. All vouchers must be CLAIMED first.");
+                }
+            } else {
+                // For regular products, must be DELIVERED first
+                if (trx.orderStatus !== "DELIVERED") {
+                    throw new Error(`Cannot complete transaction with status ${trx.orderStatus}. Must be DELIVERED first.`);
+                }
             }
 
             await trx.update({ orderStatus: "COMPLETED" }, { transaction: t });

@@ -28,8 +28,8 @@ class masterCustomerService {
 
       let hashedPassword = null;
 
-      // const otp = masterCustomerService.generateOtp();
-      const otp = "123456";
+      const otp = masterCustomerService.generateOtp();
+      // const otp = "123456";
 
       if (loginMethod !== "google" && password) {
         hashedPassword = await bcrypt.hash(password, 10);
@@ -265,8 +265,8 @@ class masterCustomerService {
   async resendOtpAuthentication(data) {
     const { customerId } = data;
 
-    // const otp = masterCustomerService.generateOtp();
-    const otp = "123456";
+    const otp = masterCustomerService.generateOtp();
+    // const otp = "123456";
 
     const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
@@ -309,8 +309,8 @@ class masterCustomerService {
       const { email, phoneNumber, password, loginMethod, countryCode } = data;
       console.log(data);
 
-      // const otp = masterCustomerService.generateOtp();
-      const otp = "123456";
+      const otp = masterCustomerService.generateOtp();
+      // const otp = "123456";
 
       if (loginMethod == "phone") {
         if (!password)
