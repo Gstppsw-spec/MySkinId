@@ -3,7 +3,7 @@ const {
   transactionItem,
   order,
 } = require("../models");
-const { Op } = require("sequelize");
+const { Op, Sequelize } = require("sequelize");
 
 /**
  * Checks if a customer has a valid transaction to rate an entity.
@@ -72,7 +72,15 @@ module.exports = async function checkCustomerTransaction({
             as: "transaction",
             required: true,
             where: {
-              orderStatus: "COMPLETED",
+              [Op.or]: [
+                { orderStatus: "COMPLETED" },
+                // If not completed, we check if there's a claimed voucher
+                Sequelize.literal(`EXISTS (
+                  SELECT 1 FROM customerVouchers 
+                  WHERE customerVouchers.transactionItemId = transactionItem.id 
+                  AND customerVouchers.status = 'CLAIMED'
+                )`)
+              ]
             },
             include: [
               {

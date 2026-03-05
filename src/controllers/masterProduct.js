@@ -22,6 +22,8 @@ module.exports = {
           : [categoryIds]
         : undefined;
 
+      console.log(categoryIdsArray);
+
       const result = await productService.getAll({
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
         maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
