@@ -67,6 +67,13 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
+      isPremium: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      premiumExpiredAt: {
+        type: DataTypes.DATE,
+      },
     },
     {
       tableName: "masterLocation",

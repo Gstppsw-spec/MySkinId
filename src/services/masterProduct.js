@@ -16,6 +16,7 @@ module.exports = {
   async getAll(filters = {}) {
     try {
       const {
+        name,
         minPrice,
         maxPrice,
         categoryIds,
@@ -28,6 +29,10 @@ module.exports = {
       } = filters;
 
       const where = {};
+
+      if (name) {
+        where.name = { [Op.like]: `%${name}%` };
+      }
 
       if (isCustomer == 1 || isCustomer == "1") {
         where.isActive = true;
@@ -108,11 +113,29 @@ module.exports = {
         order = [[distanceLiteral, "ASC"]];
       }
 
-      if (sort === "price") {
+      // if (sort === "price") {
+      //   order = [
+      //     [
+      //       Sequelize.literal("(price - (price * discountPercent / 100))"),
+      //       "ASC",
+      //     ],
+      //   ];
+      // }
+
+      if (sort === "low-price") {
         order = [
           [
             Sequelize.literal("(price - (price * discountPercent / 100))"),
             "ASC",
+          ],
+        ];
+      }
+
+      if (sort === "high-price") {
+        order = [
+          [
+            Sequelize.literal("(price - (price * discountPercent / 100))"),
+            "DESC",
           ],
         ];
       }

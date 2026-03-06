@@ -27,6 +27,18 @@ module.exports = {
         }
     },
 
+    async buyPremiumBadge(req, res) {
+        try {
+            const userId = req.user.id;
+            const result = await transactionOrder.buyPremiumBadge(req.body, userId);
+            if (!result.status)
+                return response.error(res, result.message, result.data);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
     async getPaymentMethods(req, res) {
         try {
             const result = await transactionOrder.getAvailablePaymentMethods();

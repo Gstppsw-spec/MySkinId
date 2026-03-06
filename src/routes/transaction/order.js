@@ -10,6 +10,7 @@ router.use(verifyToken);
 
 router.post("/checkout-cart", transactionOrder.checkoutFromCart);
 router.post("/checkout-direct", transactionOrder.directCheckout);
+router.post("/buy-premium-badge", transactionOrder.buyPremiumBadge);
 router.get("/status/:orderId", transactionOrder.getTransactionStatus);
 router.post("/cancel", transactionOrder.cancelOrder);
 router.get("/payment-methods", transactionOrder.getPaymentMethods);

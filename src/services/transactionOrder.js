@@ -782,6 +782,97 @@ module.exports = {
         }
     },
 
+    async buyPremiumBadge(data, customerId) {
+        const t = await sequelize.transaction();
+        try {
+            const { locationId, paymentMethod } = data;
+
+            if (!locationId) throw new Error("Location ID is required");
+            if (!paymentMethod) throw new Error("Payment method is required");
+
+            const location = await masterLocation.findByPk(locationId);
+            if (!location) throw new Error("Location not found");
+
+            const price = 100000; // 100,000 IDR as planned
+            const totalOrderAmount = price;
+
+            const newOrder = await order.create(
+                {
+                    orderNumber: `ORD-PREM-${nanoid(10).toUpperCase()}`,
+                    customerId: customerId,
+                    totalAmount: totalOrderAmount,
+                    paymentStatus: "UNPAID",
+                },
+                { transaction: t }
+            );
+
+            const newTransaction = await transaction.create(
+                {
+                    orderId: newOrder.id,
+                    transactionNumber: `TRX-PREM-${nanoid(10).toUpperCase()}`,
+                    locationId: locationId,
+                    subTotal: price,
+                    shippingFee: 0,
+                    grandTotal: price,
+                    orderStatus: "CREATED",
+                },
+                { transaction: t }
+            );
+
+            await transactionItem.create(
+                {
+                    transactionId: newTransaction.id,
+                    itemType: "PREMIUM_BADGE",
+                    itemId: locationId,
+                    itemName: `Premium Badge - ${location.name}`,
+                    quantity: 1,
+                    unitPrice: price,
+                    discountAmount: 0,
+                    totalPrice: price,
+                    isShippingRequired: false,
+                    locationId: locationId,
+                },
+                { transaction: t }
+            );
+
+            // Create Native Xendit Payment
+            const customer = await masterCustomer.findByPk(customerId);
+            const xenditPayment = await this._createXenditPayment(newOrder.orderNumber, totalOrderAmount, customer, paymentMethod);
+
+            // Create Payment Record with Xendit data
+            await orderPayment.create(
+                {
+                    orderId: newOrder.id,
+                    paymentMethod: paymentMethod,
+                    amount: totalOrderAmount,
+                    paymentStatus: "PENDING",
+                    referenceNumber: xenditPayment.id,
+                    gatewayResponse: xenditPayment.rawPayload,
+                    checkoutUrl: xenditPayment.checkoutUrl || xenditPayment.invoiceUrl,
+                    instructions: Array.isArray(xenditPayment.instructions) ? xenditPayment.instructions.join("\n") : xenditPayment.instructions,
+                },
+                { transaction: t }
+            );
+
+            await t.commit();
+
+            // Schedule auto-expiry after 10 minutes if unpaid
+            schedulePaymentTimeout(newOrder.id, newOrder.orderNumber, this._expireOrder.bind(this));
+
+            return {
+                status: true,
+                message: "Premium badge purchase initiated",
+                data: {
+                    ...newOrder.toJSON(),
+                    paymentDetails: xenditPayment
+                }
+            };
+        } catch (error) {
+            await t.rollback();
+            return { status: false, message: error.message };
+        }
+    },
+
     // Auto-expire an order that is still UNPAID after timeout
     async _expireOrder(orderId, orderNumber) {
         const t = await sequelize.transaction();
@@ -1051,8 +1142,11 @@ module.exports = {
 
                         for (const item of trxItems) {
                             if (item.voucherCode) {
+                                const now = new Date();
+                                const expiredAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
                                 await customerVoucher.update(
-                                    { status: "ACTIVE" },
+                                    { status: "ACTIVE", expiredAt: expiredAt },
                                     { where: { voucherCode: item.voucherCode, status: "NOT_ACTIVE" }, transaction: t }
                                 );
                             }
@@ -1066,6 +1160,13 @@ module.exports = {
                             } else if (item.itemType === "PACKAGE") {
                                 await masterPackage.increment(
                                     { totalSold: item.quantity },
+                                    { where: { id: item.itemId }, transaction: t }
+                                );
+                            } else if (item.itemType === "PREMIUM_BADGE") {
+                                const now = new Date();
+                                const expiredAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
+                                await masterLocation.update(
+                                    { isPremium: true, premiumExpiredAt: expiredAt },
                                     { where: { id: item.itemId }, transaction: t }
                                 );
                             }
@@ -1275,8 +1376,21 @@ module.exports = {
 
     async getMyVouchers(customerId) {
         try {
+            // 1. Auto-expire vouchers first
+            await customerVoucher.update(
+                { status: "EXPIRED" },
+                {
+                    where: {
+                        customerId,
+                        status: "ACTIVE",
+                        expiredAt: { [Op.lt]: new Date() },
+                    },
+                }
+            );
+
+            // 2. Fetch all vouchers for the customer
             const vouchers = await customerVoucher.findAll({
-                where: { customerId, status: "ACTIVE" },
+                where: { customerId },
                 include: [
                     {
                         model: masterPackage,
@@ -1365,7 +1479,13 @@ module.exports = {
                 throw new Error(`Voucher is already ${voucher.status}`);
             }
 
-            // 3. Security Check: Admin location must match package location
+            // 3. Expiration Check
+            if (voucher.expiredAt && new Date() > new Date(voucher.expiredAt)) {
+                await voucher.update({ status: "EXPIRED" }, { transaction: t });
+                throw new Error("Voucher has expired and can no longer be claimed");
+            }
+
+            // 4. Security Check: Admin location must match package location
             if (voucher.package.locationId !== userLocation.locationId) {
                 throw new Error("Voucher cannot be claimed at this location");
             }
@@ -1454,7 +1574,17 @@ module.exports = {
                 };
             }
 
-            // 3. Security Check: Admin location must match package location
+            // 3. Expiration Check
+            if (plainVoucher.status === "ACTIVE" && plainVoucher.expiredAt && new Date() > new Date(plainVoucher.expiredAt)) {
+                await customerVoucher.update({ status: "EXPIRED" }, { where: { id: plainVoucher.id } });
+                return {
+                    status: false,
+                    message: "Voucher has expired",
+                    data: { ...plainVoucher, status: "EXPIRED", imageLocation }
+                };
+            }
+
+            // 4. Security Check: Admin location must match package location
             if (plainVoucher.package.locationId !== userLocation.locationId) {
                 throw new Error("Voucher cannot be claimed at this location");
             }

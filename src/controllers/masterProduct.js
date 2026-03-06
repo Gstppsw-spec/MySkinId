@@ -5,6 +5,7 @@ module.exports = {
   async getAll(req, res) {
     try {
       const {
+        name,
         minPrice,
         maxPrice,
         categoryIds,
@@ -25,6 +26,7 @@ module.exports = {
       console.log(categoryIdsArray);
 
       const result = await productService.getAll({
+        name: name || undefined,
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
         maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
         categoryIds: categoryIdsArray,

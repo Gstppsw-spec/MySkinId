@@ -5,6 +5,7 @@ module.exports = {
   async getAllPackage(req, res) {
     try {
       const {
+        name,
         minPrice,
         maxPrice,
         categoryIds,
@@ -23,6 +24,7 @@ module.exports = {
         : undefined;
 
       const result = await packageService.getAllPackage({
+        name: name || undefined,
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
         maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
         userLat: lat ? parseFloat(lat) : undefined,

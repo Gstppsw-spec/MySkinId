@@ -48,6 +48,10 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.STRING(20),
                 defaultValue: "ACTIVE", // ACTIVE / CLAIMED / EXPIRED
             },
+            expiredAt: {
+                type: DataTypes.DATE,
+                allowNull: true,
+            },
             createdAt: { type: DataTypes.DATE },
             updatedAt: { type: DataTypes.DATE },
         },

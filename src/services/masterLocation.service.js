@@ -168,7 +168,13 @@ class MasterLocationService {
         order: [["createdAt", "DESC"]],
       });
 
-      return { status: true, message: "Location list", data: locations };
+      const processedLocations = locations.map(loc => {
+        const plain = loc.get({ plain: true });
+        const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+        return { ...plain, isPremium: isPremiumValid };
+      });
+
+      return { status: true, message: "Location list", data: processedLocations };
     } catch (error) {
       console.error("List error:", error);
       return { status: false, message: error.message, data: null };
@@ -304,7 +310,12 @@ class MasterLocationService {
     }
   }
 
-  async detailLocationByCustomer(id, customerId = null) {
+  async detailLocationByCustomer(
+    id,
+    customerId = null,
+    latt = null,
+    long = null
+  ) {
     try {
       const include = [{ model: masterLocationImage, as: "images" }];
 
@@ -326,12 +337,37 @@ class MasterLocationService {
 
       const plain = location.get({ plain: true });
 
+      let distance = 0;
+      if (latt && long && plain.latitude && plain.longitude) {
+        const R = 6371000; // Radius of the Earth in meters
+        const lat1 = parseFloat(latt);
+        const lon1 = parseFloat(long);
+        const lat2 = parseFloat(plain.latitude);
+        const lon2 = parseFloat(plain.longitude);
+
+        const φ1 = (lat1 * Math.PI) / 180;
+        const φ2 = (lat2 * Math.PI) / 180;
+        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+        const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+        const a =
+          Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+          Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        distance = Math.round(R * c);
+      }
+
+      const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+
       return {
         status: true,
         message: "Location found",
         data: {
           ...plain,
+          isPremium: isPremiumValid,
           isFavorite: plain.favorites?.length > 0 || false,
+          distance: distance,
           favorites: undefined,
         },
       };
@@ -387,8 +423,11 @@ class MasterLocationService {
           distance = Math.round(R * c);
         }
 
+        const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+
         return {
           ...plain,
+          isPremium: isPremiumValid,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
