@@ -17,10 +17,9 @@ const fs = require("fs");
 const path = require("path");
 const { Op, Sequelize } = require("sequelize");
 const {
-  fetchProvinces,
-  fetchCities,
-  fetchDistricts,
-} = require("./rajaongkir.service");
+  searchArea,
+  getAreaByDetails,
+} = require("./biteship.service");
 const { sleep, retryRequest } = require("../helpers/request.helper");
 
 class MasterLocationService {
@@ -42,9 +41,51 @@ class MasterLocationService {
         }
       }
 
+      // 1. Resolve Biteship area ID logic
+      let resolvedAreaId = data.biteshipAreaId || null;
+      if (!resolvedAreaId) {
+        // Try detailed names lookup first (Village, District, City)
+        const subDist = data.subdistrict || data.subDistrict;
+        let pCode = data.postalCode;
+
+        // Try to find local zipCode if missing
+        if (!pCode && subDist && data.districtId) {
+          const localSubDist = await masterSubDistrict.findOne({
+            where: { name: subDist, districtId: data.districtId }
+          });
+          if (localSubDist) pCode = localSubDist.zipCode;
+        }
+
+        if (subDist && data.district && data.city) {
+          const areaMatch = await getAreaByDetails(subDist, data.district, data.city, pCode);
+          if (areaMatch) {
+            resolvedAreaId = areaMatch.id;
+            data.postalCode = data.postalCode || areaMatch.postal_code;
+
+            // Back-fill local database
+            if (subDist && data.districtId && areaMatch.postal_code) {
+              await masterSubDistrict.update(
+                { zipCode: String(areaMatch.postal_code) },
+                { where: { name: subDist, districtId: data.districtId, zipCode: null } }
+              ).catch(() => null);
+            }
+          }
+        }
+
+        // Fallback to postal code search
+        if (!resolvedAreaId && (pCode || data.postalCode)) {
+          const fallbackPCode = pCode || data.postalCode;
+          resolvedAreaId = await searchArea(fallbackPCode).then(areas => {
+            const exactMatch = areas.find(a => String(a.postal_code) === String(fallbackPCode));
+            return exactMatch ? exactMatch.id : (areas[0] ? areas[0].id : null);
+          }).catch(() => null);
+        }
+      }
+
       const newLocation = await masterLocation.create({
         ...data,
         code: newCode,
+        biteshipAreaId: resolvedAreaId,
         createdBy: userId,
         updatedBy: userId,
       });
@@ -55,6 +96,19 @@ class MasterLocationService {
             imageUrl: file.path,
           });
         }
+      }
+
+      // Auto-create Xendit sub-account (non-blocking)
+      try {
+        const xenditPlatformService = require("./xenditPlatform.service");
+        const xenditResult = await xenditPlatformService.createSubAccount(newLocation);
+        if (xenditResult.status) {
+          newLocation.xenditAccountId = xenditResult.data.xenditAccountId;
+        } else {
+          console.warn(`[Location Create] Xendit sub-account creation skipped/failed: ${xenditResult.message}`);
+        }
+      } catch (xenditError) {
+        console.warn("[Location Create] Xendit sub-account creation failed (non-blocking):", xenditError.message);
       }
 
       return {
@@ -74,6 +128,51 @@ class MasterLocationService {
 
       if (!location) {
         return { status: false, message: "Location not found", data: null };
+      }
+
+      // Resolve Biteship area ID if updated and not provided
+      const inputSubDist = data.subdistrict || data.subDistrict;
+      const needsResolve = (inputSubDist && inputSubDist !== location.subdistrict) ||
+        (data.postalCode && data.postalCode !== location.postalCode);
+
+      if (needsResolve && !data.biteshipAreaId) {
+        const subDist = inputSubDist || location.subdistrict;
+        const dist = data.district || location.district;
+        const distId = data.districtId || location.districtId;
+        const cty = data.city || location.city;
+        let pCode = data.postalCode || location.postalCode;
+
+        // Try to find zipCode if missing
+        if (!pCode && subDist && distId) {
+          const localSubDist = await masterSubDistrict.findOne({
+            where: { name: subDist, districtId: distId }
+          });
+          if (localSubDist) pCode = localSubDist.zipCode;
+        }
+
+        if (subDist && dist && cty) {
+          const areaMatch = await getAreaByDetails(subDist, dist, cty, pCode);
+          if (areaMatch) {
+            data.biteshipAreaId = areaMatch.id;
+            data.postalCode = data.postalCode || areaMatch.postal_code;
+
+            // Back-fill local database
+            if (subDist && distId && areaMatch.postal_code) {
+              await masterSubDistrict.update(
+                { zipCode: String(areaMatch.postal_code) },
+                { where: { name: subDist, districtId: distId, zipCode: null } }
+              ).catch(() => null);
+            }
+          }
+        }
+
+        // Fallback to postal code
+        if (!data.biteshipAreaId && pCode) {
+          data.biteshipAreaId = await searchArea(pCode).then(areas => {
+            const exactMatch = areas.find(a => String(a.postal_code) === String(pCode));
+            return exactMatch ? exactMatch.id : (areas[0] ? areas[0].id : null);
+          }).catch(() => null);
+        }
       }
 
       await location.update({
@@ -595,44 +694,134 @@ class MasterLocationService {
     }
   }
 
-  async syncRajaOngkir() {
+  async syncRegions() {
     try {
-      const provinces = await retryRequest(() => fetchProvinces());
+      console.log("--- Starting Robust Region Sync ---");
+      const axios = require('axios');
+      const { v4: uuidv4 } = require('uuid');
+      const BASE_URL = "https://www.emsifa.com/api-wilayah-indonesia/api";
+
+      // 1. Ensure 38 Provinces exist (handle emsifa's 34 limit)
+      const targetProvinces = [
+        "ACEH", "SUMATERA UTARA", "SUMATERA BARAT", "RIAU", "JAMBI", "SUMATERA SELATAN",
+        "BENGKULU", "LAMPUNG", "KEPULAUAN BANGKA BELITUNG", "KEPULAUAN RIAU", "DKI JAKARTA",
+        "JAWA BARAT", "JAWA TENGAH", "DI YOGYAKARTA", "JAWA TIMUR", "BANTEN", "BALI",
+        "NUSA TENGGARA BARAT", "NUSA TENGGARA TIMUR", "KALIMANTAN BARAT", "KALIMANTAN TENGAH",
+        "KALIMANTAN SELATAN", "KALIMANTAN TIMUR", "KALIMANTAN UTARA", "SULAWESI UTARA",
+        "SULAWESI TENGAH", "SULAWESI SELATAN", "SULAWESI TENGGARA", "GORONTALO", "SULAWESI BARAT",
+        "MALUKU", "MALUKU UTARA", "PAPUA BARAT", "PAPUA", "PAPUA SELATAN", "PAPUA TENGAH",
+        "PAPUA PEGUNUNGAN", "PAPUA BARAT DAYA"
+      ];
+
+      for (const name of targetProvinces) {
+        let province = await masterProvince.findOne({
+          where: sequelize.where(sequelize.fn('LOWER', sequelize.col('name')), name.toLowerCase())
+        });
+        if (!province) {
+          await masterProvince.create({ name });
+          console.log(`  Added missing province: ${name}`);
+        }
+      }
+
+      const provRes = await axios.get(`${BASE_URL}/provinces.json`);
+      const provinces = provRes.data;
 
       for (const p of provinces) {
-        console.log("Sync province:", p.name);
-        await this.upsertProvince(p);
-        await sleep(5000);
+        console.log(`Syncing Data for: ${p.name}`);
 
-        const cities = await retryRequest(() => fetchCities(p.id));
+        let provinceRecord = await masterProvince.findOne({
+          where: sequelize.where(sequelize.fn('LOWER', sequelize.col('name')), p.name.toLowerCase())
+        });
+
+        if (!provinceRecord) continue;
+
+        if (provinceRecord.id.length < 36) {
+          const newUuid = uuidv4();
+          const oldId = provinceRecord.id;
+          await masterProvince.update({ id: newUuid }, { where: { id: oldId } });
+          await masterCity.update({ provinceId: newUuid }, { where: { provinceId: oldId } });
+          provinceRecord = await masterProvince.findByPk(newUuid);
+        }
+
+        const cityRes = await axios.get(`${BASE_URL}/regencies/${p.id}.json`);
+        const cities = cityRes.data;
+
         for (const c of cities) {
-          console.log("  Sync city:", c.name);
-          await this.upsertCity(c, p.id);
-          await sleep(5000);
+          let cityRecord = await masterCity.findOne({
+            where: {
+              [Op.and]: [
+                sequelize.where(sequelize.fn('LOWER', sequelize.col('name')), c.name.toLowerCase()),
+                { provinceId: provinceRecord.id }
+              ]
+            }
+          });
 
-          const districts = await retryRequest(() => fetchDistricts(c.id));
-          for (const d of districts) {
-            console.log("    Sync district:", d.name);
-            await this.upsertDistrict(d, c.id);
+          if (!cityRecord) {
+            cityRecord = await masterCity.create({ name: c.name, provinceId: provinceRecord.id });
+          } else if (cityRecord.id.length < 36) {
+            const newUuid = uuidv4();
+            const oldId = cityRecord.id;
+            await masterCity.update({ id: newUuid }, { where: { id: oldId } });
+            await masterDistrict.update({ cityId: newUuid }, { where: { cityId: oldId } });
+            cityRecord = await masterCity.findByPk(newUuid);
           }
 
-          await sleep(5000); // Respect rate limit
+          const distRes = await axios.get(`${BASE_URL}/districts/${c.id}.json`);
+          const districts = distRes.data;
+
+          for (const d of districts) {
+            let districtRecord = await masterDistrict.findOne({
+              where: {
+                [Op.and]: [
+                  sequelize.where(sequelize.fn('LOWER', sequelize.col('name')), d.name.toLowerCase()),
+                  { cityId: cityRecord.id }
+                ]
+              }
+            });
+
+            if (!districtRecord) {
+              districtRecord = await masterDistrict.create({ name: d.name, cityId: cityRecord.id });
+            } else if (districtRecord.id.length < 36) {
+              const newUuid = uuidv4();
+              const oldId = districtRecord.id;
+              await masterDistrict.update({ id: newUuid }, { where: { id: oldId } });
+              await masterSubDistrict.update({ districtId: newUuid }, { where: { districtId: oldId } });
+              districtRecord = await masterDistrict.findByPk(newUuid);
+            }
+
+            const existingSubCount = await masterSubDistrict.count({
+              where: { districtId: districtRecord.id }
+            });
+
+            if (existingSubCount === 0) {
+              const villageRes = await axios.get(`${BASE_URL}/villages/${d.id}.json`);
+              const villages = villageRes.data;
+
+              if (villages.length > 0) {
+                const villageData = villages.map(v => ({
+                  name: v.name,
+                  districtId: districtRecord.id
+                }));
+                await masterSubDistrict.bulkCreate(villageData);
+              }
+            }
+          }
         }
       }
 
       return {
         status: true,
-        message: "Sync province, city, district berhasil",
+        message: "Full administrative regions sync completed (38 Provinces, UUID Integrity)",
         data: null,
       };
     } catch (error) {
-      console.error("Sync RajaOngkir Error:", error);
+      console.error("Sync Regions Error:", error);
       return { status: false, message: error.message, data: null };
     }
   }
 
   async injectDataRegion() {
-    return await this.syncRajaOngkir();
+    return await this.syncRegions();
   }
 
   // --- PROVINCE CRUD ---

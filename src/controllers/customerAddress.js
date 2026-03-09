@@ -1,5 +1,6 @@
-const { customerAddress, masterCustomer } = require("../models");
+const { customerAddress, masterCustomer, masterSubDistrict } = require("../models");
 const response = require("../helpers/response");
+const biteshipService = require("../services/biteship.service");
 
 module.exports = {
     // 1. Get all addresses for a customer
@@ -51,9 +52,13 @@ module.exports = {
                 province,
                 city,
                 district,
+                subDistrict,
                 cityId,
                 districtId,
                 postalCode,
+                biteshipAreaId,
+                latitude,
+                longitude,
                 isPrimary
             } = req.body;
 
@@ -69,6 +74,45 @@ module.exports = {
                 await customerAddress.update({ isPrimary: false }, { where: { customerId } });
             }
 
+            // 1. Resolve Biteship area ID logic
+            let resolvedAreaId = biteshipAreaId || null;
+            let finalPostalCode = postalCode;
+
+            if (!resolvedAreaId) {
+                // If postalCode is missing but we have subDistrict and districtId, 
+                // try to find the local zipCode for better disambiguation
+                if (!finalPostalCode && subDistrict && districtId) {
+                    const localSubDist = await masterSubDistrict.findOne({
+                        where: { name: subDistrict, districtId: districtId }
+                    });
+                    if (localSubDist && localSubDist.zipCode) {
+                        finalPostalCode = localSubDist.zipCode;
+                    }
+                }
+
+                // Try detailed lookup if subDistrict, district, and city are available
+                if (subDistrict && district && city) {
+                    const areaMatch = await biteshipService.getAreaByDetails(subDistrict, district, city, finalPostalCode);
+                    if (areaMatch) {
+                        resolvedAreaId = areaMatch.id;
+                        finalPostalCode = finalPostalCode || areaMatch.postal_code;
+
+                        // Back-fill local database with discovered zip code
+                        if (subDistrict && districtId && areaMatch.postal_code) {
+                            await masterSubDistrict.update(
+                                { zipCode: String(areaMatch.postal_code) },
+                                { where: { name: subDistrict, districtId, zipCode: null } }
+                            ).catch(() => null); // Non-blocking
+                        }
+                    }
+                }
+
+                // Fallback to postal code search if still no ID
+                if (!resolvedAreaId && finalPostalCode) {
+                    resolvedAreaId = await biteshipService.resolveAreaId(finalPostalCode);
+                }
+            }
+
             const newAddress = await customerAddress.create({
                 customerId,
                 label,
@@ -78,9 +122,13 @@ module.exports = {
                 province,
                 city,
                 district,
+                subDistrict,
                 cityId,
                 districtId,
-                postalCode,
+                postalCode: finalPostalCode,
+                latitude,
+                longitude,
+                biteshipAreaId: resolvedAreaId,
                 isPrimary: makePrimary
             });
 
@@ -107,6 +155,47 @@ module.exports = {
 
             if (updateData.isPrimary === true && !addressToUpdate.isPrimary) {
                 await customerAddress.update({ isPrimary: false }, { where: { customerId } });
+            }
+
+            // 1. Resolve Biteship area ID if updated
+            const needsResolve = (updateData.subDistrict && updateData.subDistrict !== addressToUpdate.subDistrict) ||
+                (updateData.postalCode && updateData.postalCode !== addressToUpdate.postalCode);
+
+            if (needsResolve && !updateData.biteshipAreaId) {
+                const subDist = updateData.subDistrict || addressToUpdate.subDistrict;
+                const dist = updateData.district || addressToUpdate.district;
+                const distId = updateData.districtId || addressToUpdate.districtId;
+                const cty = updateData.city || addressToUpdate.city;
+                let pCode = updateData.postalCode || addressToUpdate.postalCode;
+
+                // Try to find zipCode if missing
+                if (!pCode && subDist && distId) {
+                    const localSubDist = await masterSubDistrict.findOne({
+                        where: { name: subDist, districtId: distId }
+                    });
+                    if (localSubDist) pCode = localSubDist.zipCode;
+                }
+
+                if (subDist && dist && cty) {
+                    const areaMatch = await biteshipService.getAreaByDetails(subDist, dist, cty, pCode);
+                    if (areaMatch) {
+                        updateData.biteshipAreaId = areaMatch.id;
+                        updateData.postalCode = updateData.postalCode || areaMatch.postal_code;
+
+                        // Back-fill local database
+                        if (subDist && distId && areaMatch.postal_code) {
+                            await masterSubDistrict.update(
+                                { zipCode: String(areaMatch.postal_code) },
+                                { where: { name: subDist, districtId: distId, zipCode: null } }
+                            ).catch(() => null);
+                        }
+                    }
+                }
+
+                // Fallback to postal code
+                if (!updateData.biteshipAreaId && pCode) {
+                    updateData.biteshipAreaId = await biteshipService.resolveAreaId(pCode);
+                }
             }
 
             await addressToUpdate.update(updateData);

@@ -57,10 +57,22 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.STRING(20),
                 defaultValue: "PENDING",
             },
-            rajaOngkirResponse: {
+            shippingApiResponse: {
                 type: DataTypes.JSON,
             },
+            originPostalCode: {
+                type: DataTypes.STRING(10),
+            },
+            destinationPostalCode: {
+                type: DataTypes.STRING(10),
+            },
             trackingNumber: {
+                type: DataTypes.STRING(100),
+            },
+            originAreaId: {
+                type: DataTypes.STRING(100),
+            },
+            destinationAreaId: {
                 type: DataTypes.STRING(100),
             },
             createdAt: { type: DataTypes.DATE },

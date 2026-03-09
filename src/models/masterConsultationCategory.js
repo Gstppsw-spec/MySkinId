@@ -10,6 +10,23 @@ module.exports = (sequelize, DataTypes) => {
         otherKey: "productId",
         as: "products",
       });
+
+      masterConsultationCategory.belongsToMany(
+        models.masterQuestionnaire,
+        {
+          through: "relationshipQuestionnaireCategoryConsultation",
+          foreignKey: "consultationCategoryId",
+          otherKey: "questionnaireId",
+          as: "questionnaires",
+        },
+      );
+
+      masterConsultationCategory.belongsToMany(models.masterPackage, {
+        through: "relationshipPackageConsultationCategory",
+        foreignKey: "consultationCategoryId",
+        otherKey: "packageId",
+        as: "packages",
+      });
     }
   }
 
@@ -38,8 +55,7 @@ module.exports = (sequelize, DataTypes) => {
           if (!rawValue) return null;
           const BASE_URL =
             process.env.BASE_URL ||
-            `${process.env.APP_PROTOCOL || "http"}://${
-              process.env.APP_HOST || "localhost"
+            `${process.env.APP_PROTOCOL || "http"}://${process.env.APP_HOST || "localhost"
             }:${process.env.APP_PORT || 3000}`;
 
           return `${BASE_URL}/${rawValue}`;

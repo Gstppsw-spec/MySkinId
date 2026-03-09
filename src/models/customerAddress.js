@@ -42,16 +42,32 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.STRING,
                 allowNull: false,
             },
+            subDistrict: {
+                type: DataTypes.STRING,
+                allowNull: true,
+            },
             cityId: {
-                type: DataTypes.INTEGER,
-                allowNull: false,
+                type: DataTypes.UUID,
+                allowNull: true,
             },
             districtId: {
-                type: DataTypes.INTEGER,
+                type: DataTypes.UUID,
                 allowNull: true,
             },
             postalCode: {
                 type: DataTypes.STRING(10),
+                allowNull: true,
+            },
+            biteshipAreaId: {
+                type: DataTypes.STRING(100),
+                allowNull: true,
+            },
+            latitude: {
+                type: DataTypes.DECIMAL(10, 7),
+                allowNull: true,
+            },
+            longitude: {
+                type: DataTypes.DECIMAL(10, 7),
                 allowNull: true,
             },
             isPrimary: {

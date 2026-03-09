@@ -78,7 +78,7 @@ module.exports = async function checkCustomerTransaction({
                 Sequelize.literal(`EXISTS (
                   SELECT 1 FROM customerVouchers 
                   WHERE customerVouchers.transactionItemId = transactionItem.id 
-                  AND customerVouchers.status = 'CLAIMED'
+                  AND customerVouchers.status = 'REDEEM'
                 )`)
               ]
             },

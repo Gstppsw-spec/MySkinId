@@ -42,4 +42,8 @@ router.get("/vouchers", transactionOrder.getMyVouchers);
 router.get("/vouchers/check/:voucherCode", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.checkVoucher);
 router.post("/vouchers/claim", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.claimVoucher);
 
+// Platform Transfers
+router.get("/transfers/:orderId", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getTransferStatus);
+router.post("/transfers/retry/:transferId", allowRoles("SUPER_ADMIN"), transactionOrder.retryTransfer);
+
 module.exports = router;

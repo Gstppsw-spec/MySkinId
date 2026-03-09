@@ -185,8 +185,9 @@ module.exports = {
             const page = parseInt(req.query.page) || 1;
             const pageSize = parseInt(req.query.pageSize) || 10;
             const { search } = req.query;
+            const { status } = req.query;
 
-            const result = await transactionOrder.getOutletTransactions(adminId, { page, pageSize, search });
+            const result = await transactionOrder.getOutletTransactions(adminId, { page, pageSize, search, status });
 
             if (!result.status)
                 return response.error(res, result.message);
@@ -356,9 +357,8 @@ module.exports = {
 
     async getOrderDetail(req, res) {
         try {
-            const userId = req.user.id;
             const { id } = req.params;
-            const result = await transactionOrder.getOrderDetail(id, userId);
+            const result = await transactionOrder.getOrderDetail(id);
             if (!result.status)
                 return response.error(res, result.message);
             return response.success(res, result.message, result.data);
@@ -405,6 +405,32 @@ module.exports = {
             res.setHeader('Content-Disposition', `attachment; filename=${result.filename}`);
 
             return res.send(result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getTransferStatus(req, res) {
+        try {
+            const { orderId } = req.params;
+            const xenditPlatformService = require("../services/xenditPlatform.service");
+            const result = await xenditPlatformService.getTransfersByOrder(orderId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async retryTransfer(req, res) {
+        try {
+            const { transferId } = req.params;
+            const xenditPlatformService = require("../services/xenditPlatform.service");
+            const result = await xenditPlatformService.retryFailedTransfer(transferId);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
         } catch (error) {
             return response.serverError(res, error);
         }

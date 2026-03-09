@@ -23,7 +23,7 @@ const {
 } = require("../models");
 const { nanoid } = require("nanoid");
 const axios = require("axios");
-const rajaongkirService = require("./rajaongkir.service");
+const biteshipService = require("./biteship.service");
 const socketInstance = require("../socket/socketInstance");
 const { schedulePaymentTimeout, cancelPaymentTimeout } = require("../utils/paymentTimeout");
 const ExcelJS = require('exceljs');
@@ -347,6 +347,9 @@ module.exports = {
                 let finalReceiverPhone = null;
                 let finalAddress = null;
 
+                let resolvedOriginAreaId = null;
+                let resolvedDestinationAreaId = null;
+
                 if (shippingOpt) {
                     if (shippingOpt.addressId) {
                         const custAddr = await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } });
@@ -363,36 +366,88 @@ module.exports = {
                         finalAddress = shippingOpt.address;
                     }
 
-                    // Validation & Calculation with RajaOngkir
+                    // Validation & Calculation with Biteship
                     if (items.some(i => i.isShippingRequired)) {
-                        if (!destinationId) throw new Error(`Destination city ID is missing for shipping`);
                         const totalWeight = items.reduce((sum, i) => sum + (i.totalWeight || 0), 0);
-                        const originId = location.districtId || location.cityId || 0;
-                        console.log(`RajaOngkir DEBUG (${shippingOpt.courierCode}): Origin=${originId}, Dest=${destinationId}, Weight=${totalWeight}`);
-                        const rates = await rajaongkirService.calculateCost({
-                            origin: originId,
-                            destination: destinationId,
-                            weight: totalWeight,
-                            courier: shippingOpt.courierCode
+                        const totalValue = items.reduce((sum, i) => sum + (i.totalPrice || 0), 0);
+
+                        // Build origin params from location data
+                        const originParams = {};
+                        if (shippingOpt.origin_area_id) {
+                            originParams.origin_area_id = shippingOpt.origin_area_id;
+                        } else if (location.biteshipAreaId) {
+                            originParams.origin_area_id = location.biteshipAreaId;
+                        } else if (location.latitude && location.longitude) {
+                            originParams.origin_latitude = parseFloat(location.latitude);
+                            originParams.origin_longitude = parseFloat(location.longitude);
+                        } else if (location.postalCode) {
+                            originParams.origin_postal_code = location.postalCode;
+                        }
+
+                        // Build destination params from shipping options or customer address
+                        const destParams = {};
+                        if (shippingOpt.destination_area_id) {
+                            destParams.destination_area_id = shippingOpt.destination_area_id;
+                        } else if (shippingOpt.destination_latitude && shippingOpt.destination_longitude) {
+                            destParams.destination_latitude = parseFloat(shippingOpt.destination_latitude);
+                            destParams.destination_longitude = parseFloat(shippingOpt.destination_longitude);
+                        } else if (shippingOpt.destination_postal_code) {
+                            destParams.destination_postal_code = shippingOpt.destination_postal_code;
+                        } else if (shippingOpt.addressId && typeof custAddr !== 'undefined') {
+                            // Reuse custAddr fetched above
+                            if (custAddr.biteshipAreaId) {
+                                destParams.destination_area_id = custAddr.biteshipAreaId;
+                            } else if (custAddr.latitude && custAddr.longitude) {
+                                destParams.destination_latitude = parseFloat(custAddr.latitude);
+                                destParams.destination_longitude = parseFloat(custAddr.longitude);
+                            } else if (custAddr.postalCode) {
+                                destParams.destination_postal_code = custAddr.postalCode;
+                            }
+                        } else if (finalAddress) {
+                            // Fallback for manual address entry if any
+                            const custAddrFallback = shippingOpt.addressId ? await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } }) : null;
+                            if (custAddrFallback) {
+                                if (custAddrFallback.biteshipAreaId) {
+                                    destParams.destination_area_id = custAddrFallback.biteshipAreaId;
+                                } else if (custAddrFallback.latitude && custAddrFallback.longitude) {
+                                    destParams.destination_latitude = parseFloat(custAddrFallback.latitude);
+                                    destParams.destination_longitude = parseFloat(custAddrFallback.longitude);
+                                } else if (custAddrFallback.postalCode) {
+                                    destParams.destination_postal_code = custAddrFallback.postalCode;
+                                }
+                            }
+                        }
+
+                        if (Object.keys(originParams).length === 0) throw new Error(`Origin location data is missing for shipping`);
+                        if (Object.keys(destParams).length === 0) throw new Error(`Destination location data is missing for shipping`);
+
+                        resolvedOriginAreaId = originParams.origin_area_id;
+                        resolvedDestinationAreaId = destParams.destination_area_id;
+
+                        console.log(`Biteship DEBUG (${shippingOpt.courierCode}):`, JSON.stringify({ ...originParams, ...destParams, weight: totalWeight }));
+
+                        const ratesResponse = await biteshipService.getRates({
+                            ...originParams,
+                            ...destParams,
+                            couriers: shippingOpt.courierCode,
+                            items: [{ name: "Order Items", value: totalValue, weight: totalWeight, quantity: 1 }]
                         });
 
-                        console.log("RajaOngkir RAW Response:", JSON.stringify(rates));
+                        console.log("Biteship RAW Response:", JSON.stringify(ratesResponse));
 
-                        const serviceRate = rates && Array.isArray(rates)
-                            ? rates.find(c => c.service && c.service.toUpperCase() === shippingOpt.courierService.toUpperCase())
-                            : null;
+                        const pricing = ratesResponse.pricing || [];
+                        const serviceRate = pricing.find(p =>
+                            p.courier_code === shippingOpt.courierCode &&
+                            p.courier_service_code &&
+                            p.courier_service_code.toUpperCase() === shippingOpt.courierService.toUpperCase()
+                        );
 
                         if (!serviceRate) {
-                            console.error("Service Rate Not Found. Available services:", rates ? rates.map(r => r.service).join(", ") : "None");
+                            console.error("Service Rate Not Found. Available services:", pricing.map(p => `${p.courier_code}:${p.courier_service_code}`).join(", "));
                             throw new Error(`Service ${shippingOpt.courierService} not available for ${shippingOpt.courierCode}`);
                         }
 
-                        if (!serviceRate.cost || !Array.isArray(serviceRate.cost) || serviceRate.cost.length === 0) {
-                            console.error("Invalid Service Rate structure:", JSON.stringify(serviceRate));
-                            throw new Error(`Invalid cost data for service ${shippingOpt.courierService}`);
-                        }
-
-                        shippingFee = serviceRate.cost[0].value || 0;
+                        shippingFee = serviceRate.price || 0;
                     }
                 }
 
@@ -403,7 +458,9 @@ module.exports = {
                     finalReceiverPhone,
                     finalAddress,
                     location,
-                    shippingOpt
+                    shippingOpt,
+                    originAreaId: resolvedOriginAreaId,
+                    destinationAreaId: resolvedDestinationAreaId
                 };
 
                 totalOrderAmount += shippingFee;
@@ -480,6 +537,8 @@ module.exports = {
                             courierCode: calcInfo.shippingOpt.courierCode,
                             courierService: calcInfo.shippingOpt.courierService,
                             shippingCost: calcInfo.shippingFee,
+                            originAreaId: calcInfo.originAreaId,
+                            destinationAreaId: calcInfo.destinationAreaId,
                         },
                         { transaction: t }
                     );
@@ -602,6 +661,9 @@ module.exports = {
                 let finalReceiverPhone = null;
                 let finalAddress = null;
 
+                let resolvedOriginAreaId = null;
+                let resolvedDestinationAreaId = null;
+
                 if (shippingOpt) {
                     if (shippingOpt.addressId) {
                         const custAddr = await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } });
@@ -618,36 +680,88 @@ module.exports = {
                         finalAddress = shippingOpt.address;
                     }
 
-                    // Validation & Calculation with RajaOngkir
+                    // Validation & Calculation with Biteship
                     if (items.some(i => i.isShippingRequired)) {
-                        if (!destinationId) throw new Error(`Destination city ID is missing for shipping`);
                         const totalWeight = items.reduce((sum, i) => sum + (i.totalWeight || 0), 0);
-                        const originId = location.districtId || location.cityId || 0;
-                        console.log(`RajaOngkir DEBUG (${shippingOpt.courierCode}): Origin=${originId}, Dest=${destinationId}, Weight=${totalWeight}`);
-                        const rates = await rajaongkirService.calculateCost({
-                            origin: originId,
-                            destination: destinationId,
-                            weight: totalWeight,
-                            courier: shippingOpt.courierCode
+                        const totalValue = items.reduce((sum, i) => sum + (i.totalPrice || 0), 0);
+
+                        // Build origin params from location data
+                        const originParams = {};
+                        if (shippingOpt.origin_area_id) {
+                            originParams.origin_area_id = shippingOpt.origin_area_id;
+                        } else if (location.biteshipAreaId) {
+                            originParams.origin_area_id = location.biteshipAreaId;
+                        } else if (location.latitude && location.longitude) {
+                            originParams.origin_latitude = parseFloat(location.latitude);
+                            originParams.origin_longitude = parseFloat(location.longitude);
+                        } else if (location.postalCode) {
+                            originParams.origin_postal_code = location.postalCode;
+                        }
+
+                        // Build destination params from shipping options or customer address
+                        const destParams = {};
+                        if (shippingOpt.destination_area_id) {
+                            destParams.destination_area_id = shippingOpt.destination_area_id;
+                        } else if (shippingOpt.destination_latitude && shippingOpt.destination_longitude) {
+                            destParams.destination_latitude = parseFloat(shippingOpt.destination_latitude);
+                            destParams.destination_longitude = parseFloat(shippingOpt.destination_longitude);
+                        } else if (shippingOpt.destination_postal_code) {
+                            destParams.destination_postal_code = shippingOpt.destination_postal_code;
+                        } else if (shippingOpt.addressId && typeof custAddr !== 'undefined') {
+                            // Reuse custAddr fetched above
+                            if (custAddr.biteshipAreaId) {
+                                destParams.destination_area_id = custAddr.biteshipAreaId;
+                            } else if (custAddr.latitude && custAddr.longitude) {
+                                destParams.destination_latitude = parseFloat(custAddr.latitude);
+                                destParams.destination_longitude = parseFloat(custAddr.longitude);
+                            } else if (custAddr.postalCode) {
+                                destParams.destination_postal_code = custAddr.postalCode;
+                            }
+                        } else if (finalAddress) {
+                            // Fallback for manual address entry if any
+                            const custAddrFallback = shippingOpt.addressId ? await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } }) : null;
+                            if (custAddrFallback) {
+                                if (custAddrFallback.biteshipAreaId) {
+                                    destParams.destination_area_id = custAddrFallback.biteshipAreaId;
+                                } else if (custAddrFallback.latitude && custAddrFallback.longitude) {
+                                    destParams.destination_latitude = parseFloat(custAddrFallback.latitude);
+                                    destParams.destination_longitude = parseFloat(custAddrFallback.longitude);
+                                } else if (custAddrFallback.postalCode) {
+                                    destParams.destination_postal_code = custAddrFallback.postalCode;
+                                }
+                            }
+                        }
+
+                        if (Object.keys(originParams).length === 0) throw new Error(`Origin location data is missing for shipping`);
+                        if (Object.keys(destParams).length === 0) throw new Error(`Destination location data is missing for shipping`);
+
+                        resolvedOriginAreaId = originParams.origin_area_id;
+                        resolvedDestinationAreaId = destParams.destination_area_id;
+
+                        console.log(`Biteship DEBUG (${shippingOpt.courierCode}):`, JSON.stringify({ ...originParams, ...destParams, weight: totalWeight }));
+
+                        const ratesResponse = await biteshipService.getRates({
+                            ...originParams,
+                            ...destParams,
+                            couriers: shippingOpt.courierCode,
+                            items: [{ name: "Order Items", value: totalValue, weight: totalWeight, quantity: 1 }]
                         });
 
-                        console.log("RajaOngkir RAW Response:", JSON.stringify(rates));
+                        console.log("Biteship RAW Response:", JSON.stringify(ratesResponse));
 
-                        const serviceRate = rates && Array.isArray(rates)
-                            ? rates.find(c => c.service && c.service.toUpperCase() === shippingOpt.courierService.toUpperCase())
-                            : null;
+                        const pricing = ratesResponse.pricing || [];
+                        const serviceRate = pricing.find(p =>
+                            p.courier_code === shippingOpt.courierCode &&
+                            p.courier_service_code &&
+                            p.courier_service_code.toUpperCase() === shippingOpt.courierService.toUpperCase()
+                        );
 
                         if (!serviceRate) {
-                            console.error("Service Rate Not Found. Available services:", rates ? rates.map(r => r.service).join(", ") : "None");
+                            console.error("Service Rate Not Found. Available services:", pricing.map(p => `${p.courier_code}:${p.courier_service_code}`).join(", "));
                             throw new Error(`Service ${shippingOpt.courierService} not available for ${shippingOpt.courierCode}`);
                         }
 
-                        if (!serviceRate.cost || !Array.isArray(serviceRate.cost) || serviceRate.cost.length === 0) {
-                            console.error("Invalid Service Rate structure:", JSON.stringify(serviceRate));
-                            throw new Error(`Invalid cost data for service ${shippingOpt.courierService}`);
-                        }
-
-                        shippingFee = serviceRate.cost[0].value || 0;
+                        shippingFee = serviceRate.price || 0;
                     }
                 }
 
@@ -658,7 +772,9 @@ module.exports = {
                     finalReceiverPhone,
                     finalAddress,
                     location,
-                    shippingOpt
+                    shippingOpt,
+                    originAreaId: resolvedOriginAreaId,
+                    destinationAreaId: resolvedDestinationAreaId
                 };
 
                 totalOrderAmount += shippingFee;
@@ -735,6 +851,8 @@ module.exports = {
                             courierCode: calcInfo.shippingOpt.courierCode,
                             courierService: calcInfo.shippingOpt.courierService,
                             shippingCost: calcInfo.shippingFee,
+                            originAreaId: calcInfo.originAreaId,
+                            destinationAreaId: calcInfo.destinationAreaId,
                         },
                         { transaction: t }
                     );
@@ -926,12 +1044,17 @@ module.exports = {
                 where: { id: orderId, customerId },
                 include: [
                     {
+                        model: masterCustomer,
+                        as: "customer",
+                        attributes: ["phoneNumber"],
+                    },
+                    {
                         model: transaction,
                         as: "transactions",
                         include: [
                             { model: transactionItem, as: "items" },
                             { model: transactionShipping, as: "shipping" },
-                            { model: masterLocation, as: "location", attributes: ["name", "address"] },
+                            { model: masterLocation, as: "location", attributes: ["name", "address", "phone"] },
                         ],
                     },
                     { model: orderPayment, as: "payments" },
@@ -943,6 +1066,19 @@ module.exports = {
             }
 
             const plain = orderData.get({ plain: true });
+            const result = {
+                ...plain,
+                customerPhone: plain.customer?.phoneNumber || null,
+                transactions: (plain.transactions || []).map(trx => {
+                    const t = { ...trx };
+                    if (t.location) {
+                        t.outletPhone = t.location.phone || null;
+                        delete t.location.phone;
+                    }
+                    return t;
+                })
+            };
+            delete result.customer; // Remove redundant customer object as phone is extracted
 
             // Get the primary payment record
             const latestPayment = plain.payments?.[0];
@@ -980,27 +1116,9 @@ module.exports = {
                 }
             }
 
-            const resultArr = {
-                orderId: plain.id,
-                orderNumber: plain.orderNumber,
-                totalAmount: plain.totalAmount,
-                paymentStatus: plain.paymentStatus,
-                paymentDetail,
-                transactions: plain.transactions.map(t => ({
-                    transactionId: t.id,
-                    transactionNumber: t.transactionNumber,
-                    locationName: t.location?.name,
-                    orderStatus: t.orderStatus,
-                    items: t.items.map(i => ({
-                        itemName: i.itemName,
-                        quantity: i.quantity,
-                        totalPrice: i.totalPrice
-                    }))
-                })),
-                createdAt: plain.createdAt
-            };
+            result.paymentDetail = paymentDetail;
 
-            return { status: true, message: "Status found", data: resultArr };
+            return { status: true, message: "Status found", data: result };
         } catch (error) {
             return { status: false, message: error.message };
         }
@@ -1146,7 +1264,7 @@ module.exports = {
                                 const expiredAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
 
                                 await customerVoucher.update(
-                                    { status: "ACTIVE", expiredAt: expiredAt },
+                                    { status: "BOOKED", expiredAt: expiredAt },
                                     { where: { voucherCode: item.voucherCode, status: "NOT_ACTIVE" }, transaction: t }
                                 );
                             }
@@ -1229,6 +1347,10 @@ module.exports = {
                     {
                         model: transactionShipping,
                         as: "shipping"
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location"
                     }
                 ]
             });
@@ -1247,17 +1369,60 @@ module.exports = {
                 throw new Error(`Cannot ship transaction with status ${trx.orderStatus}`);
             }
 
+            let finalTrackingNumber = trackingNumber;
+
+            // 3. Biteship Auto-Booking (if trackingNumber is not provided)
+            if (!finalTrackingNumber && trx.shipping && trx.shipping.originAreaId && trx.shipping.destinationAreaId) {
+                const items = await transactionItem.findAll({
+                    where: { transactionId: trx.id },
+                });
+
+                const biteshipData = {
+                    origin_contact_name: trx.location.name,
+                    origin_contact_phone: trx.location.phone || "08123456789",
+                    origin_address: trx.location.address,
+                    origin_area_id: trx.shipping.originAreaId,
+
+                    destination_contact_name: trx.shipping.receiverName,
+                    destination_contact_phone: trx.shipping.receiverPhone,
+                    destination_address: trx.shipping.address,
+                    destination_area_id: trx.shipping.destinationAreaId,
+
+                    courier_company: trx.shipping.courierCode,
+                    courier_type: trx.shipping.courierService,
+
+                    items: items.map(item => ({
+                        name: item.itemName,
+                        value: parseFloat(item.totalPrice),
+                        weight: item.totalWeight || 0,
+                        quantity: item.quantity
+                    }))
+                };
+
+                const biteshipOrder = await biteshipService.createOrder(biteshipData);
+                finalTrackingNumber = biteshipOrder.courier?.waybill_id;
+
+                // Save full response for debug/audit
+                await trx.shipping.update({
+                    shippingApiResponse: biteshipOrder
+                }, { transaction: t });
+            }
+
             await trx.update({ orderStatus: "SHIPPED" }, { transaction: t });
 
             if (trx.shipping) {
                 await trx.shipping.update({
                     shippingStatus: "SHIPPED",
-                    trackingNumber: trackingNumber || trx.shipping.trackingNumber
+                    trackingNumber: finalTrackingNumber || trx.shipping.trackingNumber
                 }, { transaction: t });
             }
 
             await t.commit();
-            return { status: true, message: "Transaction marked as shipped" };
+            return {
+                status: true,
+                message: "Transaction marked as shipped",
+                data: { trackingNumber: finalTrackingNumber }
+            };
         } catch (error) {
             await t.rollback();
             return { status: false, message: error.message };
@@ -1308,6 +1473,31 @@ module.exports = {
             }
 
             await t.commit();
+
+            // 🔹 Xendit Platform: Transfer product amount to merchant after DELIVERED
+            try {
+                const xenditPlatformService = require("./xenditPlatform.service");
+                const productItems = await transactionItem.findAll({
+                    where: { transactionId: trx.id, itemType: "product" },
+                });
+
+                if (productItems.length > 0) {
+                    const totalProductAmount = productItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0);
+                    const transferResult = await xenditPlatformService.transferToMerchant({
+                        locationId: trx.locationId,
+                        amount: totalProductAmount,
+                        transferType: "PRODUCT_DELIVERED",
+                        transactionId: trx.id,
+                        orderId: trx.orderId,
+                    });
+                    if (!transferResult.status) {
+                        console.warn(`[Deliver] Platform transfer skipped/failed: ${transferResult.message}`);
+                    }
+                }
+            } catch (transferError) {
+                console.error("[Deliver] Platform transfer error (non-blocking):", transferError.message);
+            }
+
             return { status: true, message: "Transaction marked as delivered" };
         } catch (error) {
             await t.rollback();
@@ -1345,7 +1535,7 @@ module.exports = {
                     throw new Error(`Cannot complete voucher transaction with status ${trx.orderStatus}. Must be PAID or DELIVERED.`);
                 }
 
-                // Verify all vouchers are CLAIMED
+                // Verify all vouchers are REDEEM
                 const vouchers = await customerVoucher.findAll({
                     where: {
                         voucherCode: trx.items.filter(item => item.voucherCode).map(item => item.voucherCode)
@@ -1353,9 +1543,9 @@ module.exports = {
                     transaction: t
                 });
 
-                const allClaimed = vouchers.every(v => v.status === "CLAIMED");
+                const allClaimed = vouchers.every(v => v.status === "REDEEM");
                 if (!allClaimed) {
-                    throw new Error("Cannot complete transaction. All vouchers must be CLAIMED first.");
+                    throw new Error("Cannot complete transaction. All vouchers must be REDEEM first.");
                 }
             } else {
                 // For regular products, must be DELIVERED first
@@ -1382,7 +1572,7 @@ module.exports = {
                 {
                     where: {
                         customerId,
-                        status: "ACTIVE",
+                        status: "BOOKED",
                         expiredAt: { [Op.lt]: new Date() },
                     },
                 }
@@ -1393,13 +1583,18 @@ module.exports = {
                 where: { customerId },
                 include: [
                     {
+                        model: masterCustomer,
+                        as: "customer",
+                        attributes: ["phoneNumber"],
+                    },
+                    {
                         model: masterPackage,
                         as: "package",
                         include: [
                             {
                                 model: masterLocation,
                                 as: "location",
-                                attributes: ["id", "name", "address"],
+                                attributes: ["id", "name", "address", "phone"],
                                 include: [
                                     {
                                         model: masterLocationImage,
@@ -1432,10 +1627,17 @@ module.exports = {
                 const imageLocation = plain.package?.location?.images?.[0]?.imageUrl || null;
 
                 // Cleanup internal objects if preferred, or just add the field
-                return {
+                const res = {
                     ...plain,
+                    customerPhone: plain.customer?.phoneNumber || null,
+                    outletPhone: plain.package?.location?.phone || null,
                     imageLocation,
                 };
+                delete res.customer;
+                if (res.package?.location) {
+                    delete res.package.location.phone;
+                }
+                return res;
             });
 
             return {
@@ -1467,7 +1669,19 @@ module.exports = {
                     {
                         model: masterPackage,
                         as: "package",
+                        include: [
+                            {
+                                model: masterLocation,
+                                as: "location",
+                                attributes: ["phone"],
+                            },
+                        ],
                     },
+                    {
+                        model: masterCustomer,
+                        as: "customer",
+                        attributes: ["phoneNumber"],
+                    }
                 ],
             });
 
@@ -1475,7 +1689,18 @@ module.exports = {
                 throw new Error("Voucher not found");
             }
 
-            if (voucher.status !== "ACTIVE") {
+            const plainVoucher = voucher.get({ plain: true });
+            const resultVoucher = {
+                ...plainVoucher,
+                customerPhone: plainVoucher.customer?.phoneNumber || null,
+                outletPhone: plainVoucher.package?.location?.phone || null,
+            };
+            delete resultVoucher.customer;
+            if (resultVoucher.package?.location) {
+                delete resultVoucher.package.location.phone;
+            }
+
+            if (voucher.status !== "BOOKED") {
                 throw new Error(`Voucher is already ${voucher.status}`);
             }
 
@@ -1491,13 +1716,39 @@ module.exports = {
             }
 
             // 4. Update Status
-            await voucher.update({ status: "CLAIMED" }, { transaction: t });
+            await voucher.update({ status: "REDEEM" }, { transaction: t });
 
             await t.commit();
+
+            // 🔹 Xendit Platform: Transfer package amount to merchant after REDEEM
+            try {
+                const xenditPlatformService = require("./xenditPlatform.service");
+                const voucherTrxItem = await transactionItem.findOne({
+                    where: { id: voucher.transactionItemId },
+                    include: [{ model: transaction, as: "transaction" }],
+                });
+
+                if (voucherTrxItem && voucherTrxItem.transaction) {
+                    const transferResult = await xenditPlatformService.transferToMerchant({
+                        locationId: voucherTrxItem.locationId,
+                        amount: parseFloat(voucherTrxItem.totalPrice),
+                        transferType: "VOUCHER_REDEEM",
+                        transactionId: voucherTrxItem.transaction.id,
+                        transactionItemId: voucherTrxItem.id,
+                        orderId: voucherTrxItem.transaction.orderId,
+                    });
+                    if (!transferResult.status) {
+                        console.warn(`[ClaimVoucher] Platform transfer skipped/failed: ${transferResult.message}`);
+                    }
+                }
+            } catch (transferError) {
+                console.error("[ClaimVoucher] Platform transfer error (non-blocking):", transferError.message);
+            }
+
             return {
                 status: true,
                 message: "Voucher claimed successfully",
-                data: voucher,
+                data: resultVoucher,
             };
         } catch (error) {
             await t.rollback();
@@ -1527,7 +1778,7 @@ module.exports = {
                             {
                                 model: masterLocation,
                                 as: "location",
-                                attributes: ["id", "name", "address"],
+                                attributes: ["id", "name", "address", "phone"],
                                 include: [
                                     {
                                         model: masterLocationImage,
@@ -1554,7 +1805,7 @@ module.exports = {
                     {
                         model: masterCustomer,
                         as: "customer",
-                        attributes: ["id", "name", "username", "email"],
+                        attributes: ["id", "name", "username", "email", "phoneNumber"],
                     }
                 ],
             });
@@ -1566,21 +1817,37 @@ module.exports = {
             const plainVoucher = voucher.get({ plain: true });
             const imageLocation = plainVoucher.package?.location?.images?.[0]?.imageUrl || null;
 
-            if (plainVoucher.status !== "ACTIVE") {
+            if (plainVoucher.status !== "BOOKED") {
                 return {
                     status: false,
                     message: `Voucher is already ${plainVoucher.status}`,
-                    data: { ...plainVoucher, imageLocation }
+                    data: {
+                        ...plainVoucher,
+                        customerPhone: plainVoucher.customer?.phoneNumber || null,
+                        outletPhone: plainVoucher.package?.location?.phone || null,
+                        imageLocation
+                    }
                 };
+                delete result.data.customer;
+                if (result.data.package?.location) {
+                    delete result.data.package.location.phone;
+                }
+                return result;
             }
 
             // 3. Expiration Check
-            if (plainVoucher.status === "ACTIVE" && plainVoucher.expiredAt && new Date() > new Date(plainVoucher.expiredAt)) {
+            if (plainVoucher.status === "BOOKED" && plainVoucher.expiredAt && new Date() > new Date(plainVoucher.expiredAt)) {
                 await customerVoucher.update({ status: "EXPIRED" }, { where: { id: plainVoucher.id } });
                 return {
                     status: false,
                     message: "Voucher has expired",
-                    data: { ...plainVoucher, status: "EXPIRED", imageLocation }
+                    data: {
+                        ...plainVoucher,
+                        status: "EXPIRED",
+                        customerPhone: plainVoucher.customer?.phoneNumber || null,
+                        outletPhone: plainVoucher.package?.location?.phone || null,
+                        imageLocation
+                    }
                 };
             }
 
@@ -1589,13 +1856,21 @@ module.exports = {
                 throw new Error("Voucher cannot be claimed at this location");
             }
 
+            const finalData = {
+                ...plainVoucher,
+                customerPhone: plainVoucher.customer?.phoneNumber || null,
+                outletPhone: plainVoucher.package?.location?.phone || null,
+                imageLocation,
+            };
+            delete finalData.customer;
+            if (finalData.package?.location) {
+                delete finalData.package.location.phone;
+            }
+
             return {
                 status: true,
                 message: "Voucher is valid and claimable",
-                data: {
-                    ...plainVoucher,
-                    imageLocation,
-                },
+                data: finalData,
             };
         } catch (error) {
             return { status: false, message: error.message };
@@ -1618,7 +1893,7 @@ module.exports = {
         }
     },
 
-    async getOutletTransactions(adminId, { page = 1, pageSize = 10, search = "" }) {
+    async getOutletTransactions(adminId, { page = 1, pageSize = 10, search = "", status = "" }) {
         try {
             // 1. Get Admin's Location
             const userLocation = await relationshipUserLocation.findOne({
@@ -1642,19 +1917,23 @@ module.exports = {
                 ];
             }
 
+            if (status) {
+                whereClause.orderStatus = status;
+            }
+
             const { count, rows } = await transaction.findAndCountAll({
                 where: whereClause,
                 include: [
                     {
                         model: order,
                         as: "order",
-                        required: !!search, // Order must exist and be joined for name search
+                        required: !!search,
                         include: [
                             {
                                 model: masterCustomer,
                                 as: "customer",
-                                attributes: ["id", "name"],
-                                required: !!search, // Customer must exist and be joined for name search
+                                attributes: ["id", "name", "phoneNumber"],
+                                required: !!search,
                             },
                             {
                                 model: orderPayment,
@@ -1667,19 +1946,40 @@ module.exports = {
                         model: transactionItem,
                         as: "items",
                         attributes: ["itemName", "quantity", "totalPrice"],
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "name", "phone"],
                     }
                 ],
                 limit: limit,
                 offset: offset,
                 order: [["createdAt", "DESC"]],
                 distinct: true,
-                subQuery: false, // Avoid separate subquery for IDs to handle nested filters
+                subQuery: false,
+            });
+
+            const result = rows.map(r => {
+                const plain = r.get({ plain: true });
+                const res = {
+                    ...plain,
+                    customerPhone: plain.order?.customer?.phoneNumber || null,
+                    outletPhone: plain.location?.phone || null,
+                };
+                if (res.order?.customer) {
+                    delete res.order.customer.phoneNumber;
+                }
+                if (res.location) {
+                    delete res.location.phone;
+                }
+                return res;
             });
 
             return {
                 status: true,
                 message: "Transactions fetched successfully",
-                data: rows,
+                data: result,
                 totalCount: count
             };
         } catch (error) {
@@ -1699,6 +1999,11 @@ module.exports = {
                         as: "order",
                         where: { customerId },
                         include: [
+                            {
+                                model: masterCustomer,
+                                as: "customer",
+                                attributes: ["phoneNumber"],
+                            },
                             {
                                 model: orderPayment,
                                 as: "payments",
@@ -1727,7 +2032,7 @@ module.exports = {
                     {
                         model: masterLocation,
                         as: "location",
-                        attributes: ["id", "name"],
+                        attributes: ["id", "name", "phone"],
                     }
                 ],
                 limit: limit,
@@ -1737,10 +2042,26 @@ module.exports = {
                 subQuery: false,
             });
 
+            const result = rows.map(r => {
+                const plain = r.get({ plain: true });
+                const res = {
+                    ...plain,
+                    customerPhone: plain.order?.customer?.phoneNumber || null,
+                    outletPhone: plain.location?.phone || null,
+                };
+                if (res.order?.customer) {
+                    delete res.order.customer.phoneNumber;
+                }
+                if (res.location) {
+                    delete res.location.phone;
+                }
+                return res;
+            });
+
             return {
                 status: true,
                 message: "Transaction history fetched successfully",
-                data: rows,
+                data: result,
                 totalCount: count
             };
         } catch (error) {
@@ -1756,6 +2077,11 @@ module.exports = {
             const { count, rows } = await order.findAndCountAll({
                 where: { customerId },
                 include: [
+                    {
+                        model: masterCustomer,
+                        as: "customer",
+                        attributes: ["phoneNumber"],
+                    },
                     {
                         model: orderPayment,
                         as: "payments",
@@ -1785,7 +2111,7 @@ module.exports = {
                             {
                                 model: masterLocation,
                                 as: "location",
-                                attributes: ["id", "name"]
+                                attributes: ["id", "name", "phone"]
                             }
                         ]
                     }
@@ -1803,23 +2129,28 @@ module.exports = {
                     orderNumber: plainOrder.orderNumber,
                     totalAmount: plainOrder.totalAmount,
                     paymentStatus: plainOrder.paymentStatus,
+                    customerPhone: plainOrder.customer?.phoneNumber || null,
                     createdAt: plainOrder.createdAt,
                     payments: plainOrder.payments,
-                    transactions: (plainOrder.transactions || []).map(trx => ({
-                        id: trx.id,
-                        transactionNumber: trx.transactionNumber,
-                        orderStatus: trx.orderStatus,
-                        locationName: trx.location?.name || null,
-                        grandTotal: trx.grandTotal,
-                        items: (trx.items || []).map(item => ({
-                            itemName: item.itemName,
-                            itemType: item.itemType,
-                            quantity: item.quantity,
-                            unitPrice: item.unitPrice,
-                            totalPrice: item.totalPrice,
-                            imageUrl: item.product?.images?.[0]?.imageUrl || null
-                        }))
-                    }))
+                    transactions: (plainOrder.transactions || []).map(trx => {
+                        const t = {
+                            id: trx.id,
+                            transactionNumber: trx.transactionNumber,
+                            orderStatus: trx.orderStatus,
+                            locationName: trx.location?.name || null,
+                            outletPhone: trx.location?.phone || null,
+                            grandTotal: trx.grandTotal,
+                            items: (trx.items || []).map(item => ({
+                                itemName: item.itemName,
+                                itemType: item.itemType,
+                                quantity: item.quantity,
+                                unitPrice: item.unitPrice,
+                                totalPrice: item.totalPrice,
+                                imageUrl: item.product?.images?.[0]?.imageUrl || null
+                            }))
+                        };
+                        return t;
+                    })
                 };
             });
 
@@ -1846,11 +2177,18 @@ module.exports = {
                         model: order,
                         as: "order",
                         where: { customerId },
+                        include: [
+                            {
+                                model: masterCustomer,
+                                as: "customer",
+                                attributes: ["phoneNumber"],
+                            }
+                        ]
                     },
                     {
                         model: masterLocation,
                         as: "location",
-                        attributes: ["id", "name"],
+                        attributes: ["id", "name", "phone"],
                     },
                     {
                         model: transactionItem,
@@ -1910,6 +2248,8 @@ module.exports = {
                     purchasedAt: plainTrx.updatedAt,
                     locationId: plainTrx.locationId,
                     locationName: plainTrx.location?.name,
+                    customerPhone: plainTrx.order?.customer?.phoneNumber || null,
+                    outletPhone: plainTrx.location?.phone || null,
                     items: items
                 };
             });
@@ -1937,11 +2277,18 @@ module.exports = {
                         model: order,
                         as: "order",
                         where: { customerId },
+                        include: [
+                            {
+                                model: masterCustomer,
+                                as: "customer",
+                                attributes: ["phoneNumber"],
+                            }
+                        ]
                     },
                     {
                         model: masterLocation,
                         as: "location",
-                        attributes: ["id", "name"],
+                        attributes: ["id", "name", "phone"],
                     },
                     {
                         model: transactionItem,
@@ -2015,6 +2362,8 @@ module.exports = {
                     completedAt: plainTrx.updatedAt,
                     locationId: plainTrx.locationId,
                     locationName: plainTrx.location?.name,
+                    customerPhone: plainTrx.order?.customer?.phoneNumber || null,
+                    outletPhone: plainTrx.location?.phone || null,
                     items: items
                 };
             }));
@@ -2039,6 +2388,11 @@ module.exports = {
                 where: { customerId, paymentStatus: "UNPAID" },
                 include: [
                     {
+                        model: masterCustomer,
+                        as: "customer",
+                        attributes: ["phoneNumber"],
+                    },
+                    {
                         model: transaction,
                         as: "transactions",
                         include: [
@@ -2058,6 +2412,11 @@ module.exports = {
                                         attributes: ["id", "name"],
                                     }
                                 ]
+                            },
+                            {
+                                model: masterLocation,
+                                as: "location",
+                                attributes: ["phone"],
                             }
                         ]
                     },
@@ -2102,6 +2461,8 @@ module.exports = {
                     paymentStatus: plainOrder.paymentStatus,
                     totalAmount: plainOrder.totalAmount,
                     createdAt: plainOrder.createdAt,
+                    customerPhone: plainOrder.customer?.phoneNumber || null,
+                    outletPhone: plainOrder.transactions?.[0]?.location?.phone || null,
                     paymentMethod: latestPayment?.paymentMethod || null,
                     checkoutUrl: latestPayment?.checkoutUrl || null,
                     items,
@@ -2132,6 +2493,13 @@ module.exports = {
                         model: order,
                         as: "order",
                         where: { customerId },
+                        include: [
+                            {
+                                model: masterCustomer,
+                                as: "customer",
+                                attributes: ["phoneNumber"],
+                            }
+                        ]
                     },
                     {
                         model: transactionShipping,
@@ -2153,6 +2521,11 @@ module.exports = {
                                 attributes: ["id", "name"],
                             }
                         ]
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["phone"],
                     }
                 ],
                 limit: limit,
@@ -2162,10 +2535,26 @@ module.exports = {
                 subQuery: false,
             });
 
+            const processedRows = rows.map(r => {
+                const plain = r.get({ plain: true });
+                const res = {
+                    ...plain,
+                    customerPhone: plain.order?.customer?.phoneNumber || null,
+                    outletPhone: plain.location?.phone || null,
+                };
+                if (res.order?.customer) {
+                    delete res.order.customer.phoneNumber;
+                }
+                if (res.location) {
+                    delete res.location.phone;
+                }
+                return res;
+            });
+
             return {
                 status: true,
                 message: "Shipping transactions fetched successfully",
-                data: rows,
+                data: processedRows,
                 totalCount: count
             };
         } catch (error) {
@@ -2181,6 +2570,13 @@ module.exports = {
                     {
                         model: order,
                         as: "order",
+                        include: [
+                            {
+                                model: masterCustomer,
+                                as: "customer",
+                                attributes: ["phoneNumber"],
+                            },
+                        ],
                     },
                     {
                         model: transactionShipping,
@@ -2202,6 +2598,11 @@ module.exports = {
                                 attributes: ["id", "name", "price"],
                             }
                         ]
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "name", "phone"],
                     }
                 ],
             });
@@ -2219,22 +2620,24 @@ module.exports = {
                 throw new Error("Unauthorized: You don't have access to this tracking detail");
             }
 
+            const plainTrx = trx.get({ plain: true });
+
             // Timeline logic as seen in Image 5
             const timeline = [
                 {
                     title: "Pesanan Dibuat",
                     description: "Kami telah menerima pesanan Anda",
-                    time: trx.createdAt,
+                    time: plainTrx.createdAt,
                     completed: true
                 }
             ];
 
             // Paid
-            if (trx.order.paymentStatus === "PAID" || ["SHIPPED", "DELIVERED", "COMPLETED"].includes(trx.orderStatus)) {
+            if (plainTrx.order.paymentStatus === "PAID" || ["SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)) {
                 timeline.push({
                     title: "Pembayaran Dikonfirmasi",
                     description: "Pembayaran telah berhasil dikonfirmasi",
-                    time: trx.order.updatedAt,
+                    time: plainTrx.order.updatedAt,
                     completed: true
                 });
             } else {
@@ -2247,11 +2650,11 @@ module.exports = {
             }
 
             // Processed (Status PAID usually means it's being packed/prepared)
-            if (["PAID", "SHIPPED", "DELIVERED", "COMPLETED"].includes(trx.orderStatus)) {
+            if (["PAID", "SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)) {
                 timeline.push({
                     title: "Pesanan Diproses",
                     description: "Produk skincare sedang disiapkan oleh apoteker kami",
-                    time: trx.updatedAt,
+                    time: plainTrx.updatedAt,
                     completed: true
                 });
             } else {
@@ -2267,35 +2670,43 @@ module.exports = {
             timeline.push({
                 title: "Siap Dikirim",
                 description: "Pesanan sudah dikemas dan menunggu kurir",
-                time: trx.orderStatus === "SHIPPED" || ["DELIVERED", "COMPLETED"].includes(trx.orderStatus) ? trx.updatedAt : null,
-                completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(trx.orderStatus)
+                time: plainTrx.orderStatus === "SHIPPED" || ["DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus) ? plainTrx.updatedAt : null,
+                completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)
             });
 
             // In Shipping
             timeline.push({
                 title: "Dalam Pengiriman",
                 description: "Pesanan sedang dalam perjalanan ke lokasi Anda",
-                time: trx.orderStatus === "SHIPPED" ? trx.updatedAt : null,
-                completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(trx.orderStatus)
+                time: plainTrx.orderStatus === "SHIPPED" ? plainTrx.updatedAt : null,
+                completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)
             });
 
             let trackingRealtime = null;
-            if (trx.shipping?.trackingNumber) {
+            if (plainTrx.shipping?.trackingNumber) {
                 try {
-                    trackingRealtime = await rajaongkirService.trackWaybill(
-                        trx.shipping.trackingNumber,
-                        trx.shipping.courierCode
+                    trackingRealtime = await biteshipService.trackShipment(
+                        plainTrx.shipping.trackingNumber,
+                        plainTrx.shipping.courierCode
                     );
                 } catch (e) {
                     console.error("Realtime Tracking Error:", e.message);
                 }
             }
 
+            const trackingTransaction = {
+                ...plainTrx,
+                customerPhone: plainTrx.order?.customer?.phoneNumber || null,
+                outletPhone: plainTrx.location?.phone || null,
+            };
+            if (trackingTransaction.order?.customer) delete trackingTransaction.order.customer.phoneNumber;
+            if (trackingTransaction.location) delete trackingTransaction.location.phone;
+
             return {
                 status: true,
                 message: "Order tracking detail fetched successfully",
                 data: {
-                    transaction: trx,
+                    transaction: trackingTransaction,
                     timeline,
                     trackingRealtime
                 }
@@ -2313,6 +2724,13 @@ module.exports = {
                     {
                         model: order,
                         as: "order",
+                        include: [
+                            {
+                                model: masterCustomer,
+                                as: "customer",
+                                attributes: ["phoneNumber"],
+                            },
+                        ],
                     },
                     {
                         model: transactionShipping,
@@ -2334,6 +2752,11 @@ module.exports = {
                                 attributes: ["id", "name", "price"],
                             }
                         ]
+                    },
+                    {
+                        model: masterLocation,
+                        as: "location",
+                        attributes: ["id", "name", "phone"],
                     }
                 ],
             });
@@ -2351,21 +2774,35 @@ module.exports = {
                 throw new Error("Unauthorized: You don't have access to this transaction detail");
             }
 
+            const plain = trx.get({ plain: true });
+            const resultData = {
+                ...plain,
+                customerPhone: plain.order?.customer?.phoneNumber || null,
+                outletPhone: plain.location?.phone || null,
+            };
+            if (resultData.order?.customer) delete resultData.order.customer.phoneNumber;
+            if (resultData.location) delete resultData.location.phone;
+
             return {
                 status: true,
                 message: "Transaction detail fetched successfully",
-                data: trx
+                data: resultData
             };
         } catch (error) {
             return { status: false, message: error.message };
         }
     },
 
-    async getOrderDetail(orderId, customerId) {
+    async getOrderDetail(orderId) {
         try {
             const orderData = await order.findOne({
-                where: { id: orderId, customerId },
+                where: { id: orderId },
                 include: [
+                    {
+                        model: masterCustomer,
+                        as: "customer",
+                        attributes: ["phoneNumber"],
+                    },
                     {
                         model: orderPayment,
                         as: "payments",
@@ -2398,7 +2835,7 @@ module.exports = {
                             {
                                 model: masterLocation,
                                 as: "location",
-                                attributes: ["id", "name", "address"],
+                                attributes: ["id", "name", "address", "phone"],
                             }
                         ]
                     }
@@ -2415,6 +2852,7 @@ module.exports = {
                 orderNumber: plainOrder.orderNumber,
                 totalAmount: plainOrder.totalAmount,
                 paymentStatus: plainOrder.paymentStatus,
+                customerPhone: plainOrder.customer?.phoneNumber || null,
                 createdAt: plainOrder.createdAt,
                 payments: (plainOrder.payments || []).map(p => ({
                     paymentMethod: p.paymentMethod,
@@ -2429,6 +2867,7 @@ module.exports = {
                     orderStatus: trx.orderStatus,
                     locationName: trx.location?.name || null,
                     locationAddress: trx.location?.address || null,
+                    outletPhone: trx.location?.phone || null,
                     grandTotal: trx.grandTotal,
                     items: (trx.items || []).map(item => ({
                         itemName: item.itemName,
@@ -2461,7 +2900,23 @@ module.exports = {
             const orderData = await order.findOne({
                 where: { id: orderId, customerId },
                 include: [
+                    {
+                        model: masterCustomer,
+                        as: "customer",
+                        attributes: ["phoneNumber"],
+                    },
                     { model: orderPayment, as: "payments" },
+                    {
+                        model: transaction,
+                        as: "transactions",
+                        include: [
+                            {
+                                model: masterLocation,
+                                as: "location",
+                                attributes: ["phone"],
+                            }
+                        ]
+                    }
                 ],
             });
 
@@ -2490,6 +2945,8 @@ module.exports = {
                 totalAmount: orderData.totalAmount,
                 paymentStatus: orderData.paymentStatus,
                 paymentMethod: latestPayment.paymentMethod,
+                customerPhone: orderData.customer?.phoneNumber || null,
+                outletPhone: orderData.transactions?.[0]?.location?.phone || null,
                 remainingSeconds,
                 instructions: latestPayment.instructions ? latestPayment.instructions.split("\n") : [],
                 checkoutUrl: latestPayment.checkoutUrl,

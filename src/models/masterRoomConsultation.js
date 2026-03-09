@@ -47,6 +47,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      productId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
     {
       tableName: "masterRoomConsultation",
@@ -73,6 +77,11 @@ module.exports = (sequelize, DataTypes) => {
       as: "location",
     });
 
+    masterRoomConsultation.belongsTo(models.masterProduct, {
+      foreignKey: "productId",
+      as: "product",
+    });
+
     masterRoomConsultation.hasMany(models.masterConsultationImage, {
       foreignKey: "roomId",
       as: "consultationImage",
@@ -80,6 +89,11 @@ module.exports = (sequelize, DataTypes) => {
     masterRoomConsultation.hasMany(models.masterConsultationMessage, {
       foreignKey: "roomId",
       as: "consultationMessage",
+    });
+
+    masterRoomConsultation.hasMany(models.masterQuestionnaireAnswer, {
+      foreignKey: "roomId",
+      as: "questionnaireAnswers",
     });
   };
 

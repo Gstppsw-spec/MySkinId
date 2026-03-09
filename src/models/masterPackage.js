@@ -21,6 +21,13 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "refferenceId",
         as: "favorites",
       });
+
+      masterPackage.belongsToMany(models.masterConsultationCategory, {
+        through: "relationshipPackageConsultationCategory",
+        foreignKey: "packageId",
+        otherKey: "consultationCategoryId",
+        as: "consultationCategories",
+      });
     }
   }
 

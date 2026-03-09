@@ -331,6 +331,31 @@ class masterLocationController {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   }
+
+  // --- XENDIT PLATFORM ---
+  async createXenditAccount(req, res) {
+    try {
+      const { locationId } = req.params;
+      const { masterLocation } = require("../models");
+      const xenditPlatformService = require("../services/xenditPlatform.service");
+
+      const location = await masterLocation.findByPk(locationId);
+      if (!location) {
+        return response.error(res, "Location not found", null);
+      }
+
+      if (location.xenditAccountId) {
+        return response.error(res, `Location already has Xendit account: ${location.xenditAccountId}`, null);
+      }
+
+      const result = await xenditPlatformService.createSubAccount(location);
+      return result.status
+        ? response.success(res, result.message, result.data)
+        : response.error(res, result.message, null);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
 }
 
 module.exports = new masterLocationController();

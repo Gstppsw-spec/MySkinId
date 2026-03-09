@@ -147,10 +147,22 @@ async function trackWaybill(awb, courier) {
     }
 }
 
+// Sub-District by District ID
+async function fetchSubDistricts(districtId) {
+    try {
+        const res = await api.get(`/destination/sub-district/${districtId}`);
+        return res.data.data;
+    } catch (error) {
+        console.error(`Error fetching sub-districts for district ${districtId}:`, error.response ? error.response.data : error.message);
+        throw error;
+    }
+}
+
 module.exports = {
     fetchProvinces,
     fetchCities,
     fetchDistricts,
+    fetchSubDistricts,
     calculateCost,
     calculateAllCosts,
     fetchCouriers,

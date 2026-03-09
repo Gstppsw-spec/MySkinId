@@ -46,7 +46,7 @@ module.exports = (sequelize, DataTypes) => {
             },
             status: {
                 type: DataTypes.STRING(20),
-                defaultValue: "ACTIVE", // ACTIVE / CLAIMED / EXPIRED
+                defaultValue: "BOOKED", // BOOKED / REDEEM / EXPIRED
             },
             expiredAt: {
                 type: DataTypes.DATE,

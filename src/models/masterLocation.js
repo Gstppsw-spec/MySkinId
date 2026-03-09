@@ -23,8 +23,8 @@ module.exports = (sequelize, DataTypes) => {
       subdistrict: { type: DataTypes.STRING(100) },
       postalCode: { type: DataTypes.STRING(10) },
 
-      cityId: { type: DataTypes.INTEGER },
-      districtId: { type: DataTypes.INTEGER },
+      cityId: { type: DataTypes.UUID },
+      districtId: { type: DataTypes.UUID },
 
       latitude: { type: DataTypes.DECIMAL(10, 7) },
       longitude: { type: DataTypes.DECIMAL(10, 7) },
@@ -73,6 +73,14 @@ module.exports = (sequelize, DataTypes) => {
       },
       premiumExpiredAt: {
         type: DataTypes.DATE,
+      },
+      xenditAccountId: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+      biteshipAreaId: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
       },
     },
     {

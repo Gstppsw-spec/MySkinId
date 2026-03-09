@@ -15,7 +15,9 @@ const {
   masterPackage,
   masterPackageItems,
   masterService,
-  masterCity
+  masterCity,
+  masterQuestionnaire,
+  masterQuestionnaireAnswer,
 } = require("../models");
 
 const { Op, Sequelize, where } = require("sequelize");
@@ -53,6 +55,19 @@ module.exports = {
             model: masterLocation,
             as: 'location',
             attributes: ['id', 'name']
+          },
+          {
+            model: masterProduct,
+            as: 'product',
+            attributes: ['id', 'name', 'price', 'discountPercent', 'description'],
+            include: [
+              {
+                model: masterProductImage,
+                as: 'images',
+                attributes: ['imageUrl'],
+                limit: 1
+              }
+            ]
           }
         ],
       });
@@ -108,6 +123,8 @@ module.exports = {
         locationId,
         latitude,
         longitude,
+        answers,
+        productId,
       } = data;
 
       if (!customerId) {
@@ -119,6 +136,13 @@ module.exports = {
           status: false,
           message: "Kategori konsultasi tidak boleh kosong",
         };
+      }
+
+      if (productId) {
+        const product = await masterProduct.findByPk(productId);
+        if (!product) {
+          return { status: false, message: "Produk tidak ditemukan" };
+        }
       }
 
       const roomCode = `ROOM-${nanoid(8).toUpperCase()}`;
@@ -133,7 +157,49 @@ module.exports = {
         locationId,
         latitude,
         longitude,
+        productId,
       });
+
+      // Save questionnaire answers if provided
+      if (answers && Array.isArray(answers) && answers.length > 0) {
+        // Validate required questions
+        const requiredQuestions = await masterQuestionnaire.findAll({
+          where: { isActive: true, isRequired: true },
+          include: [
+            {
+              model: masterConsultationCategory,
+              as: "consultationCategories",
+              through: { attributes: [] },
+              where: { id: consultationCategoryId },
+              attributes: [],
+            },
+          ],
+        });
+
+        const answeredIds = answers.map((a) => a.questionnaireId);
+        const missingRequired = requiredQuestions.filter(
+          (q) => !answeredIds.includes(q.id),
+        );
+
+        if (missingRequired.length > 0) {
+          // Rollback: delete the room
+          await room.destroy();
+          const missingQuestions = missingRequired.map((q) => q.question).join(", ");
+          return {
+            status: false,
+            message: `Pertanyaan wajib belum dijawab: ${missingQuestions}`,
+            data: null,
+          };
+        }
+
+        const answerData = answers.map((a) => ({
+          roomId: room.id,
+          questionnaireId: a.questionnaireId,
+          answer: typeof a.answer === "object" ? JSON.stringify(a.answer) : a.answer,
+        }));
+
+        await masterQuestionnaireAnswer.bulkCreate(answerData);
+      }
 
       return { status: true, message: "Success", data: room };
     } catch (error) {
@@ -201,6 +267,16 @@ module.exports = {
           {
             model: masterCustomer,
             as: 'customer',
+            attributes: ['id', 'name']
+          },
+          {
+            model: masterProduct,
+            as: 'product',
+            attributes: ['id', 'name']
+          },
+          {
+            model: masterLocation,
+            as: 'location',
             attributes: ['id', 'name']
           }
         ],
@@ -405,6 +481,19 @@ module.exports = {
             as: "consultationImage",
             attributes: ["imageUrl"],
           },
+          {
+            model: masterProduct,
+            as: 'product',
+            attributes: ['id', 'name', 'price', 'discountPercent', 'description'],
+            include: [
+              {
+                model: masterProductImage,
+                as: 'images',
+                attributes: ['imageUrl'],
+                limit: 1
+              }
+            ]
+          }
         ],
         order: [["createdAt", "ASC"]],
         limit: pageSize,
@@ -723,7 +812,7 @@ module.exports = {
       // Get the room to extract locationId or latitude/longitude
       const room = await masterRoomConsultation.findOne({
         where: { id: roomId },
-        attributes: ["id", "locationId", "latitude", "longitude"],
+        attributes: ["id", "locationId", "latitude", "longitude", "consultationCategoryId"],
       });
 
       if (!room) {
@@ -739,15 +828,15 @@ module.exports = {
         const latitude = room.latitude;
         const longitude = room.longitude;
 
-        // Find nearest locations by latitude and longitude
+        // Find nearest locations by latitude and longitude (distance in meters)
         const distanceLiteral = Sequelize.literal(`
-          6371 * acos(
+          (6371 * acos(
             cos(radians(${latitude})) *
             cos(radians(CAST(latitude AS FLOAT))) *
             cos(radians(CAST(longitude AS FLOAT)) - radians(${longitude})) +
             sin(radians(${latitude})) *
             sin(radians(CAST(latitude AS FLOAT)))
-          )
+          )) * 1000.0
         `);
 
         const nearestLocations = await masterLocation.findAll({
@@ -770,10 +859,7 @@ module.exports = {
           return {
             status: true,
             message: "Tidak ada lokasi terdekat ditemukan",
-            data: {
-              product: [],
-              package: []
-            }
+            data: []
           };
         }
 
@@ -789,6 +875,18 @@ module.exports = {
             attributes: ["id", "name", "cityId", "districtId"],
           },
         ];
+
+        // Filter product berdasarkan consultationCategoryId dari room
+        if (room.consultationCategoryId) {
+          productInclude.push({
+            model: masterConsultationCategory,
+            as: "consultationCategories",
+            where: { id: room.consultationCategoryId },
+            attributes: [],
+            through: { attributes: [] },
+            required: true,
+          });
+        }
 
         if (categoryName) {
           productInclude.push({
@@ -840,6 +938,18 @@ module.exports = {
             ],
           },
         ];
+
+        // Filter package berdasarkan consultationCategoryId dari room
+        if (room.consultationCategoryId) {
+          packageInclude.push({
+            model: masterConsultationCategory,
+            as: "consultationCategories",
+            where: { id: room.consultationCategoryId },
+            attributes: [],
+            through: { attributes: [] },
+            required: true,
+          });
+        }
 
         const [productPrescription, packagePrescription] = await Promise.all([
           masterProduct.findAll({
@@ -873,87 +983,104 @@ module.exports = {
           }),
         ]);
 
-        // Format the response to include media property
-        const formattedProducts = productPrescription.map((product) => {
-          const productJson = product.toJSON();
-          const price = parseFloat(productJson.price) || 0;
-          const discountPercent = parseFloat(productJson.discountPercent) || 0;
-          const discountPrice = price - (price * discountPercent) / 100;
+        // Group by nearest locations
+        const prescriptionsByOutlet = nearestLocations.map((loc) => {
+          const locJson = loc.toJSON();
+          const locId = locJson.id;
 
-          let media = null;
-          if (productJson.images && productJson.images.length > 0) {
-            media = productJson.images[0];
-          }
+          const formattedProducts = productPrescription
+            .filter((p) => p.locationId === locId)
+            .map((product) => {
+              const productJson = product.toJSON();
+              const price = parseFloat(productJson.price) || 0;
+              const discountPercent = parseFloat(productJson.discountPercent) || 0;
+              const discountPrice = price - (price * discountPercent) / 100;
 
-          let location = null;
-          if (productJson.location) {
-            location = {
-              locationId: productJson.location.id,
-              locationName: productJson.location.name,
-              cityId: productJson.location.cityId,
-              districtId: productJson.location.districtId,
-            };
-          }
+              let media = null;
+              if (productJson.images && productJson.images.length > 0) {
+                media = productJson.images[0];
+              }
+
+              let location = null;
+              if (productJson.location) {
+                location = {
+                  locationId: productJson.location.id,
+                  locationName: productJson.location.name,
+                  cityId: productJson.location.cityId,
+                  districtId: productJson.location.districtId,
+                };
+              }
+
+              return {
+                id: productJson.id,
+                name: productJson.name,
+                description: productJson.description,
+                price: price,
+                discountPrice: discountPrice,
+                discountPercent: discountPercent,
+                weight: productJson.weightGram,
+                media,
+                location,
+              };
+            });
+
+          const formattedPackages = packagePrescription
+            .filter((pkg) => pkg.locationId === locId)
+            .map((pkg) => {
+              const pkgJson = pkg.toJSON();
+              const price = parseFloat(pkgJson.price) || 0;
+              const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
+              const discountPrice = price - (price * discountPercent) / 100;
+
+              const items = (pkgJson.items || []).map((item) => ({
+                id: item.id,
+                qty: item.qty,
+                service: item.service || null,
+              }));
+
+              let media = null;
+              let location = null;
+              if (pkgJson.location) {
+                location = {
+                  locationId: pkgJson.location.id,
+                  locationName: pkgJson.location.name,
+                  cityId: pkgJson.location.cityId,
+                  districtId: pkgJson.location.districtId,
+                };
+
+                if (pkgJson.location.images && pkgJson.location.images.length > 0) {
+                  media = pkgJson.location.images[0];
+                }
+              }
+
+              return {
+                id: pkgJson.id,
+                name: pkgJson.name,
+                description: pkgJson.description,
+                price: price,
+                discountPrice: discountPrice,
+                discountPercent: discountPercent,
+                items,
+                media,
+                location,
+              };
+            });
 
           return {
-            id: productJson.id,
-            name: productJson.name,
-            description: productJson.description,
-            price: price,
-            discountPrice: discountPrice,
-            discountPercent: discountPercent,
-            weight: productJson.weightGram,
-            media,
-            location,
+            locationId: locId,
+            locationName: locJson.name,
+            distance: Math.round(parseFloat(locJson.distance) || 0),
+            product: formattedProducts,
+            package: formattedPackages,
           };
         });
 
-        const formattedPackages = packagePrescription.map((pkg) => {
-          const pkgJson = pkg.toJSON();
-          const price = parseFloat(pkgJson.price) || 0;
-          const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
-          const discountPrice = price - (price * discountPercent) / 100;
+        // Optional: filter out outlets that have neither products nor packages
+        const filteredResult = prescriptionsByOutlet.filter(
+          (item) => item.product.length > 0 || item.package.length > 0
+        );
 
-          const items = (pkgJson.items || []).map((item) => ({
-            id: item.id,
-            qty: item.qty,
-            service: item.service || null,
-          }));
-
-          let media = null;
-          let location = null;
-          if (pkgJson.location) {
-            location = {
-              locationId: pkgJson.location.id,
-              locationName: pkgJson.location.name,
-              cityId: pkgJson.location.cityId,
-              districtId: pkgJson.location.districtId,
-            };
-
-            if (pkgJson.location.images && pkgJson.location.images.length > 0) {
-              media = pkgJson.location.images[0];
-            }
-          }
-
-          return {
-            id: pkgJson.id,
-            name: pkgJson.name,
-            description: pkgJson.description,
-            price: price,
-            discountPrice: discountPrice,
-            discountPercent: discountPercent,
-            items,
-            media,
-            location,
-          };
-        });
-
-        const prescriptions = {
-          product: formattedProducts,
-          package: formattedPackages,
-        };
-
-        return { status: true, message: "Berhasil", data: prescriptions };
+        return { status: true, message: "Berhasil", data: filteredResult };
       }
       else {
         const productInclude = [
@@ -968,6 +1095,18 @@ module.exports = {
             attributes: ["id", "name", "cityId", "districtId"],
           },
         ];
+
+        // Filter product berdasarkan consultationCategoryId dari room
+        if (room.consultationCategoryId) {
+          productInclude.push({
+            model: masterConsultationCategory,
+            as: "consultationCategories",
+            where: { id: room.consultationCategoryId },
+            attributes: [],
+            through: { attributes: [] },
+            required: true,
+          });
+        }
 
         if (categoryName) {
           productInclude.push({
@@ -1019,6 +1158,18 @@ module.exports = {
             ],
           },
         ];
+
+        // Filter package berdasarkan consultationCategoryId dari room
+        if (room.consultationCategoryId) {
+          packageInclude.push({
+            model: masterConsultationCategory,
+            as: "consultationCategories",
+            where: { id: room.consultationCategoryId },
+            attributes: [],
+            through: { attributes: [] },
+            required: true,
+          });
+        }
 
         // Fetch products and packages with the same locationId
         const [productPrescription, packagePrescription] = await Promise.all([

@@ -160,6 +160,15 @@ router.delete(
 router.get("/cities", masterLocationController.getCities);
 router.get("/", masterLocationController.list);
 router.get("/city/:cityId", masterLocationController.getByCityId);
+
+// --- XENDIT PLATFORM ---
+router.post(
+  "/:locationId/create-xendit-account",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.createXenditAccount,
+);
+
 router.get("/:id", masterLocationController.detail);
 
 module.exports = router;

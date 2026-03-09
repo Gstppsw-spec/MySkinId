@@ -4,9 +4,9 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     const timestamp = new Date();
 
-    // Ambil produk yang isPrescriptionRequired = true
+    // Ambil semua produk
     const [products] = await queryInterface.sequelize.query(
-      `SELECT id, name FROM masterProduct WHERE isPrescriptionRequired = true`
+      `SELECT id, name FROM masterProduct`
     );
 
     // Ambil semua kategori konsultasi
@@ -18,14 +18,16 @@ module.exports = {
     const categoryMap = {};
     categories.forEach((c) => (categoryMap[c.name] = c.id));
 
-    // Contoh mapping produk ke kategori konsultasi
-    // Hanya produk resep yang dimasukkan
+    // Mapping produk ke kategori konsultasi (1 product bisa punya beberapa kategori)
     const pivotData = [
-      {
-        productName: "Retinol Cream",
-        consultationCategoryName: "Skincare Facial",
-      },
-      // Bisa tambah mapping lain sesuai kebutuhan
+      { productName: "Hydrating Serum", consultationCategoryName: "Skincare Facial" },
+      { productName: "Hydrating Serum", consultationCategoryName: "Consultation Only" },
+      { productName: "Vitamin C Toner", consultationCategoryName: "Skincare Facial" },
+      { productName: "Clay Face Mask", consultationCategoryName: "Skincare Facial" },
+      { productName: "Clay Face Mask", consultationCategoryName: "Body Treatment" },
+      { productName: "Retinol Cream", consultationCategoryName: "Skincare Facial" },
+      { productName: "Retinol Cream", consultationCategoryName: "Consultation Only" },
+      { productName: "Sunscreen SPF 50", consultationCategoryName: "Skincare Facial" },
     ];
 
     const bulkInsertData = pivotData
