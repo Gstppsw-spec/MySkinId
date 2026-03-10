@@ -33,10 +33,10 @@ module.exports = async function checkCustomerTransaction({
   ];
 
   switch (entityType) {
-    case "PRODUCT":
+    case "product":
       return transactionItem.findOne({
         where: {
-          itemType: "PRODUCT",
+          itemType: "product",
           itemId: entityId,
         },
         include: [
@@ -59,8 +59,8 @@ module.exports = async function checkCustomerTransaction({
         ],
       });
 
-    case "PACKAGE":
-    case "SERVICE":
+    case "package":
+    case "service":
       return transactionItem.findOne({
         where: {
           itemType: entityType,

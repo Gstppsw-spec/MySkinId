@@ -941,7 +941,7 @@ module.exports = {
             await transactionItem.create(
                 {
                     transactionId: newTransaction.id,
-                    itemType: "PREMIUM_BADGE",
+                    itemType: "premium_badge",
                     itemId: locationId,
                     itemName: `Premium Badge - ${location.name}`,
                     quantity: 1,
@@ -1271,17 +1271,17 @@ module.exports = {
                             }
 
                             // 🔹 Increment totalSold
-                            if (item.itemType === "PRODUCT") {
+                            if (item.itemType === "product") {
                                 await masterProduct.increment(
                                     { totalSold: item.quantity },
                                     { where: { id: item.itemId }, transaction: t }
                                 );
-                            } else if (item.itemType === "PACKAGE") {
+                            } else if (item.itemType === "package") {
                                 await masterPackage.increment(
                                     { totalSold: item.quantity },
                                     { where: { id: item.itemId }, transaction: t }
                                 );
-                            } else if (item.itemType === "PREMIUM_BADGE") {
+                            } else if (item.itemType === "premium_badge") {
                                 const now = new Date();
                                 const expiredAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
                                 await masterLocation.update(
@@ -1410,11 +1410,11 @@ module.exports = {
                 }, { transaction: t });
             }
 
-            await trx.update({ orderStatus: "SHIPPED" }, { transaction: t });
+            await trx.update({ orderStatus: "WAITING_PICKUP" }, { transaction: t });
 
             if (trx.shipping) {
                 await trx.shipping.update({
-                    shippingStatus: "SHIPPED",
+                    shippingStatus: "WAITING_PICKUP",
                     trackingNumber: finalTrackingNumber || trx.shipping.trackingNumber
                 }, { transaction: t });
             }
@@ -1422,7 +1422,7 @@ module.exports = {
             await t.commit();
             return {
                 status: true,
-                message: "Transaction marked as shipped",
+                message: "Transaction is waiting for pickup",
                 data: { trackingNumber: finalTrackingNumber }
             };
         } catch (error) {
@@ -1546,13 +1546,15 @@ module.exports = {
             // 1. Map Delivered
             if (["delivered", "received"].includes(normalizedStatus)) {
                 if (trx.orderStatus !== "DELIVERED" && trx.orderStatus !== "COMPLETED") {
+                    // Ensure shipping info is attached so _completeDelivery can update it
+                    trx.shipping = shipInfo;
                     await this._completeDelivery(trx);
                     console.log(`[Biteship Webhook] Transaction ${trx.transactionNumber} marked as DELIVERED`);
                 }
             }
             // 2. Map Shipped
-            else if (["shipped", "picked_up", "dropping_off", "on_hold", "allocated"].includes(normalizedStatus)) {
-                if (trx.orderStatus === "PAID" || trx.orderStatus === "CREATED") {
+            else if (["shipped", "picked_up", "picked", "dropping_off"].includes(normalizedStatus)) {
+                if (["PAID", "CREATED", "WAITING_PICKUP"].includes(trx.orderStatus)) {
                     await trx.update({ orderStatus: "SHIPPED" });
                     await shipInfo.update({ shippingStatus: "SHIPPED" });
                     console.log(`[Biteship Webhook] Transaction ${trx.transactionNumber} marked as SHIPPED`);
@@ -2390,7 +2392,7 @@ module.exports = {
                 const plainTrx = trx.get({ plain: true });
 
                 const items = await Promise.all(plainTrx.items.map(async (item) => {
-                    const entityType = item.itemType === "PRODUCT" ? "PRODUCT" : "PACKAGE";
+                    const entityType = item.itemType === "product" ? "product" : "package";
                     const entityId = item.itemId;
 
                     // Fetch user rating for this item
@@ -2551,7 +2553,12 @@ module.exports = {
 
             // Image 4 "Dalam Pengiriman"
             const { count, rows } = await transaction.findAndCountAll({
-                where: { orderStatus: "SHIPPED" },
+                where: {
+                    [Op.or]: [
+                        { orderStatus: "SHIPPED" },
+                        { orderStatus: "WAITING_PICKUP" }
+                    ]
+                },
                 include: [
                     {
                         model: order,
@@ -2686,65 +2693,33 @@ module.exports = {
 
             const plainTrx = trx.get({ plain: true });
 
-            // Timeline logic as seen in Image 5
+            // Timeline logic
             const timeline = [
                 {
-                    title: "Pesanan Dibuat",
+                    title: "Order placed",
                     description: "Kami telah menerima pesanan Anda",
                     time: plainTrx.createdAt,
                     completed: true
+                },
+                {
+                    title: "Waiting for courier",
+                    description: "Pesanan sudah dikemas dan menunggu kurir",
+                    time: ["WAITING_PICKUP", "SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus) ? plainTrx.updatedAt : null,
+                    completed: ["WAITING_PICKUP", "SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)
+                },
+                {
+                    title: "In transit",
+                    description: "Pesanan sedang dalam perjalanan ke lokasi Anda",
+                    time: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus) ? plainTrx.updatedAt : null,
+                    completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)
+                },
+                {
+                    title: "Order delivered",
+                    description: "Pesanan telah sampai di tujuan",
+                    time: ["DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus) ? plainTrx.updatedAt : null,
+                    completed: ["DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)
                 }
             ];
-
-            // Paid
-            if (plainTrx.order.paymentStatus === "PAID" || ["SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)) {
-                timeline.push({
-                    title: "Pembayaran Dikonfirmasi",
-                    description: "Pembayaran telah berhasil dikonfirmasi",
-                    time: plainTrx.order.updatedAt,
-                    completed: true
-                });
-            } else {
-                timeline.push({
-                    title: "Pembayaran Dikonfirmasi",
-                    description: "Pembayaran belum dikonfirmasi",
-                    time: null,
-                    completed: false
-                });
-            }
-
-            // Processed (Status PAID usually means it's being packed/prepared)
-            if (["PAID", "SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)) {
-                timeline.push({
-                    title: "Pesanan Diproses",
-                    description: "Produk skincare sedang disiapkan oleh apoteker kami",
-                    time: plainTrx.updatedAt,
-                    completed: true
-                });
-            } else {
-                timeline.push({
-                    title: "Pesanan Diproses",
-                    description: "Akan segera diproses",
-                    time: null,
-                    completed: false
-                });
-            }
-
-            // Ready to Ship
-            timeline.push({
-                title: "Siap Dikirim",
-                description: "Pesanan sudah dikemas dan menunggu kurir",
-                time: plainTrx.orderStatus === "SHIPPED" || ["DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus) ? plainTrx.updatedAt : null,
-                completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)
-            });
-
-            // In Shipping
-            timeline.push({
-                title: "Dalam Pengiriman",
-                description: "Pesanan sedang dalam perjalanan ke lokasi Anda",
-                time: plainTrx.orderStatus === "SHIPPED" ? plainTrx.updatedAt : null,
-                completed: ["SHIPPED", "DELIVERED", "COMPLETED"].includes(plainTrx.orderStatus)
-            });
 
             let trackingRealtime = null;
             if (plainTrx.shipping?.trackingNumber) {
