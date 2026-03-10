@@ -309,8 +309,8 @@ class masterCustomerService {
       const { email, phoneNumber, password, loginMethod, countryCode } = data;
       console.log(data);
 
-      // const otp = masterCustomerService.generateOtp();
-      const otp = "123456";
+      const otp = masterCustomerService.generateOtp();
+      // const otp = "123456";
 
       if (loginMethod == "phone") {
         if (!password)
