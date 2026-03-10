@@ -202,6 +202,120 @@ module.exports = {
         }
     },
 
+    async getRoomProgress(roomId) {
+        try {
+            if (!roomId) {
+                return { status: false, message: "Room ID tidak boleh kosong", data: null };
+            }
+
+            const room = await masterRoomConsultation.findByPk(roomId);
+            if (!room) {
+                return { status: false, message: "Room tidak ditemukan", data: null };
+            }
+
+            // Get all questions for this category
+            const questions = await masterQuestionnaire.findAll({
+                where: { isActive: true },
+                include: [
+                    {
+                        model: masterConsultationCategory,
+                        as: "consultationCategories",
+                        attributes: [],
+                        through: { attributes: [] },
+                        where: { id: room.consultationCategoryId },
+                    },
+                ],
+                attributes: ["id", "question", "options", "sortOrder", "isRequired"],
+                order: [["sortOrder", "ASC"]],
+            });
+
+            // Get current answers
+            const answers = await masterQuestionnaireAnswer.findAll({
+                where: { roomId },
+                attributes: ["questionnaireId", "answer"],
+            });
+
+            const answerMap = {};
+            answers.forEach(a => {
+                answerMap[a.questionnaireId] = a.answer;
+            });
+
+            const progress = questions.map((q, index) => ({
+                ...q.toJSON(),
+                isAnswered: !!answerMap[q.id],
+                currentAnswer: answerMap[q.id] || null,
+                index,
+            }));
+
+            const totalQuestions = progress.length;
+            const answeredCount = progress.filter(p => p.isAnswered).length;
+            const nextQuestionIndex = progress.findIndex(p => !p.isAnswered);
+
+            // Check if all REQUIRED questions are answered
+            const requiredMissing = progress.filter(p => p.isRequired && !p.isAnswered);
+            const isComplete = requiredMissing.length === 0;
+
+            return {
+                status: true,
+                message: "Success",
+                data: {
+                    roomId,
+                    roomStatus: room.status,
+                    totalQuestions,
+                    answeredCount,
+                    isComplete,
+                    nextQuestionIndex: nextQuestionIndex !== -1 ? nextQuestionIndex : null,
+                    questions: progress,
+                },
+            };
+        } catch (error) {
+            return { status: false, message: error.message, data: null };
+        }
+    },
+
+    async saveAnswer(roomId, questionnaireId, answer) {
+        try {
+            if (!roomId || !questionnaireId) {
+                return { status: false, message: "Room ID dan Questionnaire ID wajib diisi", data: null };
+            }
+
+            const room = await masterRoomConsultation.findByPk(roomId);
+            if (!room) {
+                return { status: false, message: "Room tidak ditemukan", data: null };
+            }
+
+            const questionnaire = await masterQuestionnaire.findByPk(questionnaireId);
+            if (!questionnaire) {
+                return { status: false, message: "Pertanyaan tidak ditemukan", data: null };
+            }
+
+            // Upsert answer
+            await masterQuestionnaireAnswer.upsert({
+                roomId,
+                questionnaireId,
+                answer: typeof answer === "object" ? JSON.stringify(answer) : answer,
+            });
+
+            // Check if this completes the required questionnaire
+            const progress = await this.getRoomProgress(roomId);
+            if (progress.data.isComplete && room.status === "waiting_questionnaire") {
+                room.status = "pending";
+                await room.save();
+            }
+
+            return {
+                status: true,
+                message: "Jawaban berhasil disimpan",
+                data: {
+                    isComplete: progress.data.isComplete,
+                    nextQuestionIndex: progress.data.nextQuestionIndex
+                }
+            };
+        } catch (error) {
+            return { status: false, message: error.message, data: null };
+        }
+    },
+
     async submitAnswers(roomId, answers) {
         try {
             if (!roomId) {
@@ -217,59 +331,38 @@ module.exports = {
                 return { status: false, message: "Jawaban tidak boleh kosong", data: null };
             }
 
-            // Validate required questions are answered
-            const categoryId = room.consultationCategoryId;
-            const requiredQuestions = await masterQuestionnaire.findAll({
-                where: { isActive: true, isRequired: true },
-                include: [
-                    {
-                        model: masterConsultationCategory,
-                        as: "consultationCategories",
-                        through: { attributes: [] },
-                        where: { id: categoryId },
-                        attributes: [],
-                    },
-                ],
-            });
-
-            const answeredIds = answers.map((a) => a.questionnaireId);
-            const missingRequired = requiredQuestions.filter(
-                (q) => !answeredIds.includes(q.id),
-            );
-
-            if (missingRequired.length > 0) {
-                const missingQuestions = missingRequired.map((q) => q.question).join(", ");
-                return {
-                    status: false,
-                    message: `Pertanyaan wajib belum dijawab: ${missingQuestions}`,
-                    data: null,
-                };
-            }
-
-            // Remove old answers for this room (if re-submitting)
-            await masterQuestionnaireAnswer.destroy({ where: { roomId } });
-
-            // Bulk create answers
+            // Save all answers
             const answerData = answers.map((a) => ({
                 roomId,
                 questionnaireId: a.questionnaireId,
                 answer: typeof a.answer === "object" ? JSON.stringify(a.answer) : a.answer,
             }));
 
-            await masterQuestionnaireAnswer.bulkCreate(answerData);
+            for (const data of answerData) {
+                await masterQuestionnaireAnswer.upsert(data);
+            }
 
-            const savedAnswers = await masterQuestionnaireAnswer.findAll({
-                where: { roomId },
-                include: [
-                    {
-                        model: masterQuestionnaire,
-                        as: "questionnaire",
-                        attributes: ["id", "question"],
-                    },
-                ],
-            });
+            // Check progress and update status
+            const progress = await this.getRoomProgress(roomId);
+            if (progress.data.isComplete && room.status === "waiting_questionnaire") {
+                room.status = "pending";
+                await room.save();
+            }
 
-            return { status: true, message: "Jawaban berhasil disimpan", data: savedAnswers };
+            if (!progress.data.isComplete) {
+                const missingQuestions = progress.data.questions
+                    .filter(q => q.isRequired && !q.isAnswered)
+                    .map(q => q.question)
+                    .join(", ");
+
+                return {
+                    status: false,
+                    message: `Pertanyaan wajib belum dijawab: ${missingQuestions}`,
+                    data: progress.data,
+                };
+            }
+
+            return { status: true, message: "Jawaban berhasil disimpan", data: progress.data };
         } catch (error) {
             return { status: false, message: error.message, data: null };
         }

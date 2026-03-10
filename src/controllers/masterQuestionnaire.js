@@ -82,6 +82,31 @@ module.exports = {
         }
     },
 
+    async saveAnswer(req, res) {
+        try {
+            const { roomId } = req.params;
+            const { questionnaireId, answer } = req.body;
+            const result = await questionnaireService.saveAnswer(roomId, questionnaireId, answer);
+            return result.status
+                ? response.success(res, result.message, result.data)
+                : response.error(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
+    async getRoomProgress(req, res) {
+        try {
+            const { roomId } = req.params;
+            const result = await questionnaireService.getRoomProgress(roomId);
+            return result.status
+                ? response.success(res, result.message, result.data)
+                : response.error(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
     async getAnswersByRoom(req, res) {
         try {
             const { roomId } = req.params;

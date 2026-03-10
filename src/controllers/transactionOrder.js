@@ -90,6 +90,17 @@ module.exports = {
         }
     },
 
+    async biteshipCallback(req, res) {
+        try {
+            const result = await transactionOrder.handleBiteshipCallback(req.body);
+            if (!result.status)
+                return response.error(res, result.message);
+            return response.success(res, result.message);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
     async shipTransaction(req, res) {
         try {
             const adminId = req.user.id;
@@ -358,7 +369,9 @@ module.exports = {
     async getOrderDetail(req, res) {
         try {
             const { id } = req.params;
-            const result = await transactionOrder.getOrderDetail(id);
+            const userId = req.user.id;
+            const userRole = req.user.role;
+            const result = await transactionOrder.getOrderDetail(id, userId, userRole);
             if (!result.status)
                 return response.error(res, result.message);
             return response.success(res, result.message, result.data);
@@ -430,6 +443,21 @@ module.exports = {
             const result = await xenditPlatformService.retryFailedTransfer(transferId);
             if (!result.status)
                 return response.error(res, result.message);
+            return response.success(res, result.message, result.data);
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+    async getOutletStats(req, res) {
+        try {
+            const adminId = req.user.id;
+            const { startDate, endDate } = req.query;
+
+            const result = await transactionOrder.getOutletStats(adminId, { startDate, endDate });
+
+            if (!result.status)
+                return response.error(res, result.message);
+
             return response.success(res, result.message, result.data);
         } catch (error) {
             return response.serverError(res, error);

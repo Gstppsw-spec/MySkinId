@@ -5,6 +5,7 @@ const {
     transactionItem,
     transactionShipping,
     orderPayment,
+    platformTransfer,
     customerCart,
     masterProduct,
     masterPackage,
@@ -323,7 +324,7 @@ module.exports = {
                     unitPrice: unitPrice,
                     discountAmount: discountAmount * item.qty,
                     totalPrice: totalPrice,
-                    unitWeight: unitWeight,
+                    weight: unitWeight,
                     totalWeight: totalWeight,
                     isShippingRequired: type === "product",
                     locationId: locationId,
@@ -637,7 +638,7 @@ module.exports = {
                     unitPrice: unitPrice,
                     discountAmount: discountAmount * item.qty,
                     totalPrice: totalPrice,
-                    unitWeight: unitWeight,
+                    weight: unitWeight,
                     totalWeight: totalWeight,
                     isShippingRequired: item.type === "product",
                     locationId: locationId,
@@ -1394,7 +1395,8 @@ module.exports = {
                     items: items.map(item => ({
                         name: item.itemName,
                         value: parseFloat(item.totalPrice),
-                        weight: item.totalWeight || 0,
+                        weight: item.weight || 0,
+                        totalWeight: item.totalWeight || 0,
                         quantity: item.quantity
                     }))
                 };
@@ -1429,9 +1431,7 @@ module.exports = {
         }
     },
 
-
     async updateTransactionToDelivered(transactionId, adminId) {
-        const t = await sequelize.transaction();
         try {
             // 1. Get Admin's Location
             const userLocation = await relationshipUserLocation.findOne({
@@ -1466,15 +1466,32 @@ module.exports = {
                 throw new Error(`Cannot deliver transaction with status ${trx.orderStatus}`);
             }
 
-            await trx.update({ orderStatus: "DELIVERED" }, { transaction: t });
+            const result = await this._completeDelivery(trx);
+            if (!result.status) throw new Error(result.message);
 
+            return { status: true, message: "Transaction marked as delivered" };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    /**
+     * Internal method to complete the delivery process:
+     * 1. Update order status to DELIVERED
+     * 2. Update shipping status to DELIVERED (if exists)
+     * 3. Trigger Xendit Platform transfer to merchant
+     * @param {Object} trx - Sequelize model instance of transaction
+     */
+    async _completeDelivery(trx) {
+        const t = await sequelize.transaction();
+        try {
+            await trx.update({ orderStatus: "DELIVERED" }, { transaction: t });
             if (trx.shipping) {
                 await trx.shipping.update({ shippingStatus: "DELIVERED" }, { transaction: t });
             }
-
             await t.commit();
 
-            // 🔹 Xendit Platform: Transfer product amount to merchant after DELIVERED
+            // 🔹 Xendit Platform Transfer (Non-blocking)
             try {
                 const xenditPlatformService = require("./xenditPlatform.service");
                 const productItems = await transactionItem.findAll({
@@ -1497,10 +1514,57 @@ module.exports = {
             } catch (transferError) {
                 console.error("[Deliver] Platform transfer error (non-blocking):", transferError.message);
             }
-
-            return { status: true, message: "Transaction marked as delivered" };
+            return { status: true };
         } catch (error) {
             await t.rollback();
+            throw error;
+        }
+    },
+
+    async handleBiteshipCallback(payload) {
+        try {
+            const { courier_waybill_id, courier_tracking_id, status } = payload;
+            const trackingNumber = courier_waybill_id || courier_tracking_id;
+
+            if (!trackingNumber) {
+                // Return success for Biteship webhook installation/validation
+                return { status: true, message: "Biteship webhook validation: No tracking number found" };
+            }
+
+            const shipInfo = await transactionShipping.findOne({
+                where: { trackingNumber },
+                include: [{ model: transaction, as: "transaction" }]
+            });
+
+            if (!shipInfo || !shipInfo.transaction) {
+                return { status: false, message: `Transaction for tracking number ${trackingNumber} not found` };
+            }
+
+            const trx = shipInfo.transaction;
+            const normalizedStatus = (status || "").toLowerCase();
+
+            // 1. Map Delivered
+            if (["delivered", "received"].includes(normalizedStatus)) {
+                if (trx.orderStatus !== "DELIVERED" && trx.orderStatus !== "COMPLETED") {
+                    await this._completeDelivery(trx);
+                    console.log(`[Biteship Webhook] Transaction ${trx.transactionNumber} marked as DELIVERED`);
+                }
+            }
+            // 2. Map Shipped
+            else if (["shipped", "picked_up", "dropping_off", "on_hold", "allocated"].includes(normalizedStatus)) {
+                if (trx.orderStatus === "PAID" || trx.orderStatus === "CREATED") {
+                    await trx.update({ orderStatus: "SHIPPED" });
+                    await shipInfo.update({ shippingStatus: "SHIPPED" });
+                    console.log(`[Biteship Webhook] Transaction ${trx.transactionNumber} marked as SHIPPED`);
+                }
+            }
+
+            // Always save/update the response for audit
+            await shipInfo.update({ shippingApiResponse: payload });
+
+            return { status: true, message: `Biteship status ${status} processed successfully` };
+        } catch (error) {
+            console.error("[Biteship Webhook Error]:", error.message);
             return { status: false, message: error.message };
         }
     },
@@ -2694,19 +2758,42 @@ module.exports = {
                 }
             }
 
-            const trackingTransaction = {
-                ...plainTrx,
+            const simplifiedTransaction = {
+                id: plainTrx.id,
+                transactionNumber: plainTrx.transactionNumber,
+                orderStatus: plainTrx.orderStatus,
+                paymentStatus: plainTrx.order?.paymentStatus || "UNPAID",
+                createdAt: plainTrx.createdAt,
                 customerPhone: plainTrx.order?.customer?.phoneNumber || null,
                 outletPhone: plainTrx.location?.phone || null,
+                location: {
+                    id: plainTrx.location?.id,
+                    name: plainTrx.location?.name,
+                },
+                shipping: {
+                    receiverName: plainTrx.shipping?.receiverName,
+                    receiverPhone: plainTrx.shipping?.receiverPhone,
+                    address: plainTrx.shipping?.address,
+                    courierCode: plainTrx.shipping?.courierCode,
+                    courierService: plainTrx.shipping?.courierService,
+                    trackingNumber: plainTrx.shipping?.trackingNumber,
+                },
+                items: (plainTrx.items || []).map(item => ({
+                    id: item.id,
+                    itemName: item.itemName,
+                    itemType: item.itemType,
+                    quantity: item.quantity,
+                    unitPrice: parseFloat(item.unitPrice),
+                    totalPrice: parseFloat(item.totalPrice),
+                    image: item.product?.images?.[0]?.imageUrl || null
+                }))
             };
-            if (trackingTransaction.order?.customer) delete trackingTransaction.order.customer.phoneNumber;
-            if (trackingTransaction.location) delete trackingTransaction.location.phone;
 
             return {
                 status: true,
                 message: "Order tracking detail fetched successfully",
                 data: {
-                    transaction: trackingTransaction,
+                    transaction: simplifiedTransaction,
                     timeline,
                     trackingRealtime
                 }
@@ -2793,10 +2880,21 @@ module.exports = {
         }
     },
 
-    async getOrderDetail(orderId) {
+    async getOrderDetail(orderId, userId, userRole) {
         try {
+            let where;
+            if (!userRole) {
+                where = {
+                    id: orderId,
+                    customerId: userId,
+                }
+            } else {
+                where = {
+                    id: orderId,
+                }
+            }
             const orderData = await order.findOne({
-                where: { id: orderId },
+                where,
                 include: [
                     {
                         model: masterCustomer,
@@ -2961,6 +3059,105 @@ module.exports = {
                 status: true,
                 message: "Payment detail fetched successfully",
                 data: paymentDetail
+            };
+        } catch (error) {
+            return { status: false, message: error.message };
+        }
+    },
+
+    async getOutletStats(adminId, { startDate, endDate }) {
+        try {
+            // 1. Get Admin's Location
+            const userLocation = await relationshipUserLocation.findOne({
+                where: { userId: adminId, isactive: true },
+            });
+
+            if (!userLocation) {
+                throw new Error("Admin not assigned to any location");
+            }
+
+            const locationId = userLocation.locationId;
+            const whereClause = { locationId };
+
+            if (startDate && endDate) {
+                whereClause.createdAt = {
+                    [Op.between]: [new Date(startDate), new Date(endDate)]
+                };
+            }
+
+            // A. Total Transaksi
+            const totalTransactions = await transaction.count({ where: whereClause });
+
+            // B. Total Pendapatan (Status SUCCESS in platformTransfers)
+            const incomeWhere = {
+                locationId,
+                status: "SUCCESS"
+            };
+            if (startDate && endDate) {
+                incomeWhere.createdAt = {
+                    [Op.between]: [new Date(startDate), new Date(endDate)]
+                };
+            }
+            const totalRevenue = await platformTransfer.sum('amount', { where: incomeWhere }) || 0;
+
+            // C. Transaksi Sukses (orderStatus = 'COMPLETED')
+            const successTransactions = await transaction.count({
+                where: { ...whereClause, orderStatus: "COMPLETED" }
+            });
+
+            // D. Transaksi Pending (PAID, SHIPPED, DELIVERED)
+            const pendingTransactions = await transaction.count({
+                where: {
+                    ...whereClause,
+                    orderStatus: { [Op.in]: ["PAID", "SHIPPED", "DELIVERED"] }
+                }
+            });
+
+            // E. Treatment Package
+            const voucherWhere = {
+                status: ["BOOKED", "REDEEM"]
+            };
+            // To filter by location and date, we need to include transactionItem -> transaction
+            const vouchers = await customerVoucher.findAll({
+                include: [
+                    {
+                        model: transactionItem,
+                        as: "transactionItem",
+                        where: { locationId },
+                        include: [
+                            {
+                                model: transaction,
+                                as: "transaction",
+                                where: (startDate && endDate) ? {
+                                    createdAt: { [Op.between]: [new Date(startDate), new Date(endDate)] }
+                                } : {}
+                            }
+                        ]
+                    }
+                ],
+                where: {
+                    status: { [Op.in]: ["BOOKED", "REDEEM"] }
+                }
+            });
+
+            const totalBook = vouchers.filter(v => v.status === "BOOKED").length;
+            const totalRedeem = vouchers.filter(v => v.status === "REDEEM").length;
+            const totalPaid = vouchers.length;
+
+            return {
+                status: true,
+                message: "Outlet statistics fetched successfully",
+                data: {
+                    totalTransactions,
+                    totalRevenue: parseFloat(totalRevenue),
+                    successTransactions,
+                    pendingTransactions,
+                    treatmentPackage: {
+                        totalBook,
+                        totalRedeem,
+                        totalPaid
+                    }
+                }
             };
         } catch (error) {
             return { status: false, message: error.message };

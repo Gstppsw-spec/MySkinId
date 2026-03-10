@@ -286,6 +286,13 @@ class MasterLocationService {
 
       const locations = await masterLocation.findAll({
         where: { cityId },
+        include: [
+          {
+            model: masterLocationImage,
+            as: "images",
+            attributes: ["id", "imageUrl"],
+          },
+        ],
         order: [["createdAt", "DESC"]],
         attributes: ["id", "name"],
       });
@@ -476,7 +483,13 @@ class MasterLocationService {
     }
   }
 
-  async listLocationByCustomer(customerId = null, latt = null, long = null) {
+  async listLocationByCustomer(
+    customerId = null,
+    latt = null,
+    long = null,
+    name = null,
+    radius = null
+  ) {
     try {
       const include = [{ model: masterLocationImage, as: "images" }];
 
@@ -489,7 +502,13 @@ class MasterLocationService {
         });
       }
 
+      const where = { isactive: true };
+      if (name) {
+        where.name = { [Op.like]: `%${name}%` };
+      }
+
       const locations = await masterLocation.findAll({
+        where,
         include,
         order: [["createdAt", "DESC"]],
       });
@@ -534,6 +553,15 @@ class MasterLocationService {
           favorites: undefined,
         };
       });
+
+      if (radius && latt && long) {
+        const radiusInMeters = parseFloat(radius) * 1000;
+        return {
+          status: true,
+          message: "Location list",
+          data: result.filter((loc) => loc.distance <= radiusInMeters),
+        };
+      }
 
       return { status: true, message: "Location list", data: result };
     } catch (error) {
@@ -1004,11 +1032,14 @@ class MasterLocationService {
   }
 
   // --- SUB DISTRICT CRUD ---
-  async listSubDistrict(districtId, name) {
+  async listSubDistrict(districtId, name, cityId) {
     try {
       const where = {};
       if (districtId) where.districtId = districtId;
       if (name) where.name = { [Op.like]: `%${name}%` };
+
+      const districtWhere = {};
+      if (cityId) districtWhere.cityId = cityId;
 
       const subDistricts = await masterSubDistrict.findAll({
         where,
@@ -1016,6 +1047,8 @@ class MasterLocationService {
           {
             model: masterDistrict,
             as: "district",
+            where: Object.keys(districtWhere).length > 0 ? districtWhere : undefined,
+            required: Object.keys(districtWhere).length > 0,
             include: [{ model: masterCity, as: "city" }],
           },
         ],
@@ -1031,13 +1064,18 @@ class MasterLocationService {
     }
   }
 
-  async detailSubDistrict(id) {
+  async detailSubDistrict(id, cityId) {
     try {
+      const districtWhere = {};
+      if (cityId) districtWhere.cityId = cityId;
+
       const subDistrict = await masterSubDistrict.findByPk(id, {
         include: [
           {
             model: masterDistrict,
             as: "district",
+            where: Object.keys(districtWhere).length > 0 ? districtWhere : undefined,
+            required: Object.keys(districtWhere).length > 0,
             include: [{ model: masterCity, as: "city" }],
           },
         ],

@@ -16,6 +16,8 @@ router.delete("/questions/:id", questionnaire.delete);
 
 // Answers
 router.post("/answers/:roomId", questionnaire.submitAnswers);
+router.post("/save-answer/:roomId", questionnaire.saveAnswer);
+router.get("/room/:roomId/progress", questionnaire.getRoomProgress);
 router.get("/answers/:roomId", questionnaire.getAnswersByRoom);
 
 module.exports = router;

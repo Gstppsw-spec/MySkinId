@@ -38,7 +38,7 @@ module.exports = {
               {
                 model: masterLocation,
                 as: "location",
-                attributes: ["id", "name", "address", "cityId", "districtId"],
+                attributes: ["id", "name", "address", "cityId", "districtId", "postalCode", "biteshipAreaId"],
               },
             ],
           },

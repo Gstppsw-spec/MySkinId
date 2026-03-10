@@ -164,8 +164,15 @@ module.exports = {
 
   async getAllPrescriptionByOutlet(req, res) {
     const { id } = req.params;
-    const { categoryName } = req.query;
-    const result = await consultation.getAllPrescriptionByOutlet(id, categoryName);
+    const { search, productCategoryId, packageCategoryId } = req.query;
+
+    const filters = {
+      search,
+      productCategoryId,
+      packageCategoryId,
+    };
+
+    const result = await consultation.getAllPrescriptionByOutlet(id, filters);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

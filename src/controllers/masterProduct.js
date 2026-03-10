@@ -15,6 +15,7 @@ module.exports = {
         sort,
         customerId,
         isCustomer,
+        cityId
       } = req.query;
 
       const categoryIdsArray = categoryIds
@@ -36,6 +37,7 @@ module.exports = {
         sort: sort || undefined,
         customerId: customerId || undefined,
         isCustomer: isCustomer,
+        cityId: cityId || undefined,
       });
 
       if (!result.status) {

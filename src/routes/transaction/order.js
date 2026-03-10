@@ -5,6 +5,7 @@ const { verifyToken } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 router.post("/callback/xendit", transactionOrder.xenditCallback);
+router.post("/callback/biteship", transactionOrder.biteshipCallback);
 
 router.use(verifyToken);
 
@@ -20,6 +21,7 @@ router.post("/add-payment-method", allowRoles("SUPER_ADMIN"), transactionOrder.a
 router.post("/ship", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.shipTransaction);
 router.post("/deliver", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.deliverTransaction);
 router.get("/outlet/transactions", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletTransactions);
+router.get("/outlet/stats", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletStats);
 router.get("/export", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.exportTransactions);
 
 // Customer Transaction Views

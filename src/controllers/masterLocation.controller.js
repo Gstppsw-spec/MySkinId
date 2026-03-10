@@ -120,12 +120,14 @@ class masterLocationController {
 
   async listLocationByCustomer(req, res) {
     const { customerId } = req.params;
-    const { latt, long } = req.query;
+    const { latt, long, name, radius } = req.query;
 
     const location = await masterLocationService.listLocationByCustomer(
       customerId,
       latt,
-      long
+      long,
+      name,
+      radius
     );
 
     return location.status
@@ -294,8 +296,8 @@ class masterLocationController {
 
   // --- SUB DISTRICT ---
   async listSubDistrict(req, res) {
-    const { districtId, name } = req.query;
-    const result = await masterLocationService.listSubDistrict(districtId, name);
+    const { districtId, name, cityId } = req.query;
+    const result = await masterLocationService.listSubDistrict(districtId, name, cityId);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
@@ -303,7 +305,8 @@ class masterLocationController {
 
   async detailSubDistrict(req, res) {
     const { id } = req.params;
-    const result = await masterLocationService.detailSubDistrict(id);
+    const { cityId } = req.query;
+    const result = await masterLocationService.detailSubDistrict(id, cityId);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

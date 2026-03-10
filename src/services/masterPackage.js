@@ -84,6 +84,7 @@ module.exports = {
         {
           model: masterLocation,
           as: "location",
+          where: cityId ? { cityId } : undefined,
           include: [
             {
               model: masterLocationImage,
@@ -102,12 +103,15 @@ module.exports = {
             "districtId",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
-          required: !!(userLat && userLng),
+          required: !!(userLat && userLng || cityId),
           ...(distanceLiteral && maxDistance
             ? {
-              where: Sequelize.where(distanceLiteral, {
-                [Op.lte]: maxDistance,
-              }),
+              where: {
+                ...((cityId ? { cityId } : {})),
+                [Op.and]: Sequelize.where(distanceLiteral, {
+                  [Op.lte]: maxDistance,
+                }),
+              },
             }
             : {}),
         },

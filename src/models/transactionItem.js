@@ -67,6 +67,16 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.DECIMAL(18, 2),
                 allowNull: false,
             },
+            weight: {
+                type: DataTypes.INTEGER,
+                allowNull: false,
+                defaultValue: 0,
+            },
+            totalWeight: {
+                type: DataTypes.INTEGER,
+                allowNull: false,
+                defaultValue: 0,
+            },
             isShippingRequired: {
                 type: DataTypes.BOOLEAN,
                 allowNull: false,

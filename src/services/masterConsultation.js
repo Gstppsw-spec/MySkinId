@@ -138,6 +138,35 @@ module.exports = {
         };
       }
 
+      const existingActiveRoom = await masterRoomConsultation.findOne({
+        where: {
+          customerId,
+          consultationCategoryId,
+          status: { [Op.ne]: "closed" },
+        }
+      });
+
+      if (existingActiveRoom) {
+        if (existingActiveRoom.status === "waiting_questionnaire") {
+          // Update basic info if it changed
+          existingActiveRoom.locationId = locationId || existingActiveRoom.locationId;
+          existingActiveRoom.latitude = latitude || existingActiveRoom.latitude;
+          existingActiveRoom.longitude = longitude || existingActiveRoom.longitude;
+          existingActiveRoom.productId = productId || existingActiveRoom.productId;
+          await existingActiveRoom.save();
+
+          // If answers are provided, process them
+          if (answers && Array.isArray(answers) && answers.length > 0) {
+            await this._processQuestionnaireAnswers(existingActiveRoom, consultationCategoryId, answers);
+          }
+
+          return { status: true, message: "Melanjutkan kuesioner yang ada", data: existingActiveRoom };
+        } else {
+          // If it's already pending or open, just return the existing room
+          return { status: true, message: "Anda sudah memiliki konsultasi aktif di kategori ini", data: existingActiveRoom };
+        }
+      }
+
       if (productId) {
         const product = await masterProduct.findByPk(productId);
         if (!product) {
@@ -147,11 +176,12 @@ module.exports = {
 
       const roomCode = `ROOM-${nanoid(8).toUpperCase()}`;
 
+      // Default status is waiting_questionnaire
       const room = await masterRoomConsultation.create({
         customerId,
         roomCode,
         doctorId: null,
-        status: "pending",
+        status: "waiting_questionnaire",
         consultationCategoryId,
         expiredAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         locationId,
@@ -162,48 +192,51 @@ module.exports = {
 
       // Save questionnaire answers if provided
       if (answers && Array.isArray(answers) && answers.length > 0) {
-        // Validate required questions
-        const requiredQuestions = await masterQuestionnaire.findAll({
-          where: { isActive: true, isRequired: true },
-          include: [
-            {
-              model: masterConsultationCategory,
-              as: "consultationCategories",
-              through: { attributes: [] },
-              where: { id: consultationCategoryId },
-              attributes: [],
-            },
-          ],
-        });
-
-        const answeredIds = answers.map((a) => a.questionnaireId);
-        const missingRequired = requiredQuestions.filter(
-          (q) => !answeredIds.includes(q.id),
-        );
-
-        if (missingRequired.length > 0) {
-          // Rollback: delete the room
-          await room.destroy();
-          const missingQuestions = missingRequired.map((q) => q.question).join(", ");
-          return {
-            status: false,
-            message: `Pertanyaan wajib belum dijawab: ${missingQuestions}`,
-            data: null,
-          };
-        }
-
-        const answerData = answers.map((a) => ({
-          roomId: room.id,
-          questionnaireId: a.questionnaireId,
-          answer: typeof a.answer === "object" ? JSON.stringify(a.answer) : a.answer,
-        }));
-
-        await masterQuestionnaireAnswer.bulkCreate(answerData);
+        await this._processQuestionnaireAnswers(room, consultationCategoryId, answers);
       }
 
       return { status: true, message: "Success", data: room };
     } catch (error) {
       return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async _processQuestionnaireAnswers(room, consultationCategoryId, answers) {
+    // Validate required questions
+    const requiredQuestions = await masterQuestionnaire.findAll({
+      where: { isActive: true, isRequired: true },
+      include: [
+        {
+          model: masterConsultationCategory,
+          as: "consultationCategories",
+          through: { attributes: [] },
+          where: { id: consultationCategoryId },
+          attributes: [],
+        },
+      ],
+    });
+
+    const answeredIds = answers.map((a) => a.questionnaireId);
+    const missingRequired = requiredQuestions.filter(
+      (q) => !answeredIds.includes(q.id),
+    );
+
+    // Save answers (potentially redundant if already exists, but simple for now)
+    // Ideally we'd only insert new ones or use upsert
+    const answerData = answers.map((a) => ({
+      roomId: room.id,
+      questionnaireId: a.questionnaireId,
+      answer: typeof a.answer === "object" ? JSON.stringify(a.answer) : a.answer,
+    }));
+
+    for (const data of answerData) {
+      await masterQuestionnaireAnswer.upsert(data);
+    }
+
+    // If all required are answered, set status to pending
+    if (missingRequired.length === 0) {
+      room.status = "pending";
+      await room.save();
     }
   },
 
@@ -272,7 +305,14 @@ module.exports = {
           {
             model: masterProduct,
             as: 'product',
-            attributes: ['id', 'name']
+            include: [
+              {
+                model: masterProductImage,
+                as: 'images',
+                attributes: ['id', 'imageUrl']
+              }
+            ],
+            attributes: ['id', 'name', 'price', 'discountPercent', 'description']
           },
           {
             model: masterLocation,
@@ -807,8 +847,14 @@ module.exports = {
     }
   },
 
-  async getAllPrescriptionByOutlet(roomId, categoryName) {
+  async getAllPrescriptionByOutlet(roomId, filters = {}) {
     try {
+      const {
+        search,
+        productCategoryId,
+        packageCategoryId,
+      } = filters;
+
       // Get the room to extract locationId or latitude/longitude
       const room = await masterRoomConsultation.findOne({
         where: { id: roomId },
@@ -888,13 +934,15 @@ module.exports = {
           });
         }
 
-        if (categoryName) {
+        if (productCategoryId) {
+          const productCategoryIds = Array.isArray(productCategoryId) ? productCategoryId : [productCategoryId];
           productInclude.push({
             model: masterProductCategory,
             as: "categories",
-            where: { name: { [Op.like]: `%${categoryName}%` } },
+            where: { id: { [Op.in]: productCategoryIds } },
             attributes: [],
             through: { attributes: [] },
+            required: true,
           });
         }
 
@@ -915,19 +963,19 @@ module.exports = {
             model: masterPackageItems,
             as: "items",
             attributes: ["id", "qty"],
-            required: categoryName ? true : false,
+            required: !!packageCategoryId,
             include: [
               {
                 model: masterService,
                 as: "service",
                 attributes: ["id", "name", "description", "duration", "price"],
-                required: categoryName ? true : false,
-                include: categoryName
+                required: !!packageCategoryId,
+                include: packageCategoryId
                   ? [
                     {
                       model: masterSubCategoryService,
                       as: "categories",
-                      where: { name: { [Op.like]: `%${categoryName}%` } },
+                      where: { id: { [Op.in]: Array.isArray(packageCategoryId) ? packageCategoryId : [packageCategoryId] } },
                       attributes: [],
                       through: { attributes: [] },
                       required: true,
@@ -951,11 +999,19 @@ module.exports = {
           });
         }
 
+        const productWhere = { locationId: locationIds };
+        if (search) {
+          productWhere.name = { [Op.like]: `%${search}%` };
+        }
+
+        const packageWhere = { locationId: locationIds };
+        if (search) {
+          packageWhere.name = { [Op.like]: `%${search}%` };
+        }
+
         const [productPrescription, packagePrescription] = await Promise.all([
           masterProduct.findAll({
-            where: {
-              locationId: locationIds,
-            },
+            where: productWhere,
             attributes: [
               "id",
               "name",
@@ -968,9 +1024,7 @@ module.exports = {
             include: productInclude,
           }),
           masterPackage.findAll({
-            where: {
-              locationId: locationIds,
-            },
+            where: packageWhere,
             attributes: [
               "id",
               "name",
@@ -1108,13 +1162,15 @@ module.exports = {
           });
         }
 
-        if (categoryName) {
+        if (productCategoryId) {
+          const productCategoryIds = Array.isArray(productCategoryId) ? productCategoryId : [productCategoryId];
           productInclude.push({
             model: masterProductCategory,
             as: "categories",
-            where: { name: { [Op.like]: `%${categoryName}%` } },
+            where: { id: { [Op.in]: productCategoryIds } },
             attributes: [],
             through: { attributes: [] },
+            required: true,
           });
         }
 
@@ -1135,19 +1191,19 @@ module.exports = {
             model: masterPackageItems,
             as: "items",
             attributes: ["id", "qty"],
-            required: categoryName ? true : false,
+            required: !!packageCategoryId,
             include: [
               {
                 model: masterService,
                 as: "service",
                 attributes: ["id", "name", "description", "duration", "price"],
-                required: categoryName ? true : false,
-                include: categoryName
+                required: !!packageCategoryId,
+                include: packageCategoryId
                   ? [
                     {
                       model: masterSubCategoryService,
                       as: "categories",
-                      where: { name: { [Op.like]: `%${categoryName}%` } },
+                      where: { id: { [Op.in]: Array.isArray(packageCategoryId) ? packageCategoryId : [packageCategoryId] } },
                       attributes: [],
                       through: { attributes: [] },
                       required: true,
@@ -1171,12 +1227,20 @@ module.exports = {
           });
         }
 
+        const productWhere = { locationId: room.locationId };
+        if (search) {
+          productWhere.name = { [Op.like]: `%${search}%` };
+        }
+
+        const packageWhere = { locationId: room.locationId };
+        if (search) {
+          packageWhere.name = { [Op.like]: `%${search}%` };
+        }
+
         // Fetch products and packages with the same locationId
         const [productPrescription, packagePrescription] = await Promise.all([
           masterProduct.findAll({
-            where: {
-              locationId: room.locationId,
-            },
+            where: productWhere,
             attributes: [
               "id",
               "name",
@@ -1189,9 +1253,7 @@ module.exports = {
             include: productInclude,
           }),
           masterPackage.findAll({
-            where: {
-              locationId: room.locationId,
-            },
+            where: packageWhere,
             attributes: [
               "id",
               "name",
