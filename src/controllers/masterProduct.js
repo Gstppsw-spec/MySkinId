@@ -15,13 +15,20 @@ module.exports = {
         sort,
         customerId,
         isCustomer,
-        cityId
+        cityId,
+        consultationCategoryIds
       } = req.query;
 
       const categoryIdsArray = categoryIds
         ? Array.isArray(categoryIds)
           ? categoryIds
-          : [categoryIds]
+          : categoryIds.toString().split(",")
+        : undefined;
+
+      const consultationCategoryIdsArray = consultationCategoryIds
+        ? Array.isArray(consultationCategoryIds)
+          ? consultationCategoryIds
+          : consultationCategoryIds.toString().split(",")
         : undefined;
 
       console.log(categoryIdsArray);
@@ -38,6 +45,7 @@ module.exports = {
         customerId: customerId || undefined,
         isCustomer: isCustomer,
         cityId: cityId || undefined,
+        consultationCategoryIds: consultationCategoryIdsArray,
       });
 
       if (!result.status) {

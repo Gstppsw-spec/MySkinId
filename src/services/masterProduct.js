@@ -26,7 +26,8 @@ module.exports = {
         sort,
         customerId,
         isCustomer,
-        cityId
+        cityId,
+        consultationCategoryIds
       } = filters;
 
       const where = {};
@@ -72,6 +73,8 @@ module.exports = {
           model: masterConsultationCategory,
           as: "consultationCategories",
           through: { attributes: [] },
+          where: consultationCategoryIds ? { id: { [Op.in]: consultationCategoryIds } } : undefined,
+          required: !!consultationCategoryIds,
           attributes: ["id", "name", "description"],
         },
         {
@@ -88,7 +91,18 @@ module.exports = {
         {
           model: masterLocation,
           as: "location",
-          where: cityId ? { cityId } : undefined,
+          where: (cityId || (userLat && userLng && maxDistance))
+            ? {
+              ...(cityId ? { cityId } : {}),
+              ...(distanceLiteral && maxDistance
+                ? {
+                  [Op.and]: Sequelize.where(distanceLiteral, {
+                    [Op.lte]: maxDistance,
+                  }),
+                }
+                : {}),
+            }
+            : undefined,
           attributes: [
             "id",
             "name",
@@ -99,16 +113,6 @@ module.exports = {
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
           required: !!(userLat && userLng || cityId),
-          ...(distanceLiteral && maxDistance
-            ? {
-              where: {
-                ...((cityId ? { cityId } : {})),
-                [Op.and]: Sequelize.where(distanceLiteral, {
-                  [Op.lte]: maxDistance,
-                }),
-              },
-            }
-            : {}),
         },
       ];
 

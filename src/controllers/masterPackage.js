@@ -16,6 +16,7 @@ module.exports = {
         customerId,
         isCustomer,
         cityId,
+        consultationCategoryIds,
       } = req.query;
 
       const categoryIdsArray = categoryIds
@@ -36,6 +37,7 @@ module.exports = {
         isCustomer: isCustomer,
         categoryIds: categoryIdsArray,
         cityId: cityId || undefined,
+        consultationCategoryIds: consultationCategoryIds ? (Array.isArray(consultationCategoryIds) ? consultationCategoryIds : consultationCategoryIds.toString().split(",")) : undefined,
       });
 
       if (!result.status) {
