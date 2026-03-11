@@ -27,11 +27,11 @@ module.exports = (sequelize, DataTypes) => {
             receiverPhone: DataTypes.STRING(20),
             address: DataTypes.STRING(255),
             originCityId: {
-                type: DataTypes.INTEGER,
+                type: DataTypes.UUID,
                 allowNull: false,
             },
             destinationCityId: {
-                type: DataTypes.INTEGER,
+                type: DataTypes.UUID,
                 allowNull: false,
             },
             totalWeight: {

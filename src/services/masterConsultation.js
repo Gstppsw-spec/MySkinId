@@ -330,6 +330,36 @@ module.exports = {
         ? room.consultationImage.length
         : 0;
       const isScanning = room.doctorId === null && imageCount >= 3;
+
+      // Check if questionnaire is completed (only count required questions)
+      const requiredQuestions = await masterQuestionnaire.findAll({
+        attributes: ["id"],
+        include: [
+          {
+            model: masterConsultationCategory,
+            as: "consultationCategories",
+            where: { id: room.consultationCategoryId },
+            through: { attributes: [] },
+            attributes: [],
+          },
+        ],
+        where: { isActive: true, isRequired: true },
+      });
+
+      const requiredQuestionIds = requiredQuestions.map((q) => q.id);
+      const totalRequired = requiredQuestionIds.length;
+
+      let isQuestionareCompleted = true;
+      if (totalRequired > 0) {
+        const totalAnswers = await masterQuestionnaireAnswer.count({
+          where: {
+            roomId: room.id,
+            questionnaireId: { [Op.in]: requiredQuestionIds },
+          },
+        });
+        isQuestionareCompleted = totalAnswers >= totalRequired;
+      }
+
       return {
         status: true,
         message: "Success",
@@ -337,6 +367,7 @@ module.exports = {
           ...room.toJSON(),
           imageCount,
           isScanning,
+          isQuestionareCompleted,
         },
       };
     } catch (error) {
