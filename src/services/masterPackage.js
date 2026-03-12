@@ -60,10 +60,10 @@ module.exports = {
               EXISTS (
                 SELECT 1
                 FROM masterPackageItems mpi
-                JOIN masterServices ms ON mpi.serviceId = ms.id
-                JOIN relationshipServiceCategories rsc ON ms.id = rsc.serviceId
+                JOIN masterService ms ON mpi.serviceId = ms.id
+                JOIN relationshipServiceCategory rsc ON ms.id = rsc.serviceId
                 WHERE mpi.packageId = masterPackage.id
-                AND rsc.categoryId IN (${ids.join(",")})
+                AND rsc.subCategoryServiceId IN (${ids.map(id => `'${id}'`).join(",")})
               )
             `)
           );
