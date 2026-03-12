@@ -7,6 +7,7 @@ const {
   masterService,
   masterSubCategoryService,
   relationshipUserLocation,
+  masterConsultationCategory,
 } = require("../models");
 const sequelize = require("../models").sequelize;
 

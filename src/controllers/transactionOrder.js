@@ -214,6 +214,30 @@ module.exports = {
         }
     },
 
+    async getOutletShippedTransactions(req, res) {
+        try {
+            const adminId = req.user.id;
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+            const { search } = req.query;
+            const status = "SHIPPED";
+
+            const result = await transactionOrder.getOutletTransactions(adminId, { page, pageSize, search, status });
+
+            if (!result.status)
+                return response.error(res, result.message);
+
+            return res.status(200).json({
+                success: true,
+                message: result.message,
+                data: result.data,
+                pagination: formatPagination(result.totalCount, page, pageSize),
+            });
+        } catch (error) {
+            return response.serverError(res, error);
+        }
+    },
+
     async getCustomerTransactionHistory(req, res) {
         try {
             const customerId = req.user.id;

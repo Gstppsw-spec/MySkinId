@@ -20,6 +20,7 @@ router.post("/add-payment-method", allowRoles("SUPER_ADMIN"), transactionOrder.a
 // Outlet Admin & Super Admin: Update order status to shipped/delivered
 router.post("/ship", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.shipTransaction);
 router.post("/deliver", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.deliverTransaction);
+router.get("/outlet/shipped", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletShippedTransactions);
 router.get("/outlet/transactions", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletTransactions);
 router.get("/outlet/stats", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletStats);
 router.get("/export", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.exportTransactions);

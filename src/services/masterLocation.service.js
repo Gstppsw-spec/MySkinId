@@ -488,7 +488,8 @@ class MasterLocationService {
     latt = null,
     long = null,
     name = null,
-    radius = null
+    radius = null,
+    cityId = null
   ) {
     try {
       const include = [{ model: masterLocationImage, as: "images" }];
@@ -505,6 +506,9 @@ class MasterLocationService {
       const where = { isactive: true };
       if (name) {
         where.name = { [Op.like]: `%${name}%` };
+      }
+      if (cityId) {
+        where.cityId = cityId;
       }
 
       const locations = await masterLocation.findAll({

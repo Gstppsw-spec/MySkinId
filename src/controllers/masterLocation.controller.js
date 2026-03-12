@@ -120,14 +120,15 @@ class masterLocationController {
 
   async listLocationByCustomer(req, res) {
     const { customerId } = req.params;
-    const { latt, long, name, radius } = req.query;
+    const { latt, long, name, radius, cityId } = req.query;
 
     const location = await masterLocationService.listLocationByCustomer(
       customerId,
       latt,
       long,
       name,
-      radius
+      radius,
+      cityId
     );
 
     return location.status
