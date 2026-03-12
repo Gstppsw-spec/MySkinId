@@ -220,7 +220,7 @@ module.exports = {
             const page = parseInt(req.query.page) || 1;
             const pageSize = parseInt(req.query.pageSize) || 10;
             const { search } = req.query;
-            const status = "SHIPPED";
+            const status = ["PAID", "WAITING_PICKUP", "SHIPPED"];
 
             const result = await transactionOrder.getOutletTransactions(adminId, { page, pageSize, search, status });
 

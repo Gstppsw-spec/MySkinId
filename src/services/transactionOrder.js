@@ -1984,7 +1984,7 @@ module.exports = {
             }
 
             if (status) {
-                whereClause.orderStatus = status;
+                whereClause.orderStatus = Array.isArray(status) ? { [Op.in]: status } : status;
             }
 
             const { count, rows } = await transaction.findAndCountAll({
