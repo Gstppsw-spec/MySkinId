@@ -9,6 +9,7 @@ router.post("/register", masterCustomerController.registerCustomer);
 router.post("/login", masterCustomerController.loginCustomer);
 router.get("/google", masterCustomerController.googleRedirect);
 router.post("/google/android", masterCustomerController.googleMobileLogin);
+router.post("/google/ios", masterCustomerController.googleIosLogin);
 router.get("/google/callback", masterCustomerController.googleCallback);
 router.post("/verifyOtp", masterCustomerController.verifyOTP);
 router.post("/resendOtpAuthentication", masterCustomerController.resendOtpAuthentication);

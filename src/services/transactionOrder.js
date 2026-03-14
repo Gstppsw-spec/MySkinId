@@ -373,49 +373,51 @@ module.exports = {
                         const totalValue = items.reduce((sum, i) => sum + (i.totalPrice || 0), 0);
 
                         // Build origin params from location data
+                        // Include BOTH area_id AND coordinates when available
+                        // so getRates can split instant vs standard couriers
                         const originParams = {};
                         if (shippingOpt.origin_area_id) {
                             originParams.origin_area_id = shippingOpt.origin_area_id;
                         } else if (location.biteshipAreaId) {
                             originParams.origin_area_id = location.biteshipAreaId;
-                        } else if (location.latitude && location.longitude) {
+                        }
+                        if (location.latitude && location.longitude) {
                             originParams.origin_latitude = parseFloat(location.latitude);
                             originParams.origin_longitude = parseFloat(location.longitude);
-                        } else if (location.postalCode) {
+                        }
+                        if (!originParams.origin_area_id && !originParams.origin_latitude && location.postalCode) {
                             originParams.origin_postal_code = location.postalCode;
                         }
 
                         // Build destination params from shipping options or customer address
+                        // Include BOTH area_id AND coordinates when available
                         const destParams = {};
+                        // Resolve custAddr for destination if addressId is provided
+                        let resolvedCustAddr = null;
+                        if (shippingOpt.addressId) {
+                            resolvedCustAddr = await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } });
+                        }
+
+                        // Area ID
                         if (shippingOpt.destination_area_id) {
                             destParams.destination_area_id = shippingOpt.destination_area_id;
-                        } else if (shippingOpt.destination_latitude && shippingOpt.destination_longitude) {
+                        } else if (resolvedCustAddr && resolvedCustAddr.biteshipAreaId) {
+                            destParams.destination_area_id = resolvedCustAddr.biteshipAreaId;
+                        }
+                        // Coordinates
+                        if (shippingOpt.destination_latitude && shippingOpt.destination_longitude) {
                             destParams.destination_latitude = parseFloat(shippingOpt.destination_latitude);
                             destParams.destination_longitude = parseFloat(shippingOpt.destination_longitude);
-                        } else if (shippingOpt.destination_postal_code) {
-                            destParams.destination_postal_code = shippingOpt.destination_postal_code;
-                        } else if (shippingOpt.addressId && typeof custAddr !== 'undefined') {
-                            // Reuse custAddr fetched above
-                            if (custAddr.biteshipAreaId) {
-                                destParams.destination_area_id = custAddr.biteshipAreaId;
-                            } else if (custAddr.latitude && custAddr.longitude) {
-                                destParams.destination_latitude = parseFloat(custAddr.latitude);
-                                destParams.destination_longitude = parseFloat(custAddr.longitude);
-                            } else if (custAddr.postalCode) {
-                                destParams.destination_postal_code = custAddr.postalCode;
-                            }
-                        } else if (finalAddress) {
-                            // Fallback for manual address entry if any
-                            const custAddrFallback = shippingOpt.addressId ? await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } }) : null;
-                            if (custAddrFallback) {
-                                if (custAddrFallback.biteshipAreaId) {
-                                    destParams.destination_area_id = custAddrFallback.biteshipAreaId;
-                                } else if (custAddrFallback.latitude && custAddrFallback.longitude) {
-                                    destParams.destination_latitude = parseFloat(custAddrFallback.latitude);
-                                    destParams.destination_longitude = parseFloat(custAddrFallback.longitude);
-                                } else if (custAddrFallback.postalCode) {
-                                    destParams.destination_postal_code = custAddrFallback.postalCode;
-                                }
+                        } else if (resolvedCustAddr && resolvedCustAddr.latitude && resolvedCustAddr.longitude) {
+                            destParams.destination_latitude = parseFloat(resolvedCustAddr.latitude);
+                            destParams.destination_longitude = parseFloat(resolvedCustAddr.longitude);
+                        }
+                        // Postal code fallback
+                        if (!destParams.destination_area_id && !destParams.destination_latitude) {
+                            if (shippingOpt.destination_postal_code) {
+                                destParams.destination_postal_code = shippingOpt.destination_postal_code;
+                            } else if (resolvedCustAddr && resolvedCustAddr.postalCode) {
+                                destParams.destination_postal_code = resolvedCustAddr.postalCode;
                             }
                         }
 
@@ -687,49 +689,51 @@ module.exports = {
                         const totalValue = items.reduce((sum, i) => sum + (i.totalPrice || 0), 0);
 
                         // Build origin params from location data
+                        // Include BOTH area_id AND coordinates when available
+                        // so getRates can split instant vs standard couriers
                         const originParams = {};
                         if (shippingOpt.origin_area_id) {
                             originParams.origin_area_id = shippingOpt.origin_area_id;
                         } else if (location.biteshipAreaId) {
                             originParams.origin_area_id = location.biteshipAreaId;
-                        } else if (location.latitude && location.longitude) {
+                        }
+                        if (location.latitude && location.longitude) {
                             originParams.origin_latitude = parseFloat(location.latitude);
                             originParams.origin_longitude = parseFloat(location.longitude);
-                        } else if (location.postalCode) {
+                        }
+                        if (!originParams.origin_area_id && !originParams.origin_latitude && location.postalCode) {
                             originParams.origin_postal_code = location.postalCode;
                         }
 
                         // Build destination params from shipping options or customer address
+                        // Include BOTH area_id AND coordinates when available
                         const destParams = {};
+                        // Resolve custAddr for destination if addressId is provided
+                        let resolvedCustAddr = null;
+                        if (shippingOpt.addressId) {
+                            resolvedCustAddr = await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } });
+                        }
+
+                        // Area ID
                         if (shippingOpt.destination_area_id) {
                             destParams.destination_area_id = shippingOpt.destination_area_id;
-                        } else if (shippingOpt.destination_latitude && shippingOpt.destination_longitude) {
+                        } else if (resolvedCustAddr && resolvedCustAddr.biteshipAreaId) {
+                            destParams.destination_area_id = resolvedCustAddr.biteshipAreaId;
+                        }
+                        // Coordinates
+                        if (shippingOpt.destination_latitude && shippingOpt.destination_longitude) {
                             destParams.destination_latitude = parseFloat(shippingOpt.destination_latitude);
                             destParams.destination_longitude = parseFloat(shippingOpt.destination_longitude);
-                        } else if (shippingOpt.destination_postal_code) {
-                            destParams.destination_postal_code = shippingOpt.destination_postal_code;
-                        } else if (shippingOpt.addressId && typeof custAddr !== 'undefined') {
-                            // Reuse custAddr fetched above
-                            if (custAddr.biteshipAreaId) {
-                                destParams.destination_area_id = custAddr.biteshipAreaId;
-                            } else if (custAddr.latitude && custAddr.longitude) {
-                                destParams.destination_latitude = parseFloat(custAddr.latitude);
-                                destParams.destination_longitude = parseFloat(custAddr.longitude);
-                            } else if (custAddr.postalCode) {
-                                destParams.destination_postal_code = custAddr.postalCode;
-                            }
-                        } else if (finalAddress) {
-                            // Fallback for manual address entry if any
-                            const custAddrFallback = shippingOpt.addressId ? await customerAddress.findOne({ where: { id: shippingOpt.addressId, customerId } }) : null;
-                            if (custAddrFallback) {
-                                if (custAddrFallback.biteshipAreaId) {
-                                    destParams.destination_area_id = custAddrFallback.biteshipAreaId;
-                                } else if (custAddrFallback.latitude && custAddrFallback.longitude) {
-                                    destParams.destination_latitude = parseFloat(custAddrFallback.latitude);
-                                    destParams.destination_longitude = parseFloat(custAddrFallback.longitude);
-                                } else if (custAddrFallback.postalCode) {
-                                    destParams.destination_postal_code = custAddrFallback.postalCode;
-                                }
+                        } else if (resolvedCustAddr && resolvedCustAddr.latitude && resolvedCustAddr.longitude) {
+                            destParams.destination_latitude = parseFloat(resolvedCustAddr.latitude);
+                            destParams.destination_longitude = parseFloat(resolvedCustAddr.longitude);
+                        }
+                        // Postal code fallback
+                        if (!destParams.destination_area_id && !destParams.destination_latitude) {
+                            if (shippingOpt.destination_postal_code) {
+                                destParams.destination_postal_code = shippingOpt.destination_postal_code;
+                            } else if (resolvedCustAddr && resolvedCustAddr.postalCode) {
+                                destParams.destination_postal_code = resolvedCustAddr.postalCode;
                             }
                         }
 
@@ -1373,7 +1377,9 @@ module.exports = {
             let finalTrackingNumber = trackingNumber;
 
             // 3. Biteship Auto-Booking (if trackingNumber is not provided)
-            if (!finalTrackingNumber && trx.shipping && trx.shipping.originAreaId && trx.shipping.destinationAreaId) {
+            const hasAreaIds = trx.shipping && trx.shipping.originAreaId && trx.shipping.destinationAreaId;
+            const hasLocationCoords = trx.location && trx.location.latitude && trx.location.longitude;
+            if (!finalTrackingNumber && trx.shipping && (hasAreaIds || hasLocationCoords)) {
                 const items = await transactionItem.findAll({
                     where: { transactionId: trx.id },
                 });
@@ -1382,12 +1388,10 @@ module.exports = {
                     origin_contact_name: trx.location.name,
                     origin_contact_phone: trx.location.phone || "08123456789",
                     origin_address: trx.location.address,
-                    origin_area_id: trx.shipping.originAreaId,
 
                     destination_contact_name: trx.shipping.receiverName,
                     destination_contact_phone: trx.shipping.receiverPhone,
                     destination_address: trx.shipping.address,
-                    destination_area_id: trx.shipping.destinationAreaId,
 
                     courier_company: trx.shipping.courierCode,
                     courier_type: trx.shipping.courierService,
@@ -1400,6 +1404,20 @@ module.exports = {
                         quantity: item.quantity
                     }))
                 };
+
+                // Use area_id when available, otherwise use coordinates
+                if (trx.shipping.originAreaId) {
+                    biteshipData.origin_area_id = trx.shipping.originAreaId;
+                } else if (trx.location.latitude && trx.location.longitude) {
+                    biteshipData.origin_latitude = parseFloat(trx.location.latitude);
+                    biteshipData.origin_longitude = parseFloat(trx.location.longitude);
+                }
+
+                if (trx.shipping.destinationAreaId) {
+                    biteshipData.destination_area_id = trx.shipping.destinationAreaId;
+                }
+                // Note: For instant couriers, destination coordinates come from the customer address
+                // The createOrder endpoint will use what's available
 
                 const biteshipOrder = await biteshipService.createOrder(biteshipData);
                 finalTrackingNumber = biteshipOrder.courier?.waybill_id;
@@ -1959,7 +1977,7 @@ module.exports = {
         }
     },
 
-    async getOutletTransactions(adminId, { page = 1, pageSize = 10, search = "", status = "" }) {
+    async getOutletTransactions(adminId, { page = 1, pageSize = 10, search = "", status = "", productOnlyForPaid = false }) {
         try {
             // 1. Get Admin's Location
             const userLocation = await relationshipUserLocation.findOne({
@@ -1984,7 +2002,38 @@ module.exports = {
             }
 
             if (status) {
-                whereClause.orderStatus = Array.isArray(status) ? { [Op.in]: status } : status;
+                const statusArr = Array.isArray(status) ? status : [status];
+
+                if (productOnlyForPaid && statusArr.includes("PAID")) {
+                    // For PAID status: only include transactions that have at least one PRODUCT item
+                    const otherStatuses = statusArr.filter(s => s !== "PAID");
+                    const orConditions = [];
+
+                    if (otherStatuses.length > 0) {
+                        orConditions.push({ orderStatus: { [Op.in]: otherStatuses } });
+                    }
+
+                    orConditions.push({
+                        [Op.and]: [
+                            { orderStatus: "PAID" },
+                            sequelize.literal(`EXISTS (SELECT 1 FROM transactionItems ti WHERE ti.transactionId = \`transaction\`.\`id\` AND ti.itemType = 'product')`)
+                        ]
+                    });
+
+                    // Merge with existing Op.or (search) if present
+                    if (whereClause[Op.or]) {
+                        const searchConditions = whereClause[Op.or];
+                        delete whereClause[Op.or];
+                        whereClause[Op.and] = [
+                            { [Op.or]: searchConditions },
+                            { [Op.or]: orConditions }
+                        ];
+                    } else {
+                        whereClause[Op.or] = orConditions;
+                    }
+                } else {
+                    whereClause.orderStatus = statusArr.length === 1 ? statusArr[0] : { [Op.in]: statusArr };
+                }
             }
 
             const { count, rows } = await transaction.findAndCountAll({
@@ -2555,8 +2604,13 @@ module.exports = {
             const { count, rows } = await transaction.findAndCountAll({
                 where: {
                     [Op.or]: [
-                        { orderStatus: "SHIPPED" },
-                        { orderStatus: "WAITING_PICKUP" }
+                        { orderStatus: { [Op.in]: ["WAITING_PICKUP", "SHIPPED"] } },
+                        {
+                            [Op.and]: [
+                                { orderStatus: "PAID" },
+                                sequelize.literal(`EXISTS (SELECT 1 FROM transactionItems ti WHERE ti.transactionId = \`transaction\`.\`id\` AND ti.itemType = 'product')`)
+                            ]
+                        }
                     ]
                 },
                 include: [

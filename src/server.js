@@ -32,6 +32,7 @@ const userRoute = require("./routes/userRoute");
 const customerAddressRoute = require("./routes/user/customerAddress.route");
 const roleRoute = require("./routes/master/masterRole.route");
 const shippingRoute = require("./routes/master/shipping.route");
+const flashSaleRoute = require("./routes/master/flashSale.route");
 
 // Social media routes
 const postRoute = require("./routes/social/post.route");
@@ -96,6 +97,7 @@ app.use("/api/v2/role", roleRoute);
 app.use("/api/v2/customer-cart", customerCartRoute);
 app.use("/api/v2/transaction/order", transactionOrderRoute);
 app.use("/api/v2/shipping", shippingRoute);
+app.use("/api/v2/flash-sale", flashSaleRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);

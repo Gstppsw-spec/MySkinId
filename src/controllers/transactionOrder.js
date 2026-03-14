@@ -222,7 +222,7 @@ module.exports = {
             const { search } = req.query;
             const status = ["PAID", "WAITING_PICKUP", "SHIPPED"];
 
-            const result = await transactionOrder.getOutletTransactions(adminId, { page, pageSize, search, status });
+            const result = await transactionOrder.getOutletTransactions(adminId, { page, pageSize, search, status, productOnlyForPaid: true });
 
             if (!result.status)
                 return response.error(res, result.message);

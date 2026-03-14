@@ -94,6 +94,40 @@ class masterCustomerController {
     }
   }
 
+  async googleIosLogin(req, res) {
+    try {
+      const { idToken } = req.body;
+      if (!idToken) {
+        return response.error(res, "idToken is required", null);
+      }
+
+      const ticket = await oauth2Client.verifyIdToken({
+        idToken: idToken,
+        audience: process.env.GOOGLE_IOS_CLIENT_ID,
+      });
+
+      const payload = ticket.getPayload();
+
+      const profile = {
+        id: payload.sub,
+        displayName: payload.name,
+        emails: [{ value: payload.email }],
+        photos: [{ value: payload.picture }],
+      };
+
+      const result = await masterCustomerService.googleLogin(profile);
+
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+
+      return response.success(res, result.message, result.data);
+    } catch (err) {
+      console.error("Google iOS Login Error:", err);
+      return response.serverError(res, err);
+    }
+  }
+
   async registerCustomer(req, res) {
     const result = await masterCustomerService.registerCustomer(req.body);
     return result.status

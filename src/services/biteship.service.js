@@ -44,6 +44,56 @@ async function getCouriers() {
     }
 }
 
+const INSTANT_COURIERS = ["gojek", "grab", "maxim", "lalamove", "borzo", "deliveree"];
+
+async function fetchRatesFromBiteship(data, couriersStr, locationPriority) {
+    const payload = {};
+
+    // Determine Origin
+    if (locationPriority === "coordinates" && data.origin_latitude && data.origin_longitude) {
+        payload.origin_latitude = data.origin_latitude;
+        payload.origin_longitude = data.origin_longitude;
+    } else if (data.origin_area_id) {
+        payload.origin_area_id = data.origin_area_id;
+    } else if (data.origin_latitude && data.origin_longitude) {
+        payload.origin_latitude = data.origin_latitude;
+        payload.origin_longitude = data.origin_longitude;
+    } else if (data.origin_postal_code) {
+        payload.origin_postal_code = parseInt(data.origin_postal_code);
+    }
+
+    // Determine Destination
+    if (locationPriority === "coordinates" && data.destination_latitude && data.destination_longitude) {
+        payload.destination_latitude = data.destination_latitude;
+        payload.destination_longitude = data.destination_longitude;
+    } else if (data.destination_area_id) {
+        payload.destination_area_id = data.destination_area_id;
+    } else if (data.destination_latitude && data.destination_longitude) {
+        payload.destination_latitude = data.destination_latitude;
+        payload.destination_longitude = data.destination_longitude;
+    } else if (data.destination_postal_code) {
+        payload.destination_postal_code = parseInt(data.destination_postal_code);
+    }
+
+    // Items
+    payload.items = (data.items || []).map(item => ({
+        name: item.name || "Item",
+        value: item.value || 0,
+        weight: item.weight || 0,
+        quantity: item.quantity || 1,
+        ...(item.length && { length: item.length }),
+        ...(item.width && { width: item.width }),
+        ...(item.height && { height: item.height }),
+    }));
+
+    if (couriersStr) {
+        payload.couriers = couriersStr;
+    }
+
+    const res = await api.post("/rates/couriers", payload);
+    return res.data;
+}
+
 /**
  * Calculate shipping rates
  * Replaces: calculateCost
@@ -52,6 +102,9 @@ async function getCouriers() {
  *   1. Coordinates: origin_latitude + origin_longitude
  *   2. Postal code: origin_postal_code
  *   3. Area ID: origin_area_id (Biteship area ID string)
+ *
+ * Note: If both area_id and coordinates are provided and mixed couriers are requested, 
+ * it smartly splits the request to ensure instant couriers get coordinates.
  * 
  * @param {Object} data
  * @param {string} [data.origin_area_id]
@@ -68,47 +121,67 @@ async function getCouriers() {
  */
 async function getRates(data) {
     try {
-        const payload = {};
+        const couriers = data.couriers ? data.couriers.split(",").map(c => c.trim().toLowerCase()) : [];
+        
+        let standardCouriers = [];
+        let instantCouriers = [];
 
-        // Origin - support areaId, coordinates, or postalCode
-        if (data.origin_area_id) {
-            payload.origin_area_id = data.origin_area_id;
-        } else if (data.origin_latitude && data.origin_longitude) {
-            payload.origin_latitude = data.origin_latitude;
-            payload.origin_longitude = data.origin_longitude;
-        } else if (data.origin_postal_code) {
-            payload.origin_postal_code = parseInt(data.origin_postal_code);
+        if (couriers.length > 0) {
+            standardCouriers = couriers.filter(c => !INSTANT_COURIERS.includes(c));
+            instantCouriers = couriers.filter(c => INSTANT_COURIERS.includes(c));
         }
 
-        // Destination - support areaId, coordinates, or postalCode
-        if (data.destination_area_id) {
-            payload.destination_area_id = data.destination_area_id;
-        } else if (data.destination_latitude && data.destination_longitude) {
-            payload.destination_latitude = data.destination_latitude;
-            payload.destination_longitude = data.destination_longitude;
-        } else if (data.destination_postal_code) {
-            payload.destination_postal_code = parseInt(data.destination_postal_code);
+        const hasOriginArea = !!data.origin_area_id;
+        const hasOriginCoords = !!(data.origin_latitude && data.origin_longitude);
+        const hasDestArea = !!data.destination_area_id;
+        const hasDestCoords = !!(data.destination_latitude && data.destination_longitude);
+
+        const needsSplit = instantCouriers.length > 0 && standardCouriers.length > 0 && 
+            ((hasOriginArea && hasOriginCoords) || (hasDestArea && hasDestCoords));
+
+        if (needsSplit) {
+            const [standardRes, instantRes] = await Promise.allSettled([
+                fetchRatesFromBiteship(data, standardCouriers.join(","), "area"),
+                fetchRatesFromBiteship(data, instantCouriers.join(","), "coordinates")
+            ]);
+
+            const mergedPricing = [];
+            let origin = null;
+            let destination = null;
+
+            if (standardRes.status === "fulfilled" && standardRes.value.pricing) {
+                mergedPricing.push(...standardRes.value.pricing);
+                origin = standardRes.value.origin;
+                destination = standardRes.value.destination;
+            } else if (standardRes.status === "rejected") {
+                console.warn("Biteship standard couriers fetch failed:", standardRes.reason?.response?.data || standardRes.reason?.message);
+            }
+
+            if (instantRes.status === "fulfilled" && instantRes.value.pricing) {
+                mergedPricing.push(...instantRes.value.pricing);
+                if (!origin) origin = instantRes.value.origin;
+                if (!destination) destination = instantRes.value.destination;
+            } else if (instantRes.status === "rejected") {
+                 console.warn("Biteship instant couriers fetch failed:", instantRes.reason?.response?.data || instantRes.reason?.message);
+            }
+
+            if (standardRes.status === "rejected" && instantRes.status === "rejected") {
+                throw standardRes.reason;
+            }
+
+            return {
+                success: true,
+                message: "Courier pricing fetched successfully",
+                object: "pricing",
+                origin: origin,
+                destination: destination,
+                pricing: mergedPricing
+            };
+        } else if (instantCouriers.length > 0 && standardCouriers.length === 0 && couriers.length > 0) {
+            return await fetchRatesFromBiteship(data, instantCouriers.join(","), "coordinates");
+        } else {
+            return await fetchRatesFromBiteship(data, data.couriers, "area");
         }
-
-        // Items
-        payload.items = (data.items || []).map(item => ({
-            name: item.name || "Item",
-            value: item.value || 0,
-            weight: item.weight || 0,
-            quantity: item.quantity || 1,
-            ...(item.length && { length: item.length }),
-            ...(item.width && { width: item.width }),
-            ...(item.height && { height: item.height }),
-        }));
-
-        // Couriers filter (optional)
-        if (data.couriers) {
-            payload.couriers = data.couriers;
-        }
-
-        const res = await api.post("/rates/couriers", payload);
-
-        return res.data;
     } catch (error) {
         console.error("Biteship getRates Error:", error.response?.data || error.message);
         throw new Error(error.response?.data?.error || error.message);
@@ -223,14 +296,20 @@ async function createOrder(data) {
             origin_contact_phone: data.origin_contact_phone,
             origin_address: data.origin_address,
             origin_note: data.origin_note || "",
-            origin_area_id: data.origin_area_id,
+            // Support both area_id and coordinates for origin
+            ...(data.origin_area_id ? { origin_area_id: data.origin_area_id } : {}),
+            ...(data.origin_latitude ? { origin_latitude: data.origin_latitude } : {}),
+            ...(data.origin_longitude ? { origin_longitude: data.origin_longitude } : {}),
 
             destination_contact_name: data.destination_contact_name,
             destination_contact_phone: data.destination_contact_phone,
             destination_contact_email: data.destination_contact_email || "",
             destination_address: data.destination_address,
             destination_note: data.destination_note || "",
-            destination_area_id: data.destination_area_id,
+            // Support both area_id and coordinates for destination
+            ...(data.destination_area_id ? { destination_area_id: data.destination_area_id } : {}),
+            ...(data.destination_latitude ? { destination_latitude: data.destination_latitude } : {}),
+            ...(data.destination_longitude ? { destination_longitude: data.destination_longitude } : {}),
 
             courier_company: data.courier_company,
             courier_type: data.courier_type,
