@@ -19,6 +19,8 @@ const {
     masterPackageItems,
     masterLocationImage,
     masterProductImage,
+    flashSale,
+    flashSaleItem,
     Rating,
     sequelize,
 } = require("../models");
@@ -308,11 +310,43 @@ module.exports = {
                     itemsByLocation[locationId] = [];
                 }
 
-                const unitPrice = parseFloat(actualItem.price);
-                const discountPercent = parseFloat(actualItem.discountPercent || 0);
-                const discountAmount = (unitPrice * discountPercent) / 100;
-                const totalPrice = (unitPrice - discountAmount) * item.qty;
+                let unitPrice = parseFloat(actualItem.price);
+                let discountAmount = 0;
+                let flashSaleItemId = item.flashSaleItemId;
 
+                // 🔹 Flash Sale Logic
+                if (flashSaleItemId) {
+                    const fsItem = await flashSaleItem.findOne({
+                        where: { id: flashSaleItemId },
+                        include: [{ model: flashSale, as: "flashSale" }]
+                    });
+
+                    if (!fsItem) throw new Error("Flash sale item not found");
+                    if (fsItem.flashSale.status !== "ACTIVE") { flashSaleItemId = null; }
+                    
+                    const now = new Date();
+                    if (now < fsItem.flashSale.startDate || now > fsItem.flashSale.endDate) {
+                        flashSaleItemId = null;
+                    }
+
+                    if (flashSaleItemId && (fsItem.quota - fsItem.sold < item.qty)) {
+                        flashSaleItemId = null;
+                    }
+
+                    if (flashSaleItemId) {
+                        unitPrice = parseFloat(fsItem.flashPrice);
+                        discountAmount = 0; 
+                    } else {
+                        const discountPercent = parseFloat(actualItem.discountPercent || 0);
+                        discountAmount = (unitPrice * discountPercent) / 100;
+                    }
+                } else {
+                    const discountPercent = parseFloat(actualItem.discountPercent || 0);
+                    discountAmount = (unitPrice * discountPercent) / 100;
+                }
+                // (Closing brace for 'if (flashSaleItemId)' logic is already there in the structure)
+
+                const totalPrice = (unitPrice - discountAmount) * item.qty;
                 const unitWeight = actualItem.weightGram || 0;
                 const totalWeight = unitWeight * item.qty;
 
@@ -328,6 +362,7 @@ module.exports = {
                     totalWeight: totalWeight,
                     isShippingRequired: type === "product",
                     locationId: locationId,
+                    flashSaleItemId: flashSaleItemId,
                 });
 
                 totalOrderAmount += totalPrice;
@@ -624,11 +659,42 @@ module.exports = {
                     itemsByLocation[locationId] = [];
                 }
 
-                const unitPrice = parseFloat(actualItem.price);
-                const discountPercent = parseFloat(actualItem.discountPercent || 0);
-                const discountAmount = (unitPrice * discountPercent) / 100;
-                const totalPrice = (unitPrice - discountAmount) * item.qty;
+                let unitPrice = parseFloat(actualItem.price);
+                let discountAmount = 0;
+                let flashSaleItemId = item.flashSaleItemId;
 
+                // 🔹 Flash Sale Logic
+                if (flashSaleItemId) {
+                    const fsItem = await flashSaleItem.findOne({
+                        where: { id: flashSaleItemId },
+                        include: [{ model: flashSale, as: "flashSale" }]
+                    });
+
+                    if (!fsItem) throw new Error("Flash sale item not found");
+                    if (fsItem.flashSale.status !== "ACTIVE") { flashSaleItemId = null; }
+                    
+                    const now = new Date();
+                    if (now < fsItem.flashSale.startDate || now > fsItem.flashSale.endDate) {
+                        flashSaleItemId = null;
+                    }
+
+                    if (flashSaleItemId && (fsItem.quota - fsItem.sold < item.qty)) {
+                        flashSaleItemId = null;
+                    }
+
+                    if (flashSaleItemId) {
+                        unitPrice = parseFloat(fsItem.flashPrice);
+                        discountAmount = 0; 
+                    } else {
+                        const discountPercent = parseFloat(actualItem.discountPercent || 0);
+                        discountAmount = (unitPrice * discountPercent) / 100;
+                    }
+                } else {
+                    const discountPercent = parseFloat(actualItem.discountPercent || 0);
+                    discountAmount = (unitPrice * discountPercent) / 100;
+                }
+
+                const totalPrice = (unitPrice - discountAmount) * item.qty;
                 const unitWeight = actualItem.weightGram || 0;
                 const totalWeight = unitWeight * item.qty;
 
@@ -644,6 +710,7 @@ module.exports = {
                     totalWeight: totalWeight,
                     isShippingRequired: item.type === "product",
                     locationId: locationId,
+                    flashSaleItemId: flashSaleItemId,
                 });
 
                 totalOrderAmount += totalPrice;
@@ -1291,6 +1358,14 @@ module.exports = {
                                 await masterLocation.update(
                                     { isPremium: true, premiumExpiredAt: expiredAt },
                                     { where: { id: item.itemId }, transaction: t }
+                                );
+                            }
+
+                            // 🔹 Flash Sale sold update
+                            if (item.flashSaleItemId) {
+                                await flashSaleItem.increment(
+                                    { sold: item.quantity },
+                                    { where: { id: item.flashSaleItemId }, transaction: t }
                                 );
                             }
                         }

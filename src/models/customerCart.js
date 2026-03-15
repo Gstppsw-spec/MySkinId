@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
         as: "product",
         onDelete: "CASCADE",
         onUpdate: "RESTRICT",
+        constraints: false,
       });
 
       customerCart.belongsTo(models.masterCustomer, {
@@ -27,6 +28,11 @@ module.exports = (sequelize, DataTypes) => {
       customerCart.belongsTo(models.masterPackage, {
         foreignKey: "refferenceId",
         as: "package",
+        constraints: false,
+      });
+      customerCart.belongsTo(models.flashSaleItem, {
+        foreignKey: "flashSaleItemId",
+        as: "flashSaleItem",
         constraints: false,
       });
     }
@@ -76,6 +82,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
+      },
+      flashSaleItemId: {
+        type: DataTypes.UUID,
+        allowNull: true,
       },
       createdAt: { type: DataTypes.DATE },
       updatedAt: { type: DataTypes.DATE },

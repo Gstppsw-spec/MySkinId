@@ -66,6 +66,11 @@ module.exports = {
             ],
           },
           {
+            model: require("../models").flashSaleItem,
+            as: "flashSaleItem",
+            include: [{ model: require("../models").flashSale, as: "flashSale" }]
+          },
+          {
             model: masterService,
             as: "service",
             attributes: {
@@ -102,12 +107,35 @@ module.exports = {
       };
 
       customerCarts.forEach((cart) => {
+        let isPromoActive = false;
+        let promoError = null;
+        let finalPrice = 0;
+
+        if (cart.flashSaleItemId && cart.flashSaleItem) {
+          const fsItem = cart.flashSaleItem;
+          const fs = fsItem.flashSale;
+          const now = new Date();
+
+          if (fs && fs.status === "ACTIVE" && now >= fs.startDate && now <= fs.endDate && (fsItem.quota - fsItem.sold) > 0) {
+            isPromoActive = true;
+          } else {
+            if (!fs || fs.status !== "ACTIVE") promoError = "Promo is no longer active";
+            else if (now < fs.startDate) promoError = "Promo has not started";
+            else if (now > fs.endDate) promoError = "Promo has ended";
+            else if ((fsItem.quota - fsItem.sold) <= 0) promoError = "Promo quota is full";
+          }
+        }
+
         if (cart.product) {
+          finalPrice = isPromoActive ? cart.flashSaleItem.flashPrice : cart.product.price;
           result.product.push({
             id: cart.product.id,
             name: cart.product.name,
             desc: cart.product.description,
             price: cart.product.price,
+            flashPrice: isPromoActive ? cart.flashSaleItem.flashPrice : null,
+            finalPrice: finalPrice,
+            isPromoActive: isPromoActive,
             discountpercent: cart.product.discountPercent,
             images: cart.product.images,
             location: cart.product.location,
@@ -117,14 +145,19 @@ module.exports = {
             cartId: cart.id,
             quantity: cart.qty,
             weight: cart.product.weightGram,
+            flashSaleItemId: cart.flashSaleItemId,
           });
         }
         if (cart.package) {
+          finalPrice = isPromoActive ? cart.flashSaleItem.flashPrice : cart.package.price;
           result.package.push({
             id: cart.package.id,
             name: cart.package.name,
             desc: cart.package.description,
             price: cart.package.price,
+            flashPrice: isPromoActive ? cart.flashSaleItem.flashPrice : null,
+            finalPrice: finalPrice,
+            isPromoActive: isPromoActive,
             discpercent: cart.package.discountPercent,
             location: cart.package.location,
             isSelected: cart.isSelected,
@@ -132,6 +165,7 @@ module.exports = {
             isOnPayment: cart.isOnPayment,
             cartId: cart.id,
             quantity: cart.qty,
+            flashSaleItemId: cart.flashSaleItemId,
           });
         }
       });
@@ -144,15 +178,27 @@ module.exports = {
 
   async createCustomerCart(data, customerId) {
     try {
-      const { refferenceId, refferenceType } = data;
+      const { refferenceId, refferenceType, flashSaleItemId } = data;
 
       if (!refferenceId || !customerId || !refferenceType)
         return { status: false, message: "Data belum lengkap" };
 
       await validateReference(refferenceType, refferenceId);
 
+      if (flashSaleItemId) {
+        const fsItem = await require("../models").flashSaleItem.findByPk(flashSaleItemId);
+        if (!fsItem) {
+          return { status: false, message: "Flash sale item tidak ditemukan" };
+        }
+        
+        const isMatch = refferenceType === "product" ? fsItem.productId === refferenceId : fsItem.packageId === refferenceId;
+        if (!isMatch) {
+          return { status: false, message: "Item flash sale tidak sesuai dengan produk/paket yang dipilih" };
+        }
+      }
+
       let cart = await customerCart.findOne({
-        where: { refferenceId, customerId, refferenceType },
+        where: { refferenceId, customerId, refferenceType, flashSaleItemId: flashSaleItemId || null },
       });
 
       if (cart) {
@@ -171,6 +217,7 @@ module.exports = {
         customerId,
         refferenceType,
         qty: 1,
+        flashSaleItemId: flashSaleItemId || null,
       });
 
       return {

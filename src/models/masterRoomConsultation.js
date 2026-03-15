@@ -95,6 +95,11 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "roomId",
       as: "questionnaireAnswers",
     });
+
+    masterRoomConsultation.hasMany(models.consultationRecommendation, {
+      foreignKey: "roomId",
+      as: "recommendations",
+    });
   };
 
   return masterRoomConsultation;

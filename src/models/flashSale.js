@@ -4,11 +4,6 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class flashSale extends Model {
     static associate(models) {
-      flashSale.belongsTo(models.masterLocation, {
-        foreignKey: "locationId",
-        as: "location",
-      });
-
       flashSale.hasMany(models.flashSaleItem, {
         foreignKey: "flashSaleId",
         as: "items",
@@ -24,10 +19,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
-      },
-      locationId: {
-        type: DataTypes.UUID,
-        allowNull: false,
       },
       title: {
         type: DataTypes.STRING(150),

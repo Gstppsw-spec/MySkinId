@@ -9,9 +9,19 @@ module.exports = (sequelize, DataTypes) => {
         as: "flashSale",
       });
 
+      flashSaleItem.belongsTo(models.masterLocation, {
+        foreignKey: "locationId",
+        as: "location",
+      });
+
       flashSaleItem.belongsTo(models.masterProduct, {
         foreignKey: "productId",
         as: "product",
+      });
+
+      flashSaleItem.belongsTo(models.masterPackage, {
+        foreignKey: "packageId",
+        as: "package",
       });
     }
   }
@@ -27,16 +37,29 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      productId: {
+      locationId: {
         type: DataTypes.UUID,
         allowNull: false,
+      },
+      itemType: {
+        type: DataTypes.ENUM("PRODUCT", "PACKAGE"),
+        allowNull: false,
+        defaultValue: "PRODUCT",
+      },
+      productId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      packageId: {
+        type: DataTypes.UUID,
+        allowNull: true,
       },
       flashPrice: {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: false,
         defaultValue: 0,
       },
-      stock: {
+      quota: {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,

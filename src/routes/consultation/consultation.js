@@ -60,4 +60,7 @@ router.get("/room/:id/allPrescriptionByOutlet", consultation.getAllPrescriptionB
 router.delete("/room/:roomId/prescriptions", consultation.deletePrescriptionsByRoomId);
 router.delete("/prescription/:id", consultation.deletePrescription);
 
+router.post("/room/:id/recommendation", consultation.addRecommendation);
+router.get("/room/:id/recommendations", consultation.getRecommendations);
+
 module.exports = router;

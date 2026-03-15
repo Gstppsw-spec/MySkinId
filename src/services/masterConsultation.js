@@ -4,6 +4,7 @@ const {
   masterConsultationCategory,
   masterConsultationMessage,
   masterConsultationPrescription,
+  consultationRecommendation,
   relationshipUserLocation,
   masterProduct,
   masterProductImage,
@@ -1380,6 +1381,311 @@ module.exports = {
         return { status: true, message: "Berhasil", data: prescriptions };
       }
 
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async addRecommendation(roomId, data) {
+    try {
+      const { notes, categoryIds } = data;
+
+      if (!roomId) {
+        return { status: false, message: "Room ID tidak boleh kosong", data: null };
+      }
+
+      if (!notes || notes.trim() === "") {
+        return { status: false, message: "Notes tidak boleh kosong", data: null };
+      }
+
+      if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+        return { status: false, message: "Harus memilih minimal 1 kategori", data: null };
+      }
+
+      const room = await masterRoomConsultation.findByPk(roomId);
+      if (!room) {
+        return { status: false, message: "Room tidak ditemukan", data: null };
+      }
+
+      // Validate all category IDs exist
+      const categories = await masterConsultationCategory.findAll({
+        where: { id: { [Op.in]: categoryIds } },
+      });
+
+      if (categories.length !== categoryIds.length) {
+        return { status: false, message: "Beberapa kategori tidak ditemukan", data: null };
+      }
+
+      // Create the recommendation
+      const recommendation = await consultationRecommendation.create({
+        roomId,
+        notes: notes.trim(),
+      });
+
+      // Link categories
+      await recommendation.setCategories(categories);
+
+      // Re-fetch with categories
+      const result = await consultationRecommendation.findByPk(recommendation.id, {
+        include: [
+          {
+            model: masterConsultationCategory,
+            as: "categories",
+            attributes: ["id", "name", "iconUrl"],
+            through: { attributes: [] },
+          },
+        ],
+      });
+
+      return { status: true, message: "Berhasil menambahkan rekomendasi", data: result };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async getRecommendations(roomId) {
+    try {
+      const room = await masterRoomConsultation.findOne({
+        where: { id: roomId },
+        attributes: ["id", "locationId", "latitude", "longitude"],
+      });
+
+      if (!room) {
+        return { status: false, message: "Room tidak ditemukan", data: null };
+      }
+
+      // Fetch all recommendations for this room
+      const recommendations = await consultationRecommendation.findAll({
+        where: { roomId },
+        include: [
+          {
+            model: masterConsultationCategory,
+            as: "categories",
+            attributes: ["id", "name", "iconUrl"],
+            through: { attributes: [] },
+          },
+        ],
+        order: [["createdAt", "ASC"]],
+      });
+
+      // Collect all unique category IDs from all recommendations
+      const allCategoryIds = [
+        ...new Set(
+          recommendations.flatMap((rec) =>
+            rec.categories.map((cat) => cat.id)
+          )
+        ),
+      ];
+
+      if (allCategoryIds.length === 0) {
+        return {
+          status: true,
+          message: "Berhasil",
+          data: {
+            recommendations: recommendations.map((r) => r.toJSON()),
+            outlets: [],
+          },
+        };
+      }
+
+      // Determine customer location
+      const latitude = room.latitude;
+      const longitude = room.longitude;
+
+      if (!latitude || !longitude) {
+        return {
+          status: true,
+          message: "Berhasil (tanpa data outlet - lokasi customer tidak tersedia)",
+          data: {
+            recommendations: recommendations.map((r) => r.toJSON()),
+            outlets: [],
+          },
+        };
+      }
+
+      // Find nearest locations using Haversine formula (distance in meters)
+      const distanceLiteral = Sequelize.literal(`
+        (6371 * acos(
+          cos(radians(${latitude})) *
+          cos(radians(CAST(latitude AS FLOAT))) *
+          cos(radians(CAST(longitude AS FLOAT)) - radians(${longitude})) +
+          sin(radians(${latitude})) *
+          sin(radians(CAST(latitude AS FLOAT)))
+        )) * 1000.0
+      `);
+
+      const nearestLocations = await masterLocation.findAll({
+        attributes: ["id", "name", [distanceLiteral, "distance"]],
+        where: {
+          latitude: { [Op.ne]: null },
+          longitude: { [Op.ne]: null },
+        },
+        order: [[distanceLiteral, "ASC"]],
+        limit: 10,
+      });
+
+      const locationIds = nearestLocations.map((loc) => loc.id);
+
+      if (locationIds.length === 0) {
+        return {
+          status: true,
+          message: "Berhasil (tidak ada outlet terdekat)",
+          data: {
+            recommendations: recommendations.map((r) => r.toJSON()),
+            outlets: [],
+          },
+        };
+      }
+
+      // Fetch products & packages from nearby outlets that match the recommendation categories
+      const [products, packages] = await Promise.all([
+        masterProduct.findAll({
+          where: { locationId: locationIds },
+          attributes: ["id", "name", "description", "price", "discountPercent", "weightGram", "locationId"],
+          include: [
+            {
+              model: masterProductImage,
+              as: "images",
+              attributes: ["imageUrl"],
+            },
+            {
+              model: masterLocation,
+              as: "location",
+              attributes: ["id", "name", "cityId", "districtId"],
+            },
+            {
+              model: masterConsultationCategory,
+              as: "consultationCategories",
+              where: { id: { [Op.in]: allCategoryIds } },
+              attributes: [],
+              through: { attributes: [] },
+              required: true,
+            },
+          ],
+        }),
+        masterPackage.findAll({
+          where: { locationId: locationIds },
+          attributes: ["id", "name", "description", "price", "discountPercent", "locationId"],
+          include: [
+            {
+              model: masterLocation,
+              as: "location",
+              attributes: ["id", "name", "cityId", "districtId"],
+              include: [
+                {
+                  model: masterLocationImage,
+                  as: "images",
+                  attributes: ["imageUrl"],
+                },
+              ],
+            },
+            {
+              model: masterPackageItems,
+              as: "items",
+              attributes: ["id", "qty"],
+              include: [
+                {
+                  model: masterService,
+                  as: "service",
+                  attributes: ["id", "name", "description", "duration", "price"],
+                },
+              ],
+            },
+            {
+              model: masterConsultationCategory,
+              as: "consultationCategories",
+              where: { id: { [Op.in]: allCategoryIds } },
+              attributes: [],
+              through: { attributes: [] },
+              required: true,
+            },
+          ],
+        }),
+      ]);
+
+      // Group by nearest locations
+      const outlets = nearestLocations.map((loc) => {
+        const locJson = loc.toJSON();
+        const locId = locJson.id;
+
+        const formattedProducts = products
+          .filter((p) => p.locationId === locId)
+          .map((product) => {
+            const pj = product.toJSON();
+            const price = parseFloat(pj.price) || 0;
+            const discountPercent = parseFloat(pj.discountPercent) || 0;
+            const discountPrice = price - (price * discountPercent) / 100;
+
+            let media = null;
+            if (pj.images && pj.images.length > 0) {
+              media = pj.images[0];
+            }
+
+            return {
+              id: pj.id,
+              name: pj.name,
+              description: pj.description,
+              price,
+              discountPrice,
+              discountPercent,
+              weight: pj.weightGram,
+              media,
+            };
+          });
+
+        const formattedPackages = packages
+          .filter((pkg) => pkg.locationId === locId)
+          .map((pkg) => {
+            const pkgJson = pkg.toJSON();
+            const price = parseFloat(pkgJson.price) || 0;
+            const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
+            const discountPrice = price - (price * discountPercent) / 100;
+
+            const items = (pkgJson.items || []).map((item) => ({
+              id: item.id,
+              qty: item.qty,
+              service: item.service || null,
+            }));
+
+            let media = null;
+            if (pkgJson.location && pkgJson.location.images && pkgJson.location.images.length > 0) {
+              media = pkgJson.location.images[0];
+            }
+
+            return {
+              id: pkgJson.id,
+              name: pkgJson.name,
+              description: pkgJson.description,
+              price,
+              discountPrice,
+              discountPercent,
+              items,
+              media,
+            };
+          });
+
+        return {
+          locationId: locId,
+          locationName: locJson.name,
+          distance: Math.round(parseFloat(locJson.distance) || 0),
+          products: formattedProducts,
+          packages: formattedPackages,
+        };
+      });
+
+      // Filter out outlets with no matching products/packages
+      const filteredOutlets = outlets.filter(
+        (o) => o.products.length > 0 || o.packages.length > 0
+      );
+
+      return {
+        status: true,
+        message: "Berhasil",
+        data: {
+          recommendations: recommendations.map((r) => r.toJSON()),
+          outlets: filteredOutlets,
+        },
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

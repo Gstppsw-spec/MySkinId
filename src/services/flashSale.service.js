@@ -1,20 +1,21 @@
-const { Op, Sequelize } = require("sequelize");
+const { Op } = require("sequelize");
 const {
   flashSale,
   flashSaleItem,
   masterProduct,
   masterProductImage,
+  masterPackage,
   masterLocation,
+  masterLocationImage,
+  sequelize,
 } = require("../models");
 
 /**
- * Secara otomatis update status flash sale berdasarkan waktu sekarang.
- * Dipanggil sebelum query agar data selalu up-to-date.
+ * Auto-update status flash sale berdasarkan waktu sekarang.
  */
 async function syncStatuses() {
   const now = new Date();
 
-  // UPCOMING → ACTIVE  (sudah lewat startDate, belum lewat endDate)
   await flashSale.update(
     { status: "ACTIVE" },
     {
@@ -26,7 +27,6 @@ async function syncStatuses() {
     }
   );
 
-  // ACTIVE / UPCOMING → ENDED  (sudah lewat endDate)
   await flashSale.update(
     { status: "ENDED" },
     {
@@ -38,134 +38,92 @@ async function syncStatuses() {
   );
 }
 
+/* ── Include helpers ──────────────────────────── */
+
+const itemIncludes = [
+  {
+    model: masterLocation,
+    as: "location",
+    attributes: ["id", "name"],
+  },
+  {
+    model: masterProduct,
+    as: "product",
+    attributes: ["id", "name", "price", "discountPercent"],
+    include: [
+      {
+        model: masterProductImage,
+        as: "images",
+        attributes: ["id", "imageUrl"],
+      },
+    ],
+  },
+  {
+    model: masterPackage,
+    as: "package",
+    attributes: ["id", "name", "price", "discountPercent"],
+  },
+];
+
 module.exports = {
+  /* ═══════════════════════════════════════════════
+     SUPER ADMIN — Kelola Flash Sale Event
+     ═══════════════════════════════════════════════ */
+
   /**
-   * Buat flash sale baru beserta item-itemnya.
-   * body: { locationId, title, startDate, endDate, items: [{ productId, flashPrice, stock }] }
+   * Buat flash sale event baru (Super Admin).
    */
   async create(data) {
     try {
-      if (!data.locationId) {
-        return { status: false, message: "locationId is required", data: null };
-      }
-      if (!data.title || data.title.trim() === "") {
-        return { status: false, message: "title is required", data: null };
-      }
-      if (!data.startDate || !data.endDate) {
-        return { status: false, message: "startDate and endDate are required", data: null };
-      }
+      console.log(data);
+      const { title, startDate, endDate } = data;
+      if (!title || title.trim() === "") throw new Error("title is required");
+      if (!startDate || !endDate) throw new Error("startDate and endDate are required");
 
-      const start = new Date(data.startDate);
-      const end = new Date(data.endDate);
-      if (end <= start) {
-        return { status: false, message: "endDate must be after startDate", data: null };
-      }
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (end <= start) throw new Error("endDate must be after startDate");
 
-      // Tentukan status awal berdasarkan waktu
       const now = new Date();
       let initialStatus = "UPCOMING";
       if (now >= start && now < end) initialStatus = "ACTIVE";
       if (now >= end) initialStatus = "ENDED";
 
-      const newFlashSale = await flashSale.create({
-        locationId: data.locationId,
-        title: data.title,
+      const fs = await flashSale.create({
+        title,
         startDate: start,
         endDate: end,
         status: initialStatus,
       });
-
-      // Buat items jika ada
-      if (data.items && Array.isArray(data.items) && data.items.length > 0) {
-        const itemRecords = data.items.map((item) => ({
-          flashSaleId: newFlashSale.id,
-          productId: item.productId,
-          flashPrice: item.flashPrice || 0,
-          stock: item.stock || 0,
-          sold: 0,
-        }));
-        await flashSaleItem.bulkCreate(itemRecords);
-      }
-
-      // Re-fetch dengan items
-      const result = await flashSale.findByPk(newFlashSale.id, {
-        include: [
-          {
-            model: flashSaleItem,
-            as: "items",
-            include: [
-              {
-                model: masterProduct,
-                as: "product",
-                attributes: ["id", "name", "price", "discountPercent"],
-                include: [
-                  {
-                    model: masterProductImage,
-                    as: "images",
-                    attributes: ["id", "imageUrl"],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      });
-
-      return {
-        status: true,
-        message: "Flash sale created successfully",
-        data: result,
-      };
+      return { status: true, message: "Flash sale created", data: fs };
     } catch (error) {
-      return { status: false, message: error.message, data: null };
+      return { status: false, message: error.message };
     }
   },
 
   /**
-   * List semua flash sale milik outlet tertentu.
+   * List semua flash sale.
    */
-  async getByLocationId(locationId, statusFilter) {
+  async getAll(statusFilter) {
     try {
       await syncStatuses();
 
-      const where = { locationId };
-      if (statusFilter) {
-        where.status = statusFilter;
-      }
+      const where = {};
+      if (statusFilter) where.status = statusFilter;
 
       const data = await flashSale.findAll({
         where,
-        include: [
-          {
-            model: flashSaleItem,
-            as: "items",
-            include: [
-              {
-                model: masterProduct,
-                as: "product",
-                attributes: ["id", "name", "price", "discountPercent"],
-                include: [
-                  {
-                    model: masterProductImage,
-                    as: "images",
-                    attributes: ["id", "imageUrl"],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
         order: [["startDate", "DESC"]],
       });
 
       return { status: true, message: "Success", data };
     } catch (error) {
-      return { status: false, message: error.message, data: null };
+      return { status: false, message: error.message };
     }
   },
 
   /**
-   * Detail satu flash sale.
+   * Detail flash sale + semua items.
    */
   async getById(id) {
     try {
@@ -174,79 +132,185 @@ module.exports = {
       const data = await flashSale.findByPk(id, {
         include: [
           {
-            model: masterLocation,
-            as: "location",
-            attributes: ["id", "name", "cityId", "districtId"],
-          },
-          {
             model: flashSaleItem,
             as: "items",
-            include: [
-              {
-                model: masterProduct,
-                as: "product",
-                attributes: ["id", "name", "price", "discountPercent", "sku"],
-                include: [
-                  {
-                    model: masterProductImage,
-                    as: "images",
-                    attributes: ["id", "imageUrl"],
-                  },
-                ],
-              },
-            ],
+            include: itemIncludes,
           },
         ],
       });
 
-      if (!data) {
-        return { status: false, message: "Flash sale not found", data: null };
-      }
+      if (!data) return { status: false, message: "Flash sale not found" };
 
       return { status: true, message: "Success", data };
     } catch (error) {
-      return { status: false, message: error.message, data: null };
+      return { status: false, message: error.message };
     }
   },
 
   /**
-   * List flash sale yang sedang ACTIVE (untuk customer).
+   * Update flash sale (Super Admin).
    */
-  async getActive(filters = {}) {
+  async update(id, data) {
+    try {
+      const existing = await flashSale.findByPk(id);
+      if (!existing) return { status: false, message: "Flash sale not found" };
+
+      const { title, startDate, endDate, status } = data;
+
+      if (title !== undefined) existing.title = title;
+      if (startDate !== undefined) existing.startDate = new Date(startDate);
+      if (endDate !== undefined) existing.endDate = new Date(endDate);
+
+      if (status) {
+        existing.status = status;
+      } else {
+        // Recalculate status based on time
+        const now = new Date();
+        const start = existing.startDate;
+        const end = existing.endDate;
+        if (now < start) existing.status = "UPCOMING";
+        else if (now >= start && now < end) existing.status = "ACTIVE";
+        else existing.status = "ENDED";
+      }
+
+      await existing.save();
+      return { status: true, message: "Flash sale updated successfully", data: existing };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Hapus flash sale + semua items (Super Admin).
+   */
+  async delete(id) {
+    try {
+      const existing = await flashSale.findByPk(id);
+      if (!existing) return { status: false, message: "Flash sale not found" };
+
+      await flashSaleItem.destroy({ where: { flashSaleId: id } });
+      await existing.destroy();
+
+      return { status: true, message: "Flash sale deleted successfully", data: { id } };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /* ═══════════════════════════════════════════════
+     OUTLET ADMIN — Daftarkan Items ke Flash Sale
+     ═══════════════════════════════════════════════ */
+
+  /**
+   * Outlet mendaftarkan items ke flash sale.
+   */
+  async registerItems(flashSaleId, data) {
+    const t = await sequelize.transaction();
+    try {
+      const { locationId, items } = data;
+      const fs = await flashSale.findByPk(flashSaleId);
+      if (!fs) throw new Error("Flash sale not found");
+
+      if (!locationId) throw new Error("locationId is required");
+      if (!items || !Array.isArray(items) || items.length === 0) throw new Error("items array is required");
+
+      const results = [];
+      for (const item of items) {
+        const { itemType, productId, packageId, flashPrice, quota } = item;
+
+        if (!itemType || !["PRODUCT", "PACKAGE"].includes(itemType)) throw new Error("itemType must be PRODUCT or PACKAGE");
+        
+        // Ownership Validation
+        if (itemType === "PRODUCT") {
+          if (!productId) throw new Error("productId is required for PRODUCT type");
+          const product = await masterProduct.findByPk(productId);
+          if (!product) throw new Error(`Product ${productId} not found`);
+          if (product.locationId !== locationId) throw new Error("Product does not belong to this outlet");
+        } else if (itemType === "PACKAGE") {
+          if (!packageId) throw new Error("packageId is required for PACKAGE type");
+          const pkg = await masterPackage.findByPk(packageId);
+          if (!pkg) throw new Error(`Package ${packageId} not found`);
+          if (pkg.locationId !== locationId) throw new Error("Package does not belong to this outlet");
+        }
+
+        const newItem = await flashSaleItem.create({
+          flashSaleId,
+          locationId,
+          itemType,
+          productId: itemType === "PRODUCT" ? productId : null,
+          packageId: itemType === "PACKAGE" ? packageId : null,
+          flashPrice: flashPrice || 0,
+          quota: quota || 0,
+          sold: 0
+        }, { transaction: t });
+
+        results.push(newItem);
+      }
+
+      await t.commit();
+      return { status: true, message: "Items registered successfully", data: results };
+    } catch (error) {
+      await t.rollback();
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Lihat items yang didaftarkan outlet di flash sale tertentu.
+   */
+  async getItemsByLocation(flashSaleId, locationId) {
+    try {
+      const fs = await flashSale.findByPk(flashSaleId);
+      if (!fs) return { status: false, message: "Flash sale not found" };
+
+      const items = await flashSaleItem.findAll({
+        where: { flashSaleId, locationId },
+        include: itemIncludes,
+      });
+
+      return {
+        status: true,
+        message: "Success",
+        data: {
+          flashSale: fs,
+          items,
+        },
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Hapus satu item dari flash sale (Outlet Admin).
+   */
+  async removeItem(itemId) {
+    try {
+      const item = await flashSaleItem.findByPk(itemId);
+      if (!item) return { status: false, message: "Flash sale item not found" };
+
+      await item.destroy();
+      return { status: true, message: "Item removed successfully", data: { id: itemId } };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /* ═══════════════════════════════════════════════
+     CUSTOMER — Browse Flash Sale Aktif
+     ═══════════════════════════════════════════════ */
+
+  async getActive() {
     try {
       await syncStatuses();
-
-      const { cityId } = filters;
-
-      const locationWhere = {};
-      if (cityId) locationWhere.cityId = cityId;
 
       const data = await flashSale.findAll({
         where: { status: "ACTIVE" },
         include: [
           {
-            model: masterLocation,
-            as: "location",
-            attributes: ["id", "name", "cityId"],
-            where: Object.keys(locationWhere).length > 0 ? locationWhere : undefined,
-          },
-          {
             model: flashSaleItem,
             as: "items",
-            include: [
-              {
-                model: masterProduct,
-                as: "product",
-                attributes: ["id", "name", "price", "discountPercent"],
-                include: [
-                  {
-                    model: masterProductImage,
-                    as: "images",
-                    attributes: ["id", "imageUrl"],
-                  },
-                ],
-              },
-            ],
+            include: itemIncludes,
           },
         ],
         order: [["endDate", "ASC"]],
@@ -254,104 +318,7 @@ module.exports = {
 
       return { status: true, message: "Success", data };
     } catch (error) {
-      return { status: false, message: error.message, data: null };
-    }
-  },
-
-  /**
-   * Update flash sale (title, waktu, items).
-   */
-  async update(id, data) {
-    try {
-      const existing = await flashSale.findByPk(id);
-      if (!existing) {
-        return { status: false, message: "Flash sale not found", data: null };
-      }
-
-      if (data.title !== undefined) existing.title = data.title;
-      if (data.startDate !== undefined) existing.startDate = new Date(data.startDate);
-      if (data.endDate !== undefined) existing.endDate = new Date(data.endDate);
-
-      // Recalculate status
-      const now = new Date();
-      const start = existing.startDate;
-      const end = existing.endDate;
-      if (now < start) existing.status = "UPCOMING";
-      else if (now >= start && now < end) existing.status = "ACTIVE";
-      else existing.status = "ENDED";
-
-      await existing.save();
-
-      // Jika items dikirim, replace semua items
-      if (data.items && Array.isArray(data.items)) {
-        await flashSaleItem.destroy({ where: { flashSaleId: id } });
-
-        if (data.items.length > 0) {
-          const itemRecords = data.items.map((item) => ({
-            flashSaleId: id,
-            productId: item.productId,
-            flashPrice: item.flashPrice || 0,
-            stock: item.stock || 0,
-            sold: item.sold || 0,
-          }));
-          await flashSaleItem.bulkCreate(itemRecords);
-        }
-      }
-
-      // Re-fetch
-      const result = await flashSale.findByPk(id, {
-        include: [
-          {
-            model: flashSaleItem,
-            as: "items",
-            include: [
-              {
-                model: masterProduct,
-                as: "product",
-                attributes: ["id", "name", "price", "discountPercent"],
-                include: [
-                  {
-                    model: masterProductImage,
-                    as: "images",
-                    attributes: ["id", "imageUrl"],
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      });
-
-      return {
-        status: true,
-        message: "Flash sale updated successfully",
-        data: result,
-      };
-    } catch (error) {
-      return { status: false, message: error.message, data: null };
-    }
-  },
-
-  /**
-   * Hapus flash sale + semua items.
-   */
-  async delete(id) {
-    try {
-      const existing = await flashSale.findByPk(id);
-      if (!existing) {
-        return { status: false, message: "Flash sale not found", data: null };
-      }
-
-      await flashSaleItem.destroy({ where: { flashSaleId: id } });
-      await existing.destroy();
-
-      return {
-        status: true,
-        message: "Flash sale deleted successfully",
-        data: { id },
-      };
-    } catch (error) {
-      return { status: false, message: error.message, data: null };
+      return { status: false, message: error.message };
     }
   },
 };

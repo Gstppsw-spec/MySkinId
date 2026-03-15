@@ -193,4 +193,20 @@ module.exports = {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   },
+
+  async addRecommendation(req, res) {
+    const { id } = req.params;
+    const result = await consultation.addRecommendation(id, req.body);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async getRecommendations(req, res) {
+    const { id } = req.params;
+    const result = await consultation.getRecommendations(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
 };

@@ -18,6 +18,11 @@ module.exports = (sequelize, DataTypes) => {
                 as: "package",
                 constraints: false,
             });
+            transactionItem.belongsTo(models.flashSaleItem, {
+                foreignKey: "flashSaleItemId",
+                as: "flashSaleItem",
+                constraints: false,
+            });
         }
     }
 
@@ -84,6 +89,10 @@ module.exports = (sequelize, DataTypes) => {
             },
             voucherCode: {
                 type: DataTypes.STRING(20),
+                allowNull: true,
+            },
+            flashSaleItemId: {
+                type: DataTypes.UUID,
                 allowNull: true,
             },
             createdAt: { type: DataTypes.DATE },
