@@ -27,16 +27,6 @@ module.exports = (sequelize, DataTypes) => {
         otherKey: "packageId",
         as: "packages",
       });
-
-      masterConsultationCategory.belongsToMany(
-        models.consultationRecommendation,
-        {
-          through: "consultationRecommendationCategory",
-          foreignKey: "consultationCategoryId",
-          otherKey: "recommendationId",
-          as: "recommendations",
-        }
-      );
     }
   }
 

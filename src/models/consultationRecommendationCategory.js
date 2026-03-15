@@ -19,9 +19,13 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      consultationCategoryId: {
+      productCategoryId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
+      },
+      packageCategoryId: {
+        type: DataTypes.UUID,
+        allowNull: true,
       },
     },
     {

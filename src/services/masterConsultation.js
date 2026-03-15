@@ -21,7 +21,7 @@ const {
   masterQuestionnaireAnswer,
 } = require("../models");
 
-const { Op, Sequelize, where } = require("sequelize");
+const { Op, Sequelize, where, Model } = require("sequelize");
 const fs = require("fs");
 const path = require("path");
 const { nanoid } = require("nanoid");
@@ -1388,56 +1388,43 @@ module.exports = {
 
   async addRecommendation(roomId, data) {
     try {
-      const { notes, categoryIds } = data;
+      const { notes, productCategoryIds, packageCategoryIds } = data;
 
-      if (!roomId) {
-        return { status: false, message: "Room ID tidak boleh kosong", data: null };
-      }
-
-      if (!notes || notes.trim() === "") {
-        return { status: false, message: "Notes tidak boleh kosong", data: null };
-      }
-
-      if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
-        return { status: false, message: "Harus memilih minimal 1 kategori", data: null };
-      }
+      if (!roomId) return { status: false, message: "Room ID tidak boleh kosong", data: null };
+      if (!notes || notes.trim() === "") return { status: false, message: "Notes tidak boleh kosong", data: null };
 
       const room = await masterRoomConsultation.findByPk(roomId);
-      if (!room) {
-        return { status: false, message: "Room tidak ditemukan", data: null };
+      if (!room) return { status: false, message: "Room tidak ditemukan", data: null };
+
+      // Upsert recommendation
+      let recommendation = await consultationRecommendation.findOne({ where: { roomId } });
+
+      if (recommendation) {
+        recommendation.notes = notes.trim();
+        await recommendation.save();
+      } else {
+        recommendation = await consultationRecommendation.create({
+          roomId,
+          notes: notes.trim(),
+        });
       }
 
-      // Validate all category IDs exist
-      const categories = await masterConsultationCategory.findAll({
-        where: { id: { [Op.in]: categoryIds } },
-      });
-
-      if (categories.length !== categoryIds.length) {
-        return { status: false, message: "Beberapa kategori tidak ditemukan", data: null };
+      // Update categories (replaces existing associations)
+      if (productCategoryIds && Array.isArray(productCategoryIds)) {
+        await recommendation.setProductCategories(productCategoryIds);
+      }
+      if (packageCategoryIds && Array.isArray(packageCategoryIds)) {
+        await recommendation.setPackageCategories(packageCategoryIds);
       }
 
-      // Create the recommendation
-      const recommendation = await consultationRecommendation.create({
-        roomId,
-        notes: notes.trim(),
-      });
-
-      // Link categories
-      await recommendation.setCategories(categories);
-
-      // Re-fetch with categories
       const result = await consultationRecommendation.findByPk(recommendation.id, {
         include: [
-          {
-            model: masterConsultationCategory,
-            as: "categories",
-            attributes: ["id", "name", "iconUrl"],
-            through: { attributes: [] },
-          },
+          { model: masterProductCategory, as: "productCategories", attributes: ["id", "name"], through: { attributes: [] } },
+          { model: masterSubCategoryService, as: "packageCategories", attributes: ["id", "name"], through: { attributes: [] } },
         ],
       });
 
-      return { status: true, message: "Berhasil menambahkan rekomendasi", data: result };
+      return { status: true, message: "Berhasil menyimpan rekomendasi", data: result };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
@@ -1454,235 +1441,247 @@ module.exports = {
         return { status: false, message: "Room tidak ditemukan", data: null };
       }
 
-      // Fetch all recommendations for this room
-      const recommendations = await consultationRecommendation.findAll({
+      // Fetch the single recommendation for this room
+      const recommendation = await consultationRecommendation.findOne({
         where: { roomId },
         include: [
           {
-            model: masterConsultationCategory,
-            as: "categories",
-            attributes: ["id", "name", "iconUrl"],
+            model: masterProductCategory,
+            as: "productCategories",
+            attributes: ["id", "name"],
+            through: { attributes: [] },
+          },
+          {
+            model: masterSubCategoryService,
+            as: "packageCategories",
+            attributes: ["id", "name"],
             through: { attributes: [] },
           },
         ],
-        order: [["createdAt", "ASC"]],
       });
 
-      // Collect all unique category IDs from all recommendations
-      const allCategoryIds = [
-        ...new Set(
-          recommendations.flatMap((rec) =>
-            rec.categories.map((cat) => cat.id)
-          )
-        ),
-      ];
+      if (!recommendation) {
+        return {
+          status: true,
+          message: "Belum ada rekomendasi",
+          data: {
+            recommendation: null,
+            outlets: [],
+          },
+        };
+      }
 
-      if (allCategoryIds.length === 0) {
+      const recJson = recommendation.toJSON();
+      const allProductCategoryIds = recJson.productCategories.map((cat) => cat.id);
+      const allPackageCategoryIds = recJson.packageCategories.map((cat) => cat.id);
+
+      if (allProductCategoryIds.length === 0 && allPackageCategoryIds.length === 0) {
         return {
           status: true,
           message: "Berhasil",
           data: {
-            recommendations: recommendations.map((r) => r.toJSON()),
+            recommendation: recJson,
             outlets: [],
           },
         };
       }
 
       // Determine customer location
-      const latitude = room.latitude;
-      const longitude = room.longitude;
+      let latitude = room.latitude;
+      let longitude = room.longitude;
+      let isLocationAvailable = !!(latitude && longitude);
+      let nearestLocations = [];
 
-      if (!latitude || !longitude) {
-        return {
-          status: true,
-          message: "Berhasil (tanpa data outlet - lokasi customer tidak tersedia)",
-          data: {
-            recommendations: recommendations.map((r) => r.toJSON()),
-            outlets: [],
+      if (isLocationAvailable) {
+        const distanceLiteral = Sequelize.literal(`
+          (6371 * acos(
+            cos(radians(${parseFloat(latitude)})) *
+            cos(radians(CAST(latitude AS FLOAT))) *
+            cos(radians(CAST(longitude AS FLOAT)) - radians(${parseFloat(longitude)})) +
+            sin(radians(${parseFloat(latitude)})) *
+            sin(radians(CAST(latitude AS FLOAT)))
+          )) * 1000.0
+        `);
+
+        nearestLocations = await masterLocation.findAll({
+          attributes: ["id", "name", [distanceLiteral, "distance"]],
+          where: {
+            latitude: { [Op.ne]: null },
+            longitude: { [Op.ne]: null },
           },
-        };
+          order: [[distanceLiteral, "ASC"]],
+          limit: 10,
+        });
+      } else if (room.locationId) {
+        const fallbackOutlet = await masterLocation.findByPk(room.locationId, {
+          attributes: ["id", "name"],
+        });
+        if (fallbackOutlet) {
+          const outletJson = fallbackOutlet.toJSON();
+          outletJson.distance = 0;
+          nearestLocations = [outletJson];
+        }
       }
-
-      // Find nearest locations using Haversine formula (distance in meters)
-      const distanceLiteral = Sequelize.literal(`
-        (6371 * acos(
-          cos(radians(${latitude})) *
-          cos(radians(CAST(latitude AS FLOAT))) *
-          cos(radians(CAST(longitude AS FLOAT)) - radians(${longitude})) +
-          sin(radians(${latitude})) *
-          sin(radians(CAST(latitude AS FLOAT)))
-        )) * 1000.0
-      `);
-
-      const nearestLocations = await masterLocation.findAll({
-        attributes: ["id", "name", [distanceLiteral, "distance"]],
-        where: {
-          latitude: { [Op.ne]: null },
-          longitude: { [Op.ne]: null },
-        },
-        order: [[distanceLiteral, "ASC"]],
-        limit: 10,
-      });
 
       const locationIds = nearestLocations.map((loc) => loc.id);
 
       if (locationIds.length === 0) {
         return {
           status: true,
-          message: "Berhasil (tidak ada outlet terdekat)",
+          message: isLocationAvailable 
+            ? "Berhasil (tidak ada outlet terdekat)" 
+            : "Berhasil (lokasi customer & outlet room tidak tersedia)",
           data: {
-            recommendations: recommendations.map((r) => r.toJSON()),
+            recommendation: recJson,
             outlets: [],
           },
         };
       }
 
-      // Fetch products & packages from nearby outlets that match the recommendation categories
+      // Query preparations
+      const productInclude = [
+        { model: masterProductImage, as: "images", attributes: ["imageUrl"] },
+        {
+          model: masterProductCategory,
+          as: "categories",
+          where: { id: { [Op.in]: allProductCategoryIds } },
+          attributes: ["id", "name"],
+          through: { attributes: [] },
+          required: true,
+        }
+      ];
+
+      const packageInclude = [
+        {
+          model: masterPackageItems,
+          as: "items",
+          attributes: ["id", "qty"],
+          include: [
+            {
+              model: masterService,
+              as: "service",
+              attributes: ["id", "name", "description", "duration", "price"],
+              include: [
+                {
+                  model: masterSubCategoryService,
+                  as: "categories",
+                  where: { id: { [Op.in]: allPackageCategoryIds } },
+                  attributes: ["id", "name"],
+                  through: { attributes: [] },
+                  required: true,
+                }
+              ],
+            },
+          ],
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: ["id"],
+          include: [{ model: masterLocationImage, as: "images", attributes: ["imageUrl"] }],
+        }
+      ];
+
       const [products, packages] = await Promise.all([
-        masterProduct.findAll({
+        allProductCategoryIds.length > 0 ? masterProduct.findAll({
           where: { locationId: locationIds },
           attributes: ["id", "name", "description", "price", "discountPercent", "weightGram", "locationId"],
-          include: [
-            {
-              model: masterProductImage,
-              as: "images",
-              attributes: ["imageUrl"],
-            },
-            {
-              model: masterLocation,
-              as: "location",
-              attributes: ["id", "name", "cityId", "districtId"],
-            },
-            {
-              model: masterConsultationCategory,
-              as: "consultationCategories",
-              where: { id: { [Op.in]: allCategoryIds } },
-              attributes: [],
-              through: { attributes: [] },
-              required: true,
-            },
-          ],
-        }),
-        masterPackage.findAll({
+          include: productInclude,
+        }) : Promise.resolve([]),
+        allPackageCategoryIds.length > 0 ? masterPackage.findAll({
           where: { locationId: locationIds },
           attributes: ["id", "name", "description", "price", "discountPercent", "locationId"],
-          include: [
-            {
-              model: masterLocation,
-              as: "location",
-              attributes: ["id", "name", "cityId", "districtId"],
-              include: [
-                {
-                  model: masterLocationImage,
-                  as: "images",
-                  attributes: ["imageUrl"],
-                },
-              ],
-            },
-            {
-              model: masterPackageItems,
-              as: "items",
-              attributes: ["id", "qty"],
-              include: [
-                {
-                  model: masterService,
-                  as: "service",
-                  attributes: ["id", "name", "description", "duration", "price"],
-                },
-              ],
-            },
-            {
-              model: masterConsultationCategory,
-              as: "consultationCategories",
-              where: { id: { [Op.in]: allCategoryIds } },
-              attributes: [],
-              through: { attributes: [] },
-              required: true,
-            },
-          ],
-        }),
+          include: packageInclude,
+        }) : Promise.resolve([]),
       ]);
 
-      // Group by nearest locations
       const outlets = nearestLocations.map((loc) => {
-        const locJson = loc.toJSON();
+        const locJson = loc instanceof Model ? loc.toJSON() : loc;
         const locId = locJson.id;
+        const radius = Math.round(parseFloat(locJson.distance) || 0);
 
-        const formattedProducts = products
-          .filter((p) => p.locationId === locId)
-          .map((product) => {
-            const pj = product.toJSON();
-            const price = parseFloat(pj.price) || 0;
-            const discountPercent = parseFloat(pj.discountPercent) || 0;
-            const discountPrice = price - (price * discountPercent) / 100;
+        const outletProducts = products.filter((p) => p.locationId === locId);
+        const productCategories = [];
+        const productCatsMap = {};
 
-            let media = null;
-            if (pj.images && pj.images.length > 0) {
-              media = pj.images[0];
+        outletProducts.forEach((p) => {
+          const pj = p.toJSON();
+          const price = parseFloat(pj.price) || 0;
+          const discountPercent = parseFloat(pj.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+          const media = pj.images && pj.images.length > 0 ? pj.images[0] : null;
+
+          const productData = {
+            id: pj.id,
+            name: pj.name,
+            description: pj.description,
+            price,
+            discountPrice,
+            discountPercent,
+            weight: pj.weightGram,
+            media,
+          };
+
+          pj.categories.forEach((cat) => {
+            if (!productCatsMap[cat.id]) {
+              productCatsMap[cat.id] = { id: cat.id, name: cat.name, products: [] };
+              productCategories.push(productCatsMap[cat.id]);
             }
+            productCatsMap[cat.id].products.push(productData);
+          });
+        });
 
-            return {
-              id: pj.id,
-              name: pj.name,
-              description: pj.description,
-              price,
-              discountPrice,
-              discountPercent,
-              weight: pj.weightGram,
-              media,
-            };
+        const outletPackages = packages.filter((pkg) => pkg.locationId === locId);
+        const packageCategories = [];
+        const packageCatsMap = {};
+
+        outletPackages.forEach((pkg) => {
+          const pkgJson = pkg.toJSON();
+          const price = parseFloat(pkgJson.price) || 0;
+          const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+          const media = pkgJson.location && pkgJson.location.images && pkgJson.location.images.length > 0 ? pkgJson.location.images[0] : null;
+
+          const services = (pkgJson.items || []).map((item) => ({
+            id: item.id,
+            qty: item.qty,
+            service: item.service || null,
+          }));
+
+          const packageData = { id: pkgJson.id, name: pkgJson.name, description: pkgJson.description, price, discountPrice, discountPercent, services, media };
+
+          const uniqueCatsInPkg = {};
+          (pkgJson.items || []).forEach(item => {
+            if (item.service && item.service.categories) {
+              item.service.categories.forEach(cat => { uniqueCatsInPkg[cat.id] = cat; });
+            }
           });
 
-        const formattedPackages = packages
-          .filter((pkg) => pkg.locationId === locId)
-          .map((pkg) => {
-            const pkgJson = pkg.toJSON();
-            const price = parseFloat(pkgJson.price) || 0;
-            const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
-            const discountPrice = price - (price * discountPercent) / 100;
-
-            const items = (pkgJson.items || []).map((item) => ({
-              id: item.id,
-              qty: item.qty,
-              service: item.service || null,
-            }));
-
-            let media = null;
-            if (pkgJson.location && pkgJson.location.images && pkgJson.location.images.length > 0) {
-              media = pkgJson.location.images[0];
+          Object.values(uniqueCatsInPkg).forEach(cat => {
+            if (!packageCatsMap[cat.id]) {
+              packageCatsMap[cat.id] = { id: cat.id, name: cat.name, packages: [] };
+              packageCategories.push(packageCatsMap[cat.id]);
             }
-
-            return {
-              id: pkgJson.id,
-              name: pkgJson.name,
-              description: pkgJson.description,
-              price,
-              discountPrice,
-              discountPercent,
-              items,
-              media,
-            };
+            packageCatsMap[cat.id].packages.push(packageData);
           });
+        });
 
         return {
           locationId: locId,
           locationName: locJson.name,
-          distance: Math.round(parseFloat(locJson.distance) || 0),
-          products: formattedProducts,
-          packages: formattedPackages,
+          radius,
+          productCategories,
+          packageCategories,
         };
       });
 
-      // Filter out outlets with no matching products/packages
-      const filteredOutlets = outlets.filter(
-        (o) => o.products.length > 0 || o.packages.length > 0
-      );
+      const filteredOutlets = outlets.filter((o) => o.productCategories.length > 0 || o.packageCategories.length > 0);
 
       return {
         status: true,
         message: "Berhasil",
         data: {
-          recommendations: recommendations.map((r) => r.toJSON()),
+          recommendation: recJson,
           outlets: filteredOutlets,
         },
       };

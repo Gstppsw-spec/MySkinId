@@ -10,12 +10,22 @@ module.exports = (sequelize, DataTypes) => {
       });
 
       consultationRecommendation.belongsToMany(
-        models.masterConsultationCategory,
+        models.masterProductCategory,
         {
           through: "consultationRecommendationCategory",
           foreignKey: "recommendationId",
-          otherKey: "consultationCategoryId",
-          as: "categories",
+          otherKey: "productCategoryId",
+          as: "productCategories",
+        }
+      );
+
+      consultationRecommendation.belongsToMany(
+        models.masterSubCategoryService,
+        {
+          through: "consultationRecommendationCategory",
+          foreignKey: "recommendationId",
+          otherKey: "packageCategoryId",
+          as: "packageCategories",
         }
       );
     }

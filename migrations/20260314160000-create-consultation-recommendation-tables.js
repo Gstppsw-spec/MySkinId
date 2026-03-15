@@ -56,11 +56,21 @@ module.exports = {
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
       },
-      consultationCategoryId: {
+      productCategoryId: {
         type: Sequelize.UUID,
-        allowNull: false,
+        allowNull: true,
         references: {
-          model: "masterConsultationCategory",
+          model: "masterProductCategory",
+          key: "id",
+        },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      },
+      packageCategoryId: {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: "masterSubCategoryService",
           key: "id",
         },
         onDelete: "CASCADE",
@@ -87,9 +97,16 @@ module.exports = {
     );
     await queryInterface.addIndex(
       "consultationRecommendationCategory",
-      ["consultationCategoryId"],
+      ["productCategoryId"],
       {
-        name: "idx_crc_consultation_category",
+        name: "idx_crc_product_category",
+      }
+    );
+    await queryInterface.addIndex(
+      "consultationRecommendationCategory",
+      ["packageCategoryId"],
+      {
+        name: "idx_crc_package_category",
       }
     );
   },
