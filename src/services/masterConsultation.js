@@ -1430,6 +1430,40 @@ module.exports = {
     }
   },
 
+  async getRecommendationDetail(roomId) {
+    try {
+      const recommendation = await consultationRecommendation.findOne({
+        where: { roomId },
+        include: [
+          {
+            model: masterProductCategory,
+            as: "productCategories",
+            attributes: ["id", "name"],
+            through: { attributes: [] },
+          },
+          {
+            model: masterSubCategoryService,
+            as: "packageCategories",
+            attributes: ["id", "name"],
+            through: { attributes: [] },
+          },
+        ],
+      });
+
+      if (!recommendation) {
+        return { status: false, message: "Rekomendasi tidak ditemukan", data: null };
+      }
+
+      return {
+        status: true,
+        message: "Berhasil",
+        data: { recommendation },
+      };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
   async getRecommendations(roomId) {
     try {
       const room = await masterRoomConsultation.findOne({

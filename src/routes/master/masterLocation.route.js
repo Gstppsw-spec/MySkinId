@@ -6,6 +6,7 @@ const { verifyToken } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 // >>> STATIC ROUTES FIRST <<<
+router.get("/newly-added", masterLocationController.getNewArrivalOutlets);
 router.get("/company/:companyId", masterLocationController.getByCompanyId);
 
 router.get("/user", verifyToken, masterLocationController.getLocationByUser);

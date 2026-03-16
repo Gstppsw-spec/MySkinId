@@ -51,6 +51,7 @@ router.patch(
   allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
   masterProduct.deleteImage,
 );
+router.get("/creator", verifyToken, masterProduct.getByCreator);
 router.get("/location/:locationId", masterProduct.getByLocationId);
 router.get("/user", verifyToken, masterProduct.getProductByUser);
 router.get("/", masterProduct.getAll);

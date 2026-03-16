@@ -43,6 +43,11 @@ module.exports = (sequelize, DataTypes) => {
         as: "location",
         constraints: false, // FK di DB boleh menyusul
       });
+
+      masterProduct.belongsTo(models.masterUser, {
+        foreignKey: "createdBy",
+        as: "creator",
+      });
     }
   }
 
@@ -136,6 +141,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,
+      },
+      createdBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
       },
     },
     {

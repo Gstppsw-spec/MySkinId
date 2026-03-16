@@ -136,6 +136,15 @@ class masterLocationController {
       : response.error(res, location.message, null);
   }
 
+  async getNewArrivalOutlets(req, res) {
+    const { latt, long } = req.query;
+    const result = await masterLocationService.getNewArrivalOutlets(latt, long);
+
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
   async getCityByLatitudeLongitude(req, res) {
     const { latitude, longitude } = req.query;
     const result = await masterLocationService.getCityByLatitudeLongitude(

@@ -85,7 +85,7 @@ module.exports = {
   async create(req, res) {
     try {
       const data = req.body;
-      const result = await productService.create(data, req.files);
+      const result = await productService.create(data, req.files, req.user.id);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -135,6 +135,18 @@ module.exports = {
     try {
       const user = req.user;
       const result = await productService.getProductByUser(user);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getByCreator(req, res) {
+    try {
+      const userId = req.user.id;
+      const result = await productService.getProductByCreator(userId);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);

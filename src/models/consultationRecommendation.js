@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
       consultationRecommendation.belongsToMany(
         models.masterProductCategory,
         {
-          through: "consultationRecommendationCategory",
+          through: models.consultationRecommendationCategory,
           foreignKey: "recommendationId",
           otherKey: "productCategoryId",
           as: "productCategories",
@@ -22,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
       consultationRecommendation.belongsToMany(
         models.masterSubCategoryService,
         {
-          through: "consultationRecommendationCategory",
+          through: models.consultationRecommendationCategory,
           foreignKey: "recommendationId",
           otherKey: "packageCategoryId",
           as: "packageCategories",

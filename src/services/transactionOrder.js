@@ -1723,7 +1723,7 @@ module.exports = {
         }
     },
 
-    async getMyVouchers(customerId) {
+    async getMyVouchers(customerId, { page = 1, pageSize = 10 }) {
         try {
             // 1. Auto-expire vouchers first
             await customerVoucher.update(
@@ -1737,8 +1737,11 @@ module.exports = {
                 }
             );
 
+            const limit = parseInt(pageSize);
+            const offset = (page - 1) * limit;
+
             // 2. Fetch all vouchers for the customer
-            const vouchers = await customerVoucher.findAll({
+            const { count: totalCount, rows: vouchers } = await customerVoucher.findAndCountAll({
                 where: { customerId },
                 include: [
                     {
@@ -1778,6 +1781,8 @@ module.exports = {
                         ],
                     },
                 ],
+                limit,
+                offset,
                 order: [["createdAt", "DESC"]],
             });
 
@@ -1803,6 +1808,7 @@ module.exports = {
                 status: true,
                 message: "Vouchers fetched successfully",
                 data: result,
+                totalCount: totalCount
             };
         } catch (error) {
             return { status: false, message: error.message };

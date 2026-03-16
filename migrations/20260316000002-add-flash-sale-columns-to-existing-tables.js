@@ -3,32 +3,44 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     // Add flashSaleItemId to customerCart
-    await queryInterface.addColumn("customerCart", "flashSaleItemId", {
-      type: Sequelize.UUID,
-      allowNull: true,
-      references: {
-        model: "flashSaleItem",
-        key: "id",
-      },
-      onUpdate: "CASCADE",
-      onDelete: "SET NULL",
-    });
+    try {
+      await queryInterface.addColumn("customerCart", "flashSaleItemId", {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: "flashSaleItem",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      });
+    } catch (error) {
+      console.log("Column flashSaleItemId in customerCart might already exist, skipping...");
+    }
 
     // Add flashSaleItemId to transactionItems
-    await queryInterface.addColumn("transactionItems", "flashSaleItemId", {
-      type: Sequelize.UUID,
-      allowNull: true,
-      references: {
-        model: "flashSaleItem",
-        key: "id",
-      },
-      onUpdate: "CASCADE",
-      onDelete: "SET NULL",
-    });
+    try {
+      await queryInterface.addColumn("transactionItems", "flashSaleItemId", {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: "flashSaleItem",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      });
+    } catch (error) {
+      console.log("Column flashSaleItemId in transactionItems might already exist, skipping...");
+    }
   },
 
   async down(queryInterface) {
-    await queryInterface.removeColumn("customerCart", "flashSaleItemId");
-    await queryInterface.removeColumn("transactionItems", "flashSaleItemId");
+    try {
+      await queryInterface.removeColumn("customerCart", "flashSaleItemId");
+    } catch (error) {}
+    try {
+      await queryInterface.removeColumn("transactionItems", "flashSaleItemId");
+    } catch (error) {}
   },
 };

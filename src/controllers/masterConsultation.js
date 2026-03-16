@@ -202,6 +202,14 @@ module.exports = {
       : response.error(res, result.message, null);
   },
 
+  async getRecommendationDetail(req, res) {
+    const { id } = req.params;
+    const result = await consultation.getRecommendationDetail(id);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
   async getRecommendations(req, res) {
     const { id } = req.params;
     const result = await consultation.getRecommendations(id);

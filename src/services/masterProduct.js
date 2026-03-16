@@ -110,6 +110,7 @@ module.exports = {
             "longitude",
             "cityId",
             "districtId",
+            "biteshipAreaId",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
           required: !!(userLat && userLng || cityId),
@@ -315,7 +316,7 @@ module.exports = {
     }
   },
 
-  async create(data, files) {
+  async create(data, files, userId) {
     try {
       if (!data.name || data.name.trim() === "") {
         return { status: false, message: "Name is required", data: null };
@@ -364,6 +365,7 @@ module.exports = {
         lengthCm: data.lengthCm || null,
         widthCm: data.widthCm || null,
         heightCm: data.heightCm || null,
+        createdBy: userId,
       });
 
       if (files && files.length > 0) {
@@ -459,6 +461,9 @@ module.exports = {
 
       product.heightCm =
         data.heightCm !== undefined ? Number(data.heightCm) : product.heightCm;
+
+      product.createdBy =
+        data.createdBy !== undefined ? data.createdBy : product.createdBy;
 
       await product.save();
 
@@ -666,6 +671,58 @@ module.exports = {
         status: true,
         message: "Success",
         data: product,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async getProductByCreator(userId) {
+    try {
+      const include = [
+        {
+          model: masterProductCategory,
+          as: "categories",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterConsultationCategory,
+          as: "consultationCategories",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterGroupProduct,
+          as: "groupProduct",
+          through: { attributes: [] },
+          attributes: ["id", "name", "description"],
+        },
+        {
+          model: masterProductImage,
+          as: "images",
+          attributes: ["id", "imageUrl"],
+        },
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: ["id", "name", "cityId", "districtId"],
+        },
+      ];
+
+      const products = await masterProduct.findAll({
+        where: { createdBy: userId },
+        include,
+        attributes: {
+          exclude: ["updatedAt"],
+        },
+        order: [["createdAt", "DESC"]],
+      });
+
+      return {
+        status: true,
+        message: "Success",
+        data: products,
       };
     } catch (error) {
       return { status: false, message: error.message };

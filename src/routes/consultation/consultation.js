@@ -29,6 +29,8 @@ const uploadImageConsultation = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
+const { allowRoles } = require("../../middlewares/roleMiddleware");
+
 router.use(verifyToken);
 
 router.get("/room/readyToAssign", consultation.readyToAssign);
@@ -60,7 +62,12 @@ router.get("/room/:id/allPrescriptionByOutlet", consultation.getAllPrescriptionB
 router.delete("/room/:roomId/prescriptions", consultation.deletePrescriptionsByRoomId);
 router.delete("/prescription/:id", consultation.deletePrescription);
 
-router.post("/room/:id/recommendation", consultation.addRecommendation);
+router.post("/room/:id/recommendation", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN", "DOCTOR_GENERAL", "OUTLET_DOCTOR"), consultation.addRecommendation);
+router.get(
+  "/room/:id/recommendation",
+  allowRoles("OUTLET_ADMIN", "SUPER_ADMIN", "DOCTOR_GENERAL", "OUTLET_DOCTOR"),
+  consultation.getRecommendationDetail
+);
 router.get("/room/:id/recommendations", consultation.getRecommendations);
 
 module.exports = router;

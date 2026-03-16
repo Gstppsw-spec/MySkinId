@@ -19,6 +19,7 @@ router.delete(
   masterPackage.deletePackage,
 );
 
+router.get("/creator", verifyToken, masterPackage.getByCreator);
 router.get("/user", verifyToken, masterPackage.getPackageByUser);
 router.get("/location/:locationId", masterPackage.getByLocationId);
 router.get("/", masterPackage.getAllPackage);

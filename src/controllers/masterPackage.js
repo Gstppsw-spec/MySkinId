@@ -78,7 +78,7 @@ module.exports = {
   async create(req, res) {
     try {
       const data = req.body;
-      const result = await packageService.create(data);
+      const result = await packageService.create(data, req.user.id);
 
       if (!result.status)
         return response.error(res, result.message, result.data);
@@ -175,6 +175,18 @@ module.exports = {
     try {
       const { packageItemId } = req.params;
       const result = await packageService.deletePackageItem(packageItemId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getByCreator(req, res) {
+    try {
+      const userId = req.user.id;
+      const result = await packageService.getPackageByCreator(userId);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);

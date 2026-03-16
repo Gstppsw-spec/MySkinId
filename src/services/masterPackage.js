@@ -115,6 +115,7 @@ module.exports = {
             "longitude",
             "cityId",
             "districtId",
+            "biteshipAreaId",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
           required: !!(userLat && userLng || cityId),
@@ -240,7 +241,7 @@ module.exports = {
     }
   },
 
-  async create(data) {
+  async create(data, userId) {
     const transaction = await sequelize.transaction();
     try {
       if (!data.name || data.name.trim() === "") {
@@ -286,6 +287,7 @@ module.exports = {
           discountPercent: data.discountPercent ?? 0,
           isActive: data.isActive ?? true,
           locationId: data.locationId,
+          createdBy: userId,
         },
         { transaction },
       );
@@ -362,6 +364,7 @@ module.exports = {
           price: data.price ?? pkg.price,
           discountPercent: data.discountPercent ?? pkg.discountPercent,
           isActive: data.isActive ?? pkg.isActive,
+          createdBy: data.createdBy ?? pkg.createdBy,
           // locationId: data.locationId ?? pkg.locationId,
         },
         { transaction },
@@ -805,12 +808,17 @@ module.exports = {
     ];
     try {
       if (roleCode === "SUPER_ADMIN") {
-        return await masterPackage.findAll({
+        const packages = await masterPackage.findAll({
           include,
           attributes: {
             exclude: ["createdAt", "updatedAt"],
           },
         });
+        return {
+          status: true,
+          message: "Success",
+          data: packages,
+        };
       }
 
       const packages = await masterPackage.findAll({
@@ -831,6 +839,47 @@ module.exports = {
         data: packages,
       };
 
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async getPackageByCreator(userId) {
+    try {
+      const include = [
+        {
+          model: masterLocation,
+          as: "location",
+          attributes: ["id", "name", "cityId", "districtId"],
+        },
+        {
+          model: masterPackageItems,
+          as: "items",
+          attributes: ["packageId", "qty", "serviceId", "id"],
+          include: [
+            {
+              model: masterService,
+              as: "service",
+              attributes: ["id", "name"],
+            },
+          ],
+        },
+      ];
+      console.log("userId=", userId);
+      const packages = await masterPackage.findAll({
+        where: { createdBy: userId },
+        include,
+        attributes: {
+          exclude: ["updatedAt"],
+        },
+        order: [["createdAt", "DESC"]],
+      });
+
+      return {
+        status: true,
+        message: "Success",
+        data: packages,
+      };
     } catch (error) {
       return { status: false, message: error.message };
     }
