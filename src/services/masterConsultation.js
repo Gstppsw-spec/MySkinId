@@ -19,6 +19,7 @@ const {
   masterCity,
   masterQuestionnaire,
   masterQuestionnaireAnswer,
+  consultationRecommendationCategory,
 } = require("../models");
 
 const { Op, Sequelize, where, Model } = require("sequelize");
@@ -1409,12 +1410,53 @@ module.exports = {
         });
       }
 
-      // Update categories (replaces existing associations)
-      if (productCategoryIds && Array.isArray(productCategoryIds)) {
-        await recommendation.setProductCategories(productCategoryIds);
+      // Update categories (handle shared pivot table manually)
+      const rawProductCategoryIds = [...new Set((productCategoryIds || []).filter(id => id && id.length > 0))];
+      const rawPackageCategoryIds = [...new Set((packageCategoryIds || []).filter(id => id && id.length > 0))];
+
+      // Verify IDs exist to avoid FK errors
+      const validProductCategoryIds = [];
+      if (rawProductCategoryIds.length > 0) {
+        const existing = await masterProductCategory.findAll({
+          where: { id: { [Op.in]: rawProductCategoryIds } },
+          attributes: ["id"],
+        });
+        
+        if (existing.length !== rawProductCategoryIds.length) {
+          return { status: false, message: "Satu atau lebih kategori produk tidak ditemukan", data: null };
+        }
+        
+        existing.forEach((cat) => validProductCategoryIds.push(cat.id));
       }
-      if (packageCategoryIds && Array.isArray(packageCategoryIds)) {
-        await recommendation.setPackageCategories(packageCategoryIds);
+
+      const validPackageCategoryIds = [];
+      if (rawPackageCategoryIds.length > 0) {
+        const existing = await masterSubCategoryService.findAll({
+          where: { id: { [Op.in]: rawPackageCategoryIds } },
+          attributes: ["id"],
+        });
+
+        if (existing.length !== rawPackageCategoryIds.length) {
+          return { status: false, message: "Satu atau lebih kategori paket tidak ditemukan", data: null };
+        }
+
+        existing.forEach((cat) => validPackageCategoryIds.push(cat.id));
+      }
+
+      // We manage the pivot table manually because sharing one pivot table for two distinct 
+      // belongsToMany associations can cause Sequelize's set... methods to overwrite each other.
+      await consultationRecommendationCategory.destroy({ where: { recommendationId: recommendation.id } });
+
+      const pivotData = [];
+      validProductCategoryIds.forEach(id => {
+        pivotData.push({ recommendationId: recommendation.id, productCategoryId: id });
+      });
+      validPackageCategoryIds.forEach(id => {
+        pivotData.push({ recommendationId: recommendation.id, packageCategoryId: id });
+      });
+
+      if (pivotData.length > 0) {
+        await consultationRecommendationCategory.bulkCreate(pivotData);
       }
 
       const result = await consultationRecommendation.findByPk(recommendation.id, {
