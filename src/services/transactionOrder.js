@@ -1993,11 +1993,6 @@ module.exports = {
                         imageLocation
                     }
                 };
-                delete result.data.customer;
-                if (result.data.package?.location) {
-                    delete result.data.package.location.phone;
-                }
-                return result;
             }
 
             // 3. Expiration Check
@@ -2027,10 +2022,6 @@ module.exports = {
                 outletPhone: plainVoucher.package?.location?.phone || null,
                 imageLocation,
             };
-            delete finalData.customer;
-            if (finalData.package?.location) {
-                delete finalData.package.location.phone;
-            }
 
             return {
                 status: true,
