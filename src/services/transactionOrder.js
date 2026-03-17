@@ -1883,6 +1883,41 @@ module.exports = {
             // 4. Update Status
             await voucher.update({ status: "REDEEM" }, { transaction: t });
 
+            // 5. Auto-Complete Transaction logic
+            // Check if this transaction can be automatically marked as COMPLETED
+            const voucherTrxItem = await transactionItem.findOne({
+                where: { id: voucher.transactionItemId },
+                transaction: t
+            });
+
+            if (voucherTrxItem) {
+                const trxId = voucherTrxItem.transactionId;
+                const trx = await transaction.findOne({
+                    where: { id: trxId },
+                    include: [{ model: transactionItem, as: "items" }],
+                    transaction: t
+                });
+
+                if (trx && (trx.orderStatus === "PAID" || trx.orderStatus === "DELIVERED")) {
+                    const voucherCodes = trx.items.filter(item => item.voucherCode).map(item => item.voucherCode);
+                    const hasOtherItems = trx.items.some(item => !item.voucherCode);
+
+                    // Verify all vouchers in this transaction are REDEEM
+                    const redeemedVouchersCount = await customerVoucher.count({
+                        where: {
+                            voucherCode: { [Op.in]: voucherCodes },
+                            status: "REDEEM"
+                        },
+                        transaction: t
+                    });
+
+                    if (redeemedVouchersCount === voucherCodes.length && !hasOtherItems) {
+                        await trx.update({ orderStatus: "COMPLETED" }, { transaction: t });
+                        console.log(`[ClaimVoucher] Transaction ${trxId} automatically marked as COMPLETED`);
+                    }
+                }
+            }
+
             await t.commit();
 
             // 🔹 Xendit Platform: Transfer package amount to merchant after REDEEM
@@ -2498,6 +2533,21 @@ module.exports = {
                                 model: masterPackage,
                                 as: "package",
                                 attributes: ["id", "name", "price"],
+                                include: [
+                                    {
+                                        model: masterLocation,
+                                        as: "location",
+                                        attributes: ["id"],
+                                        include: [
+                                            {
+                                                model: masterLocationImage,
+                                                as: "images",
+                                                attributes: ["imageUrl"],
+                                                limit: 1
+                                            }
+                                        ]
+                                    }
+                                ]
                             }
                         ]
                     },
@@ -2528,6 +2578,8 @@ module.exports = {
                     let imageUrl = null;
                     if (item.product && item.product.images && item.product.images.length > 0) {
                         imageUrl = item.product.images[0].imageUrl;
+                    } else if (item.package && item.package.location && item.package.location.images && item.package.location.images.length > 0) {
+                        imageUrl = item.package.location.images[0].imageUrl;
                     }
 
                     return {
