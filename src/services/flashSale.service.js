@@ -66,6 +66,7 @@ const itemIncludes = [
 ];
 
 module.exports = {
+  syncStatuses,
   /* ═══════════════════════════════════════════════
      SUPER ADMIN — Kelola Flash Sale Event
      ═══════════════════════════════════════════════ */

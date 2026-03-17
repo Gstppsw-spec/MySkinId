@@ -7,9 +7,13 @@ const {
   masterProductImage,
   customerFavorites,
   masterLocation,
-  masterLocationImage
+  masterLocationImage,
+  relationshipUserLocation,
+  flashSale,
+  flashSaleItem,
 } = require("../models");
 const fs = require("fs");
+const flashSaleService = require("./flashSale.service");
 const { Op, Sequelize } = require("sequelize");
 
 module.exports = {
@@ -189,10 +193,45 @@ module.exports = {
         return { status: false, message: "Product not found", data: null };
       }
 
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "PRODUCT" },
+          },
+        ],
+      });
+
       const result = products.map((prod) => {
         const plain = prod.get({ plain: true });
+
+        let flashSaleInfo = null;
+        let isFlashSale = false;
+
+        for (const fs of activeFlashSales) {
+          const item = fs.items.find((i) => i.productId === plain.id);
+          if (item) {
+            isFlashSale = true;
+            flashSaleInfo = {
+              flashPrice: item.flashPrice,
+              flashSaleId: fs.id,
+              flashSaleItemId: item.id,
+              titleFlashSale: fs.title,
+              quota: item.quota,
+              sold: item.sold,
+              endDateFlashSale: fs.endDate,
+            };
+            break;
+          }
+        }
+
         return {
           ...plain,
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
@@ -586,10 +625,45 @@ module.exports = {
         return { status: false, message: "Product not found", data: null };
       }
 
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "PRODUCT" },
+          },
+        ],
+      });
+
       const result = products.map((prod) => {
         const plain = prod.get({ plain: true });
+
+        let flashSaleInfo = null;
+        let isFlashSale = false;
+
+        for (const fs of activeFlashSales) {
+          const item = fs.items.find((i) => i.productId === plain.id);
+          if (item) {
+            isFlashSale = true;
+            flashSaleInfo = {
+              flashPrice: item.flashPrice,
+              flashSaleId: fs.id,
+              flashSaleItemId: item.id,
+              titleFlashSale: fs.title,
+              quota: item.quota,
+              sold: item.sold,
+              endDateFlashSale: fs.endDate,
+            };
+            break;
+          }
+        }
+
         return {
           ...plain,
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
@@ -607,8 +681,18 @@ module.exports = {
     }
   },
 
-  async getProductByUser({ roleCode, locationIds }) {
+  async getProductByUser({ id: userId, roleCode, locationIds }) {
     try {
+      if (!locationIds || locationIds.length === 0) {
+        locationIds = await relationshipUserLocation
+          .findAll({
+            where: { userId },
+            attributes: ["locationId"],
+            raw: true,
+          })
+          .then((res) => res.map((r) => r.locationId));
+      }
+
       const include = [
         {
           model: masterProductCategory,

@@ -21,6 +21,7 @@ router.delete(
 
 router.get("/creator", verifyToken, masterPackage.getByCreator);
 router.get("/user", verifyToken, masterPackage.getPackageByUser);
+router.get("/by-user-location", verifyToken, masterPackage.getPackageByUser);
 router.get("/location/:locationId", masterPackage.getByLocationId);
 router.get("/", masterPackage.getAllPackage);
 router.get("/:id", masterPackage.getById);

@@ -8,8 +8,11 @@ const {
   masterSubCategoryService,
   relationshipUserLocation,
   masterConsultationCategory,
+  flashSale,
+  flashSaleItem,
 } = require("../models");
 const sequelize = require("../models").sequelize;
+const flashSaleService = require("./flashSale.service");
 
 const { Op, Sequelize } = require("sequelize");
 
@@ -216,10 +219,45 @@ module.exports = {
         },
       });
 
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "PACKAGE" },
+          },
+        ],
+      });
+
       const result = package.map((prod) => {
         const plain = prod.get({ plain: true });
+
+        let flashSaleInfo = null;
+        let isFlashSale = false;
+
+        for (const fs of activeFlashSales) {
+          const item = fs.items.find((i) => i.packageId === plain.id);
+          if (item) {
+            isFlashSale = true;
+            flashSaleInfo = {
+              flashPrice: item.flashPrice,
+              flashSaleId: fs.id,
+              flashSaleItemId: item.id,
+              titleFlashSale: fs.title,
+              quota: item.quota,
+              sold: item.sold,
+              endDateFlashSale: fs.endDate,
+            };
+            break;
+          }
+        }
+
         return {
           ...plain,
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
@@ -563,11 +601,46 @@ module.exports = {
         return { status: false, message: "Product not found", data: null };
       }
 
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "PACKAGE" },
+          },
+        ],
+      });
+
       const result = packages.map((prod) => {
         const plain = prod.get({ plain: true });
+
+        let flashSaleInfo = null;
+        let isFlashSale = false;
+
+        for (const fs of activeFlashSales) {
+          const item = fs.items.find((i) => i.packageId === plain.id);
+          if (item) {
+            isFlashSale = true;
+            flashSaleInfo = {
+              flashPrice: item.flashPrice,
+              flashSaleId: fs.id,
+              flashSaleItemId: item.id,
+              titleFlashSale: fs.title,
+              quota: item.quota,
+              sold: item.sold,
+              endDateFlashSale: fs.endDate,
+            };
+            break;
+          }
+        }
+
         return {
           ...plain,
           image: plain.location?.images?.[0]?.imageUrl || null,
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
@@ -781,6 +854,15 @@ module.exports = {
   },
 
   async getPackageByUser({ id: userId, roleCode, locationIds }) {
+    if (!locationIds || locationIds.length === 0) {
+      locationIds = await relationshipUserLocation
+        .findAll({
+          where: { userId },
+          attributes: ["locationId"],
+          raw: true,
+        })
+        .then((res) => res.map((r) => r.locationId));
+    }
     const include = [
       {
         model: masterLocation,

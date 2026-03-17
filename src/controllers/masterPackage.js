@@ -122,6 +122,7 @@ module.exports = {
   async getPackageByUser(req, res) {
     try {
       const user = req.user;
+      console.log(user);
       const result = await packageService.getPackageByUser(user);
       if (!result.status)
         return response.error(res, result.message, result.data);
