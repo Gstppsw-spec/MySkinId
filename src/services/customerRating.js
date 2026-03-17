@@ -11,6 +11,7 @@ module.exports = {
     const transaction = await sequelize.transaction();
     try {
       console.log(data);
+      if (data.entityType) data.entityType = data.entityType.toUpperCase();
       const { entityType, entityId, rating, review } = data;
 
       if (!entityType || !entityId || !rating)

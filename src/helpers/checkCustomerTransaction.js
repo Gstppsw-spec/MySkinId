@@ -32,8 +32,9 @@ module.exports = async function checkCustomerTransaction({
     },
   ];
 
-  switch (entityType) {
-    case "product":
+  const type = entityType.toUpperCase();
+  switch (type) {
+    case "PRODUCT":
       return transactionItem.findOne({
         where: {
           itemType: "product",
@@ -59,11 +60,11 @@ module.exports = async function checkCustomerTransaction({
         ],
       });
 
-    case "package":
-    case "service":
+    case "PACKAGE":
+    case "SERVICE":
       return transactionItem.findOne({
         where: {
-          itemType: entityType,
+          itemType: type.toLowerCase(),
           itemId: entityId,
         },
         include: [
@@ -77,7 +78,7 @@ module.exports = async function checkCustomerTransaction({
                 // If not completed, we check if there's a claimed voucher
                 Sequelize.literal(`EXISTS (
                   SELECT 1 FROM customerVouchers 
-                  WHERE customerVouchers.transactionItemId = transactionItem.id 
+                  WHERE customerVouchers.transactionItemId = \`transactionItem\`.id 
                   AND customerVouchers.status = 'REDEEM'
                 )`)
               ]
