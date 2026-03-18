@@ -341,11 +341,44 @@ module.exports = {
 
       const plain = product.get({ plain: true });
 
+      // Flash Sale Integration
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "PRODUCT", productId: id },
+          },
+        ],
+      });
+
+      let flashSaleInfo = null;
+      let isFlashSale = false;
+
+      if (activeFlashSales.length > 0) {
+        const fs = activeFlashSales[0];
+        const item = fs.items[0];
+        isFlashSale = true;
+        flashSaleInfo = {
+          flashPrice: item.flashPrice,
+          flashSaleId: fs.id,
+          flashSaleItemId: item.id,
+          titleFlashSale: fs.title,
+          quota: item.quota,
+          sold: item.sold,
+          endDateFlashSale: fs.endDate,
+        };
+      }
+
       return {
         status: true,
         message: "Success",
         data: {
           ...plain,
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: plain.favorites?.length > 0 || false,
           favorites: undefined,
         },

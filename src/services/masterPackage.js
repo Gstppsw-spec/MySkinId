@@ -523,11 +523,45 @@ module.exports = {
 
       const plain = package.get({ plain: true });
 
+      // Flash Sale Integration
+      const flashSaleService = require("./flashSale.service");
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "PACKAGE", packageId: id },
+          },
+        ],
+      });
+
+      let flashSaleInfo = null;
+      let isFlashSale = false;
+
+      if (activeFlashSales.length > 0) {
+        const fs = activeFlashSales[0];
+        const item = fs.items[0];
+        isFlashSale = true;
+        flashSaleInfo = {
+          flashPrice: item.flashPrice,
+          flashSaleId: fs.id,
+          flashSaleItemId: item.id,
+          titleFlashSale: fs.title,
+          quota: item.quota,
+          sold: item.sold,
+          endDateFlashSale: fs.endDate,
+        };
+      }
+
       return {
         status: true,
         message: "Success",
         data: {
           ...plain,
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: plain.favorites?.length > 0 || false,
           favorites: undefined,
         },

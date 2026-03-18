@@ -10,7 +10,6 @@ module.exports = {
   async createOrUpdateRating(customerId, data, images) {
     const transaction = await sequelize.transaction();
     try {
-      console.log(data);
       if (data.entityType) data.entityType = data.entityType.toUpperCase();
       const { entityType, entityId, rating, review } = data;
 

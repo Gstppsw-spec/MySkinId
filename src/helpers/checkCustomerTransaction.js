@@ -2,6 +2,7 @@ const {
   transaction,
   transactionItem,
   order,
+  customerVoucher,
 } = require("../models");
 const { Op, Sequelize } = require("sequelize");
 
@@ -61,8 +62,8 @@ module.exports = async function checkCustomerTransaction({
       });
 
     case "PACKAGE":
-    case "SERVICE":
-      return transactionItem.findOne({
+    case "SERVICE": {
+      const item = await transactionItem.findOne({
         where: {
           itemType: type.toLowerCase(),
           itemId: entityId,
@@ -72,17 +73,6 @@ module.exports = async function checkCustomerTransaction({
             model: transaction,
             as: "transaction",
             required: true,
-            where: {
-              [Op.or]: [
-                { orderStatus: "COMPLETED" },
-                // If not completed, we check if there's a claimed voucher
-                Sequelize.literal(`EXISTS (
-                  SELECT 1 FROM customerVouchers 
-                  WHERE customerVouchers.transactionItemId = \`transactionItem\`.id 
-                  AND customerVouchers.status = 'REDEEM'
-                )`)
-              ]
-            },
             include: [
               {
                 model: order,
@@ -94,6 +84,22 @@ module.exports = async function checkCustomerTransaction({
           },
         ],
       });
+
+      if (!item) return null;
+
+      // Jika transaksi sudah COMPLETED, boleh rating
+      if (item.transaction.orderStatus === "COMPLETED") return item;
+
+      // Jika belum COMPLETED, cek apakah sudah ada voucher yang di-REDEEM
+      const redeemedVoucher = await customerVoucher.findOne({
+        where: {
+          transactionItemId: item.id,
+          status: "REDEEM"
+        }
+      });
+
+      return redeemedVoucher ? item : null;
+    }
 
     case "LOCATION":
       return transaction.findOne({
