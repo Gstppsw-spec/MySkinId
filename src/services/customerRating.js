@@ -319,6 +319,50 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
+  async getDetailRatingById(id, currentUserId = null) {
+    try {
+      const rating = await Rating.findByPk(id, {
+        include: [
+          {
+            model: RatingImage,
+            as: "images",
+            attributes: ["id", "imageUrl"],
+          },
+          {
+            model: masterCustomer,
+            as: "customer",
+            attributes: ["id", "name", "profileImageUrl"],
+          },
+          {
+            model: RatingLike,
+            as: "likes",
+            attributes: ["customerId"],
+          },
+        ],
+      });
+
+      if (!rating) {
+        return { status: false, message: "Rating not found", data: null };
+      }
+
+      const ratingJson = rating.toJSON();
+      ratingJson.likeCount = ratingJson.likes.length;
+      ratingJson.isLiked = currentUserId
+        ? ratingJson.likes.some((like) => like.customerId === currentUserId)
+        : false;
+      delete ratingJson.likes;
+
+      return {
+        status: true,
+        message: "Berhasil mengambil detail rating",
+        data: ratingJson,
+      };
+    } catch (error) {
+      console.error("Get Detail Rating Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  },
 };
 
 async function saveRatingImages(ratingId, files, transaction) {

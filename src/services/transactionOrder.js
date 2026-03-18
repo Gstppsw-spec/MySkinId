@@ -2586,12 +2586,16 @@ module.exports = {
                         title: item.itemName,
                         imageUrl: imageUrl,
                         productId: item.itemId,
+                        type: item.itemType,
                         rating: itemRating ? itemRating.rating : 0,
+                        ratingId: itemRating ? itemRating.id : null,
                         isRating: !!itemRating,
                         quantity: item.quantity,
                         unitPrice: item.unitPrice,
                         totalPrice: item.totalPrice
                     };
+
+
                 }));
 
                 return {

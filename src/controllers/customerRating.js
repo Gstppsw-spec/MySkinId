@@ -87,4 +87,18 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  async getDetailRatingById(req, res) {
+    try {
+      const { id } = req.params;
+      const currentUserId = req.user ? req.user.id : null;
+      const result = await ratingService.getDetailRatingById(id, currentUserId);
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

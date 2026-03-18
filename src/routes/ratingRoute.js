@@ -5,7 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const uploadPath = "uploads/rating";
-const { verifyToken } = require("../middlewares/authMiddleware");
+const { verifyToken, optionalAuth } = require("../middlewares/authMiddleware");
 
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
@@ -30,7 +30,8 @@ const uploadImageReview = multer({
 });
 
 // Public route (no authentication required)
-router.get("/:entityId", rating.getByEntity);
+router.get("/detail/:id", optionalAuth, rating.getDetailRatingById);
+router.get("/:entityId", optionalAuth, rating.getByEntity);
 
 // Apply authentication middleware to all routes below
 router.use(verifyToken);

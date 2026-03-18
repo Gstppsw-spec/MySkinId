@@ -1,6 +1,7 @@
 const masterCustomerService = require("../services/masterCustomer.service");
 const response = require("../helpers/response");
 const { google } = require("googleapis");
+const jwt = require("jsonwebtoken");
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -66,12 +67,53 @@ class masterCustomerController {
         return response.error(res, "idToken is required", null);
       }
 
-      const ticket = await oauth2Client.verifyIdToken({
-        idToken: idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
+      // Add detailed logging to diagnose "No pem found"
+      console.log("Starting Google Mobile Login verification...");
+      
+      // Inspect token without verification first
+      const decodedToken = jwt.decode(idToken, { complete: true });
+      if (decodedToken) {
+        console.log("Token Header:", JSON.stringify(decodedToken.header));
+        console.log("Token Payload (Iss/Aud):", {
+          iss: decodedToken.payload.iss,
+          aud: decodedToken.payload.aud,
+          sub: decodedToken.payload.sub
+        });
+      } else {
+        console.log("Failed to decode token as JWT");
+      }
+
+      const audiences = [
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_ANDROID_CLIENT_ID,
+        process.env.GOOGLE_IOS_CLIENT_ID
+      ].filter(Boolean);
+
+      let ticket;
+      try {
+        ticket = await oauth2Client.verifyIdToken({
+          idToken: idToken,
+          audience: audiences,
+        });
+      } catch (verifyError) {
+        console.error("Token verification failed:", verifyError.message);
+        const metadata = decodedToken ? {
+          iss: decodedToken.payload.iss,
+          aud: decodedToken.payload.aud,
+          kid: decodedToken.header.kid,
+          exp: decodedToken.payload.exp,
+          iat: decodedToken.payload.iat,
+          now: Math.floor(Date.now() / 1000)
+        } : "Could not decode";
+        
+        return response.error(res, `Verification failed: ${verifyError.message}`, {
+          debug_metadata: metadata,
+          configured_audiences: audiences
+        });
+      }
 
       const payload = ticket.getPayload();
+      console.log("Token payload received for user:", payload.email);
 
       // Normalize profile for service
       const profile = {
@@ -101,12 +143,27 @@ class masterCustomerController {
         return response.error(res, "idToken is required", null);
       }
 
-      const ticket = await oauth2Client.verifyIdToken({
-        idToken: idToken,
-        audience: process.env.GOOGLE_IOS_CLIENT_ID,
-      });
+      console.log("Starting Google iOS Login verification...");
+
+      const audiences = [
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_IOS_CLIENT_ID,
+        process.env.GOOGLE_ANDROID_CLIENT_ID
+      ].filter(Boolean);
+
+      let ticket;
+      try {
+        ticket = await oauth2Client.verifyIdToken({
+          idToken: idToken,
+          audience: audiences,
+        });
+      } catch (verifyError) {
+        console.error("Token verification failed (iOS):", verifyError.message);
+        return response.error(res, `Verification failed: ${verifyError.message}`, null);
+      }
 
       const payload = ticket.getPayload();
+      console.log("Token payload received for user (iOS):", payload.email);
 
       const profile = {
         id: payload.sub,
