@@ -298,10 +298,6 @@ module.exports = {
 
             // Check if this completes the required questionnaire
             const progress = await this.getRoomProgress(roomId);
-            if (progress.data.isComplete && room.status === "waiting_questionnaire") {
-                room.status = "pending";
-                await room.save();
-            }
 
             return {
                 status: true,
@@ -344,10 +340,6 @@ module.exports = {
 
             // Check progress and update status
             const progress = await this.getRoomProgress(roomId);
-            if (progress.data.isComplete && room.status === "waiting_questionnaire") {
-                room.status = "pending";
-                await room.save();
-            }
 
             if (!progress.data.isComplete) {
                 const missingQuestions = progress.data.questions

@@ -104,6 +104,36 @@ module.exports = {
         rows.map(async (room) => {
           const roomJson = room.toJSON();
 
+          // Check if questionnaire is completed (only count required questions)
+          const requiredQuestions = await masterQuestionnaire.findAll({
+            attributes: ["id"],
+            include: [
+              {
+                model: masterConsultationCategory,
+                as: "consultationCategories",
+                where: { id: room.consultationCategoryId },
+                through: { attributes: [] },
+                attributes: [],
+              },
+            ],
+            where: { isActive: true, isRequired: true },
+          });
+
+          const requiredQuestionIds = requiredQuestions.map((q) => q.id);
+          const totalRequired = requiredQuestionIds.length;
+
+          let isQuestionareCompleted = true;
+          if (totalRequired > 0) {
+            const totalAnswers = await masterQuestionnaireAnswer.count({
+              where: {
+                roomId: room.id,
+                questionnaireId: { [Op.in]: requiredQuestionIds },
+              },
+            });
+            isQuestionareCompleted = totalAnswers >= totalRequired;
+          }
+          roomJson.isQuestionareCompleted = isQuestionareCompleted;
+
           if (
             !roomJson.locationId &&
             roomJson.latitude != null &&
@@ -215,12 +245,12 @@ module.exports = {
 
       const roomCode = `ROOM-${nanoid(8).toUpperCase()}`;
 
-      // Default status is waiting_questionnaire
+      // Default status is pending
       const room = await masterRoomConsultation.create({
         customerId,
         roomCode,
         doctorId: null,
-        status: "waiting_questionnaire",
+        status: "pending",
         consultationCategoryId,
         expiredAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         locationId,
@@ -270,12 +300,6 @@ module.exports = {
 
     for (const data of answerData) {
       await masterQuestionnaireAnswer.upsert(data);
-    }
-
-    // If all required are answered, set status to pending
-    if (missingRequired.length === 0) {
-      room.status = "pending";
-      await room.save();
     }
   },
 
