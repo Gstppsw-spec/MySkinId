@@ -5,20 +5,54 @@ const { formatPagination } = require("../utils/pagination");
 module.exports = {
   async getRoomByUserDoctor(req, res) {
     const user = req.user;
-    // const { id } = req.params;
-    const result = await consultation.getRoomByUser(user.id);
-    return result.status
-      ? response.success(res, result.message, result.data)
-      : response.error(res, result.message, null);
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const { status } = req.query;
+
+    const result = await consultation.getRoomByUser(user.id, {
+      page,
+      pageSize,
+      status,
+    });
+
+    if (!result.status) {
+      return response.error(res, result.message, null);
+    }
+
+    const { totalItems, rows } = result.data;
+
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: rows,
+      pagination: formatPagination(totalItems, page, pageSize),
+    });
   },
 
   async getRoomByUser(req, res) {
-    // const user = req.user;
     const { id } = req.params;
-    const result = await consultation.getRoomByUser(id);
-    return result.status
-      ? response.success(res, result.message, result.data)
-      : response.error(res, result.message, null);
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 10;
+    const { status } = req.query;
+
+    const result = await consultation.getRoomByUser(id, {
+      page,
+      pageSize,
+      status,
+    });
+
+    if (!result.status) {
+      return response.error(res, result.message, null);
+    }
+
+    const { totalItems, rows } = result.data;
+
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: rows,
+      pagination: formatPagination(totalItems, page, pageSize),
+    });
   },
 
   async createRoom(req, res) {

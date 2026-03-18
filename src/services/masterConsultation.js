@@ -29,16 +29,26 @@ const { nanoid } = require("nanoid");
 const socketInstance = require("../socket/socketInstance");
 
 module.exports = {
-  async getRoomByUser(userId) {
+  async getRoomByUser(userId, filters = {}) {
     try {
-      const rooms = await masterRoomConsultation.findAll({
-        where: {
-          [Sequelize.Op.or]: [{ customerId: userId }, { doctorId: userId }],
-        },
+      const { page = 1, pageSize = 10, status } = filters;
+      const offset = (page - 1) * pageSize;
+
+      const where = {
+        [Op.or]: [{ customerId: userId }, { doctorId: userId }],
+      };
+
+      if (status && status !== "all") {
+        where.status = status;
+      }
+
+      const { count, rows } = await masterRoomConsultation.findAndCountAll({
+        where,
         include: [
           {
             model: masterConsultationCategory,
             as: "consultationCategory",
+            required: false,
           },
           {
             model: masterConsultationMessage,
@@ -50,40 +60,59 @@ module.exports = {
           },
           {
             model: masterCustomer,
-            as: 'customer',
-            attributes: ['id', 'name']
+            as: "customer",
+            attributes: ["id", "name"],
+            required: false,
           },
           {
             model: masterLocation,
-            as: 'location',
-            attributes: ['id', 'name']
+            as: "location",
+            attributes: ["id", "name"],
+            required: false,
           },
           {
             model: masterProduct,
-            as: 'product',
-            attributes: ['id', 'name', 'price', 'discountPercent', 'description'],
+            as: "product",
+            attributes: [
+              "id",
+              "name",
+              "price",
+              "discountPercent",
+              "description",
+            ],
+            required: false,
             include: [
               {
                 model: masterProductImage,
-                as: 'images',
-                attributes: ['imageUrl'],
-                limit: 1
-              }
-            ]
-          }
+                as: "images",
+                attributes: ["imageUrl"],
+                limit: 1,
+                required: false,
+              },
+            ],
+          },
         ],
+        order: [["createdAt", "DESC"]],
+        limit: pageSize,
+        offset,
+        distinct: true,
       });
 
       // Untuk room yang locationId = null tapi punya lat/long,
       // cari location terdekat dan isi field location
-      const enrichedRooms = await Promise.all(rooms.map(async (room) => {
-        const roomJson = room.toJSON();
+      const enrichedRooms = await Promise.all(
+        rows.map(async (room) => {
+          const roomJson = room.toJSON();
 
-        if (!roomJson.locationId && roomJson.latitude != null && roomJson.longitude != null) {
-          const latitude = roomJson.latitude;
-          const longitude = roomJson.longitude;
+          if (
+            !roomJson.locationId &&
+            roomJson.latitude != null &&
+            roomJson.longitude != null
+          ) {
+            const latitude = roomJson.latitude;
+            const longitude = roomJson.longitude;
 
-          const distanceLiteral = Sequelize.literal(`
+            const distanceLiteral = Sequelize.literal(`
             6371 * acos(
               cos(radians(${latitude})) *
               cos(radians(CAST(latitude AS FLOAT))) *
@@ -93,24 +122,32 @@ module.exports = {
             )
           `);
 
-          const nearestLocation = await masterLocation.findOne({
-            attributes: ['id', 'name', [distanceLiteral, 'distance']],
-            where: {
-              latitude: { [Op.ne]: null },
-              longitude: { [Op.ne]: null },
-            },
-            order: [[distanceLiteral, 'ASC']],
-          });
+            const nearestLocation = await masterLocation.findOne({
+              attributes: ["id", "name", [distanceLiteral, "distance"]],
+              where: {
+                latitude: { [Op.ne]: null },
+                longitude: { [Op.ne]: null },
+              },
+              order: [[distanceLiteral, "ASC"]],
+            });
 
-          roomJson.location = nearestLocation
-            ? { id: nearestLocation.id, name: nearestLocation.name }
-            : null;
-        }
+            roomJson.location = nearestLocation
+              ? { id: nearestLocation.id, name: nearestLocation.name }
+              : null;
+          }
 
-        return roomJson;
-      }));
+          return roomJson;
+        }),
+      );
 
-      return { status: true, message: "Success", data: enrichedRooms };
+      return {
+        status: true,
+        message: "Success",
+        data: {
+          totalItems: count,
+          rows: enrichedRooms,
+        },
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
