@@ -117,7 +117,7 @@ module.exports = {
   },
 
 
-  async createRoom(data) {
+  async createRoom(data = {}) {
     try {
       const {
         customerId,

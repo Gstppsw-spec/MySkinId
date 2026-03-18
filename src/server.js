@@ -47,6 +47,7 @@ const bodyParser = require("body-parser");
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
 app.use(
@@ -70,8 +71,6 @@ app.use(
   "/uploads/posts",
   express.static(path.join(__dirname, "../uploads/posts")),
 );
-
-app.use(bodyParser.json());
 app.use("/api/v2/auth", authUserRoute);
 app.use("/api/v2/category", categoryRoute);
 app.use("/api/v2/product", productRoute);

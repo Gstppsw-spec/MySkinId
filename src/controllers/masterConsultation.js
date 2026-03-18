@@ -22,7 +22,11 @@ module.exports = {
   },
 
   async createRoom(req, res) {
-    const result = await consultation.createRoom(req.body);
+    const data = {
+      ...(req.body || {}),
+      customerId: req.body?.customerId || req.user?.id,
+    };
+    const result = await consultation.createRoom(data);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
