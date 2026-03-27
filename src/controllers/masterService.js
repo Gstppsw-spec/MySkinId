@@ -1,5 +1,6 @@
 const response = require("../helpers/response");
 const service = require("../services/masterService");
+const { getPagination, formatPagination } = require("../utils/pagination");
 
 module.exports = {
   async getAll(req, res) {
@@ -16,11 +17,8 @@ module.exports = {
         isCustomer,
       } = req.query;
 
-      const categoryIdsArray = categoryIds
-        ? Array.isArray(categoryIds)
-          ? categoryIds
-          : [categoryIds]
-        : undefined;
+      const { page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
 
       const result = await service.getAll({
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
@@ -32,12 +30,18 @@ module.exports = {
         sort: sort || undefined,
         customerId: customerId || undefined,
         isCustomer: isCustomer,
-      });
+      }, pagination);
 
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
-      return response.success(res, result.message, result.data);
+      
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
     } catch (error) {
       return response.serverError(res, error);
     }

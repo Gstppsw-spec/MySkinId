@@ -105,19 +105,30 @@ module.exports = {
   /**
    * List semua flash sale.
    */
-  async getAll(statusFilter) {
+  async getAll(statusFilter, pagination = {}) {
     try {
       await syncStatuses();
+
+      const { limit, offset } = pagination;
 
       const where = {};
       if (statusFilter) where.status = statusFilter;
 
-      const data = await flashSale.findAll({
+      const { count, rows: data } = await flashSale.findAndCountAll({
         where,
         order: [["startDate", "DESC"]],
+        limit,
+        offset,
+        subQuery: false,
+        distinct: true,
       });
 
-      return { status: true, message: "Success", data };
+      return {
+        status: true,
+        message: "Success",
+        data,
+        totalCount: count,
+      };
     } catch (error) {
       return { status: false, message: error.message };
     }

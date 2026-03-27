@@ -1,5 +1,6 @@
 const RelationshipUserCompanyService = require("../services/relationshipUserCompany.service");
 const response = require("../helpers/response");
+const { getPagination, formatPagination } = require("../utils/pagination");
 
 class RelationshipUserCompanyController {
   async getCompanyByUserId(req, res) {
@@ -52,8 +53,17 @@ class RelationshipUserCompanyController {
 
   async getAllCompany(req, res) {
     try {
-      const data = await RelationshipUserCompanyService.getAllCompany();
-      return response.success(res, "Data relationship user company", data);
+      const { page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
+
+      const result = await RelationshipUserCompanyService.getAllCompany(pagination);
+
+      return res.status(200).json({
+        success: true,
+        message: "Data relationship user company",
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
     } catch (error) {
       console.error(error);
       return response.serverError(res, error);

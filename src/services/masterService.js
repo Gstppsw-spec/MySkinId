@@ -9,7 +9,7 @@ const {
 const { Op, Sequelize } = require("sequelize");
 
 module.exports = {
-  async getAll(filters = {}) {
+  async getAll(filters = {}, pagination = {}) {
     try {
       const {
         minPrice,
@@ -22,6 +22,8 @@ module.exports = {
         customerId,
         isCustomer,
       } = filters;
+
+      const { limit, offset } = pagination;
 
       const where = {};
 
@@ -130,16 +132,20 @@ module.exports = {
         });
       }
 
-      const service = await masterService.findAll({
+      const { count, rows: services } = await masterService.findAndCountAll({
         where,
         include,
         order,
+        limit,
+        offset,
+        subQuery: false,
+        distinct: true,
         attributes: {
           exclude: ["createdAt", "updatedAt"],
         },
       });
 
-      if (!service) {
+      if (!services) {
         return {
           status: false,
           message: "Layanan tidak ditemukan",
@@ -147,7 +153,7 @@ module.exports = {
         };
       }
 
-      const result = service.map((prod) => {
+      const result = services.map((prod) => {
         const plain = prod.get({ plain: true });
         return {
           ...plain,
@@ -157,7 +163,12 @@ module.exports = {
           favorites: undefined,
         };
       });
-      return { status: true, message: "Success", data: result };
+      return {
+        status: true,
+        message: "Success",
+        data: result,
+        totalCount: count,
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

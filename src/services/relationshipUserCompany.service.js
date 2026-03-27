@@ -28,8 +28,14 @@ class RelationshipUserCompanyService {
     return data?.company || null;
   }
 
-  async getAllCompany() {
-    return await masterCompany.findAll();
+  async getAllCompany(pagination = {}) {
+    const { limit, offset } = pagination;
+    const { count, rows } = await masterCompany.findAndCountAll({
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
+    });
+    return { data: rows, totalCount: count };
   }
 
   async detailCompany(id) {

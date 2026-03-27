@@ -1,5 +1,6 @@
 const response = require("../helpers/response");
 const packageService = require("../services/masterPackage");
+const { getPagination, formatPagination } = require("../utils/pagination");
 
 module.exports = {
   async getAllPackage(req, res) {
@@ -19,11 +20,8 @@ module.exports = {
         consultationCategoryIds,
       } = req.query;
 
-      const categoryIdsArray = categoryIds
-        ? Array.isArray(categoryIds)
-          ? categoryIds
-          : [categoryIds]
-        : undefined;
+      const { page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
 
       const result = await packageService.getAllPackage({
         name: name || undefined,
@@ -38,12 +36,18 @@ module.exports = {
         categoryIds: categoryIdsArray,
         cityId: cityId || undefined,
         consultationCategoryIds: consultationCategoryIds ? (Array.isArray(consultationCategoryIds) ? consultationCategoryIds : consultationCategoryIds.toString().split(",")) : undefined,
-      });
+      }, pagination);
 
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
-      return response.success(res, result.message, result.data);
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
     } catch (error) {
       return res.status(500).json({
         status: false,

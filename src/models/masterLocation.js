@@ -82,6 +82,23 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: true,
       },
+      googlePlaceId: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      googleRating: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+      },
+      googleRatingCount: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+      },
+      googleRatingSyncedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: "masterLocation",
@@ -131,6 +148,11 @@ module.exports = (sequelize, DataTypes) => {
     masterLocation.hasMany(models.customerFavorites, {
       foreignKey: "refferenceId",
       as: "favorites",
+    });
+
+    masterLocation.hasMany(models.GoogleReview, {
+      foreignKey: "locationId",
+      as: "googleReviews",
     });
   };
 

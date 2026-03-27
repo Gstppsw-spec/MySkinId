@@ -1,5 +1,6 @@
 const response = require("../helpers/response");
 const flashSaleService = require("../services/flashSale.service");
+const { getPagination, formatPagination } = require("../utils/pagination");
 
 module.exports = {
   // ── Super Admin ─────────────────────────────
@@ -17,10 +18,19 @@ module.exports = {
 
   async getAll(req, res) {
     try {
-      const { status } = req.query;
-      const result = await flashSaleService.getAll(status);
+      const { status, page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
+
+      const result = await flashSaleService.getAll(status, pagination);
+
       if (!result.status) return response.error(res, result.message, result.data);
-      return response.success(res, result.message, result.data);
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
     } catch (error) {
       return response.serverError(res, error);
     }

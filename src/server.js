@@ -33,6 +33,10 @@ const customerAddressRoute = require("./routes/user/customerAddress.route");
 const roleRoute = require("./routes/master/masterRole.route");
 const shippingRoute = require("./routes/master/shipping.route");
 const flashSaleRoute = require("./routes/master/flashSale.route");
+const googlePlacesRoute = require("./routes/master/googlePlaces.route");
+
+// Cron jobs
+const initGoogleRatingCron = require("./cron/googleRatingCron");
 
 // Social media routes
 const postRoute = require("./routes/social/post.route");
@@ -97,6 +101,7 @@ app.use("/api/v2/customer-cart", customerCartRoute);
 app.use("/api/v2/transaction/order", transactionOrderRoute);
 app.use("/api/v2/shipping", shippingRoute);
 app.use("/api/v2/flash-sale", flashSaleRoute);
+app.use("/api/v2/google-places", googlePlacesRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);
@@ -107,6 +112,7 @@ app.use("/api/v2/users", followRoute);
 const server = http.createServer(app);
 
 initSocket(server);
+initGoogleRatingCron();
 
 // const io = new Server(server, { cors: { origin: "*" } });
 

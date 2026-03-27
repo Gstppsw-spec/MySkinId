@@ -1,20 +1,64 @@
 /**
- * Formats pagination response based on the required PaginationDto structure.
- * 
- * @param {number} totalItem - Total number of items across all pages.
- * @param {number} pageNumber - Current page number (1-indexed).
- * @param {number} pageSize - Number of items per page.
- * @returns {Object} Standardized pagination object.
+ * Helper to get limit and offset for Sequelize queries.
+ * @param {number|string} page - Current page number.
+ * @param {number|string} pageSize - Items per page.
+ * @returns {object} - { limit, offset }
  */
-const formatPagination = (totalItem, pageNumber, pageSize) => {
-    return {
-        totalItem: parseInt(totalItem) || 0,
-        pageNumber: parseInt(pageNumber) || 1,
-        pageSize: parseInt(pageSize) || 20,
-        totalPages: Math.ceil((parseInt(totalItem) || 0) / (parseInt(pageSize) || 20))
-    };
+const getPagination = (page, pageSize) => {
+  const p = page ? parseInt(page) : 1;
+  const ps = pageSize ? parseInt(pageSize) : 10;
+  const limit = ps;
+  const offset = (p - 1) * ps;
+
+  return { limit, offset };
+};
+
+/**
+ * Helper to format paginated data response.
+ * @param {number} totalCount - Total number of items.
+ * @param {number} page - Current page number.
+ * @param {number} pageSize - Items per page.
+ * @returns {object} - Formatted pagination metadata.
+ */
+const formatPagination = (totalCount, page, pageSize) => {
+  const pageNumber = page ? parseInt(page) : 1;
+  const itemsPerPage = pageSize ? parseInt(pageSize) : 10;
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
+
+  return {
+    totalItem: totalCount,
+    pageNumber,
+    pageSize: itemsPerPage,
+    totalPages,
+  };
+};
+
+/**
+ * Legacy helper for Sequelize findAndCountAll (if needed).
+ * @param {object} data - { count, rows } from findAndCountAll.
+ * @param {number} page - Current page number.
+ * @param {number} pageSize - Items per page.
+ * @returns {object} - { items, meta }
+ */
+const getPagingData = (data, page, pageSize) => {
+  const { count: totalItem, rows: items } = data;
+  const pageNumber = page ? parseInt(page) : 1;
+  const itemsPerPage = pageSize ? parseInt(pageSize) : 10;
+  const totalPages = Math.ceil(totalItem / itemsPerPage);
+
+  return {
+    items,
+    pagination: {
+      totalItem,
+      pageNumber,
+      pageSize: itemsPerPage,
+      totalPages,
+    },
+  };
 };
 
 module.exports = {
-    formatPagination
+  getPagination,
+  formatPagination,
+  getPagingData,
 };

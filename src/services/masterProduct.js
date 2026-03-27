@@ -17,7 +17,7 @@ const flashSaleService = require("./flashSale.service");
 const { Op, Sequelize } = require("sequelize");
 
 module.exports = {
-  async getAll(filters = {}) {
+  async getAll(filters = {}, pagination = {}) {
     try {
       const {
         name,
@@ -33,6 +33,8 @@ module.exports = {
         cityId,
         consultationCategoryIds
       } = filters;
+
+      const { limit, offset } = pagination;
 
       const where = {};
 
@@ -127,15 +129,6 @@ module.exports = {
         order = [[distanceLiteral, "ASC"]];
       }
 
-      // if (sort === "price") {
-      //   order = [
-      //     [
-      //       Sequelize.literal("(price - (price * discountPercent / 100))"),
-      //       "ASC",
-      //     ],
-      //   ];
-      // }
-
       if (sort === "low-price") {
         order = [
           [
@@ -180,10 +173,14 @@ module.exports = {
         });
       }
 
-      const products = await masterProduct.findAll({
+      const { count, rows: products } = await masterProduct.findAndCountAll({
         where,
         include,
         order,
+        limit,
+        offset,
+        subQuery: false,
+        distinct: true,
         attributes: {
           exclude: ["createdAt", "updatedAt"],
         },
@@ -243,6 +240,7 @@ module.exports = {
         status: true,
         message: "Success",
         data: result,
+        totalCount: count,
       };
     } catch (error) {
       return {

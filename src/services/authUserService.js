@@ -226,6 +226,7 @@ module.exports = {
       const usersCompany = await masterUser.findAll({
         attributes: ["id", "name", "email", "phone", "avatar"],
         distinct: true,
+        subQuery: false,
         include: [
           {
             model: masterRole,
@@ -240,7 +241,6 @@ module.exports = {
           {
             model: relationshipUserLocation,
             as: "userLocations",
-            attributes: ["id", "isactive"],
             required: true,
             where: {
               isactive: true,
@@ -249,7 +249,6 @@ module.exports = {
               {
                 model: masterLocation,
                 as: "location",
-                attributes: ["id", "name", "companyId"],
                 required: true,
                 where: {
                   companyId,
@@ -292,11 +291,15 @@ module.exports = {
     }
   },
 
-  async getAllUser() {
+  async getAllUser(pagination = {}) {
     try {
-      const users = await masterUser.findAll({
+      const { limit, offset } = pagination;
+      const { count, rows } = await masterUser.findAndCountAll({
         attributes: ["id", "name", "email", "phone", "avatar"],
         distinct: true,
+        limit,
+        offset,
+        subQuery: false,
         include: [
           {
             model: masterRole,
@@ -311,7 +314,6 @@ module.exports = {
           {
             model: relationshipUserLocation,
             as: "userLocations",
-            attributes: ["id", "isactive"],
             required: true,
             where: {
               isactive: true,
@@ -320,7 +322,6 @@ module.exports = {
               {
                 model: masterLocation,
                 as: "location",
-                attributes: ["id", "name", "companyId"],
                 required: true,
                 where: {
                   isactive: true,
@@ -331,15 +332,16 @@ module.exports = {
         ],
       });
 
-      if (!users || users.length === 0) {
+      if (!rows || rows.length === 0) {
         return {
           status: false,
           message: "Data users tidak ditemukan",
           data: [],
+          totalCount: 0,
         };
       }
 
-      const data = users.map((user) => ({
+      const data = rows.map((user) => ({
         id: user.id,
         name: user.name,
         email: user.email,
@@ -353,6 +355,7 @@ module.exports = {
         status: true,
         message: "Success",
         data: data,
+        totalCount: count,
       };
     } catch (error) {
       return {

@@ -31,18 +31,28 @@ class CompanyVerificationService {
       return { status: false, message: error.message, data: null };
     }
   }
-  async list(status) {
+  async list(status, pagination = {}) {
     try {
+      const { limit, offset } = pagination;
       const where = {};
       if (status) where.status = status;
 
-      const requests = await CompanyVerificationRequest.findAll({
+      const { count, rows: requests } = await CompanyVerificationRequest.findAndCountAll({
         where,
         include: [{ model: masterCompany, as: "company" }],
         order: [["createdAt", "DESC"]],
+        limit,
+        offset,
+        subQuery: false,
+        distinct: true,
       });
 
-      return { status: true, message: "List fetched", data: requests };
+      return {
+        status: true,
+        message: "List fetched",
+        data: requests,
+        totalCount: count,
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

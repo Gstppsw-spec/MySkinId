@@ -1,5 +1,6 @@
 const response = require("../helpers/response");
 const productService = require("../services/masterProduct");
+const { getPagination, formatPagination } = require("../utils/pagination");
 
 module.exports = {
   async getAll(req, res) {
@@ -31,7 +32,8 @@ module.exports = {
           : consultationCategoryIds.toString().split(",")
         : undefined;
 
-      console.log(categoryIdsArray);
+      const { page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
 
       const result = await productService.getAll({
         name: name || undefined,
@@ -46,12 +48,18 @@ module.exports = {
         isCustomer: isCustomer,
         cityId: cityId || undefined,
         consultationCategoryIds: consultationCategoryIdsArray,
-      });
+      }, pagination);
 
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
-      return response.success(res, result.message, result.data);
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
     } catch (error) {
       return res.status(500).json({
         status: false,

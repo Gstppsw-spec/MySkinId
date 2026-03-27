@@ -1,4 +1,5 @@
 const RequestVerificationService = require("../services/requestVerificationService");
+const { getPagination, formatPagination } = require("../utils/pagination");
 
 class RequestVerificationController {
     async create(req, res) {
@@ -16,9 +17,21 @@ class RequestVerificationController {
     }
 
     async list(req, res) {
-        const { status, type } = req.query;
-        const result = await RequestVerificationService.list(status, type);
-        return res.status(result.status ? 200 : 400).json(result);
+        const { status, type, page, pageSize } = req.query;
+        const pagination = getPagination(page, pageSize);
+
+        const result = await RequestVerificationService.list(status, type, pagination);
+
+        if (!result.status) {
+            return res.status(400).json(result);
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: result.message,
+            data: result.data,
+            pagination: formatPagination(result.totalCount, page, pageSize),
+        });
     }
 
     async detail(req, res) {

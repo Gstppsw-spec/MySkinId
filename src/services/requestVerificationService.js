@@ -91,10 +91,12 @@ class RequestVerificationService {
         }
     }
 
-    async list(status, type) {
+    async list(status, type, pagination = {}) {
         try {
             //allowed type
             const allowedType = ["location", "company", "product", "service", "package"];
+
+            const { limit, offset } = pagination;
 
             const where = {};
             if (status) where.status = status;
@@ -125,16 +127,21 @@ class RequestVerificationService {
                 ];
             }
 
-            const requests = await requestVerification.findAll({
+            const { count, rows: requests } = await requestVerification.findAndCountAll({
                 where,
                 include,
                 order: [["createdAt", "DESC"]],
+                limit,
+                offset,
+                subQuery: false,
+                distinct: true,
             });
 
             return {
                 status: true,
                 message: "List request verification",
                 data: requests,
+                totalCount: count,
             };
         } catch (error) {
             return { status: false, message: error.message, data: null };

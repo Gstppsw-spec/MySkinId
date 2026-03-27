@@ -1,5 +1,6 @@
 const masterLocationService = require("../services/masterLocation.service");
 const response = require("../helpers/response");
+const { getPagination, formatPagination } = require("../utils/pagination");
 
 class masterLocationController {
   async create(req, res) {
@@ -93,13 +94,25 @@ class masterLocationController {
   }
 
   async getLocationByUser(req, res) {
-    const user = req.user;
-    console.log(user, 'ini user');
+    try {
+      const user = req.user;
+      const { page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
 
-    const location = await masterLocationService.getLocationByUser(user);
-    return location.status
-      ? response.success(res, location.message, location.data)
-      : response.error(res, location.message, null);
+      const result = await masterLocationService.getLocationByUser(user, pagination);
+      if (!result.status) {
+        return response.error(res, result.message, null);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   }
 
   async detailLocationByCustomer(req, res) {

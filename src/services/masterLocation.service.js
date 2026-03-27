@@ -374,42 +374,45 @@ class MasterLocationService {
     }
   }
 
-  async getLocationByUser({ id: userId, roleCode, locationIds }) {
+  async getLocationByUser({ id: userId, roleCode, locationIds }, pagination = {}) {
     try {
-      if (roleCode === "SUPER_ADMIN") {
-        const data = await masterLocation.findAll({
-          include: [
-            {
-              model: masterLocationImage,
-              as: "images",
-            },
-          ],
-        });
-        return {
-          status: true,
-          message: "Location fetched successfully",
-          data: data,
-        };
-      }
-
-      const data = await masterLocation.findAll({
-        where: {
-          id: {
-            [Op.in]: locationIds,
-          },
-        },
+      const { limit, offset } = pagination;
+      const options = {
         include: [
           {
             model: masterLocationImage,
             as: "images",
           },
         ],
-      });
+        distinct: true, // Important for findAndCountAll with includes
+        limit,
+        offset,
+        subQuery: false,
+      };
+
+      if (roleCode === "SUPER_ADMIN") {
+        const { count, rows } = await masterLocation.findAndCountAll(options);
+        return {
+          status: true,
+          message: "Location fetched successfully",
+          data: rows,
+          totalCount: count,
+        };
+      }
+
+      options.where = {
+        id: {
+          [Op.in]: locationIds,
+        },
+      };
+
+      const { count, rows } = await masterLocation.findAndCountAll(options);
 
       return {
         status: true,
         message: "Location fetched successfully",
-        data: data,
+        data: rows,
+        totalCount: count,
       };
     } catch (error) {
       return { status: false, message: error.message };
