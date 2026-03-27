@@ -326,6 +326,13 @@ module.exports = {
                 where: {
                   isactive: true,
                 },
+                include: [
+                  {
+                    model: masterCompany,
+                    as: "company",
+                    attributes: ["id", "name"],
+                  },
+                ],
               },
             ],
           },
@@ -349,6 +356,96 @@ module.exports = {
         avatar: user.avatar,
         role: user.role?.name || null,
         location: user.userLocations?.[0]?.location?.name || null,
+        companyName: user.userLocations?.[0]?.location?.company?.name || null,
+      }));
+
+      return {
+        status: true,
+        message: "Success",
+        data: data,
+        totalCount: count,
+      };
+    } catch (error) {
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
+    }
+  },
+
+  async getAllUserCompany(pagination = {}) {
+    try {
+      const { limit, offset } = pagination;
+      const { count, rows } = await masterUser.findAndCountAll({
+        attributes: ["id", "name", "email", "phone", "avatar"],
+        distinct: true,
+        limit,
+        offset,
+        subQuery: false,
+        include: [
+          {
+            model: masterRole,
+            as: "role",
+            attributes: ["id", "name"],
+            where: {
+              roleCode: {
+                [Op.in]: ["OUTLET_ADMIN", "OUTLET_DOCTOR"],
+              },
+            },
+          },
+          {
+            model: relationshipUserCompany,
+            as: "userCompanies",
+            where: { isactive: true },
+            required: true,
+            include: [
+              {
+                model: masterCompany,
+                as: "company",
+                attributes: ["id", "name"],
+              },
+            ],
+          },
+          {
+            model: relationshipUserLocation,
+            as: "userLocations",
+            required: true,
+            where: {
+              isactive: true,
+            },
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                required: true,
+                where: {
+                  isactive: true,
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      if (!rows || rows.length === 0) {
+        return {
+          status: false,
+          message: "Data users tidak ditemukan",
+          data: [],
+          totalCount: 0,
+        };
+      }
+
+      const data = rows.map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        avatar: user.avatar,
+        role: user.role?.name || null,
+        location: user.userLocations?.[0]?.location?.name || null,
+        companyName: user.userCompanies?.[0]?.company?.name || null,
       }));
 
       return {

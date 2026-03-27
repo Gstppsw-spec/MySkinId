@@ -78,6 +78,27 @@ module.exports = {
     }
   },
 
+  async getAllUserCompany(req, res) {
+    try {
+      const { page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
+
+      const result = await authService.getAllUserCompany(pagination);
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async getUserById(req, res) {
     try {
       const { id } = req.params;
