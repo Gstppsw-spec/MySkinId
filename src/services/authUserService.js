@@ -341,7 +341,7 @@ module.exports = {
 
       if (!rows || rows.length === 0) {
         return {
-          status: false,
+          status: true,
           message: "Data users tidak ditemukan",
           data: [],
           totalCount: 0,
@@ -430,7 +430,7 @@ module.exports = {
 
       if (!rows || rows.length === 0) {
         return {
-          status: false,
+          status: true,
           message: "Data users tidak ditemukan",
           data: [],
           totalCount: 0,
