@@ -7,6 +7,114 @@ const PLACES_API_BASE = "https://places.googleapis.com/v1/places";
 
 class GooglePlacesService {
   /**
+   * Extract Google Place ID from a Google Maps URL.
+   * Supports:
+   * - Full URL: https://www.google.com/maps/place/...
+   * - Short URL: https://maps.app.goo.gl/... or https://goo.gl/maps/...
+   */
+  async extractPlaceIdFromUrl(url) {
+    try {
+      let resolvedUrl = url;
+
+      // If shortened URL, follow redirects to get the full URL
+      if (
+        url.includes("goo.gl/maps") ||
+        url.includes("maps.app.goo.gl")
+      ) {
+        try {
+          const response = await axios.get(url, {
+            maxRedirects: 5,
+            validateStatus: () => true,
+            headers: {
+              "User-Agent": "Mozilla/5.0",
+            },
+          });
+          // axios follows redirects by default, get final URL from response
+          resolvedUrl = response.request?.res?.responseUrl || response.request?._redirectable?._currentUrl || url;
+        } catch (redirectErr) {
+          console.warn("[GooglePlaces] Failed to resolve shortened URL:", redirectErr.message);
+        }
+      }
+
+      // Method 1: Extract place_id from URL data parameter (ftid format)
+      // Pattern: !1s followed by a place_id (starts with 0x or ChIJ)
+      const ftidMatch = resolvedUrl.match(/!1s(0x[a-fA-F0-9]+:0x[a-fA-F0-9]+)/);
+      if (ftidMatch) {
+        // This is a CID-style ID, need to convert via Places API
+        // Use the coordinates from URL to search instead
+      }
+
+      // Method 2: Extract place_id that starts with ChIJ
+      const chijMatch = resolvedUrl.match(/(?:place_id[=:]|!1s)(ChIJ[a-zA-Z0-9_-]+)/);
+      if (chijMatch) {
+        return { status: true, placeId: chijMatch[1] };
+      }
+
+      // Method 3: Extract coordinates and place name from URL, search via API
+      const coordMatch = resolvedUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      const placeNameMatch = resolvedUrl.match(/\/place\/([^/@]+)/);
+
+      if (placeNameMatch || coordMatch) {
+        const searchQuery = placeNameMatch
+          ? decodeURIComponent(placeNameMatch[1].replace(/\+/g, " "))
+          : null;
+
+        const requestBody = {};
+        if (searchQuery) {
+          requestBody.textQuery = searchQuery;
+        }
+
+        if (coordMatch) {
+          const lat = parseFloat(coordMatch[1]);
+          const lng = parseFloat(coordMatch[2]);
+          requestBody.locationBias = {
+            circle: {
+              center: { latitude: lat, longitude: lng },
+              radius: 500.0,
+            },
+          };
+          // If no text query, search by a generic term with tight radius
+          if (!requestBody.textQuery) {
+            requestBody.textQuery = `place near ${lat},${lng}`;
+          }
+        }
+
+        const response = await axios.post(
+          "https://places.googleapis.com/v1/places:searchText",
+          requestBody,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+              "X-Goog-FieldMask":
+                "places.id,places.displayName,places.formattedAddress",
+            },
+          }
+        );
+
+        const places = response.data.places || [];
+        if (places.length > 0) {
+          return {
+            status: true,
+            placeId: places[0].id,
+            name: places[0].displayName?.text,
+            address: places[0].formattedAddress,
+            totalCandidates: places.length,
+          };
+        }
+      }
+
+      return {
+        status: false,
+        message: "Tidak bisa mengekstrak Place ID dari URL ini. Pastikan URL valid dari Google Maps.",
+      };
+    } catch (error) {
+      console.error("[GooglePlaces] Error extracting place ID from URL:", error.message);
+      return { status: false, message: error.message };
+    }
+  }
+
+  /**
    * Fetch place details (rating + reviews) from Google Places API (New)
    */
   async fetchPlaceDetails(placeId) {
@@ -209,10 +317,8 @@ class GooglePlacesService {
   /**
    * Get Google reviews for a location (from local DB)
    */
-  async getGoogleReviews(locationId, page = 1, limit = 10) {
+  async getGoogleReviews(locationId, limit = 10, offset = 0) {
     try {
-      const offset = (page - 1) * limit;
-
       const { count, rows } = await GoogleReview.findAndCountAll({
         where: { locationId },
         order: [["publishedAt", "DESC"]],
@@ -225,12 +331,7 @@ class GooglePlacesService {
         message: "Google reviews fetched",
         data: {
           reviews: rows,
-          pagination: {
-            page,
-            limit,
-            total: count,
-            totalPages: Math.ceil(count / limit),
-          },
+          totalCount: count,
         },
       };
     } catch (error) {
@@ -239,7 +340,7 @@ class GooglePlacesService {
   }
 
   /**
-   * Update Google Place ID for a location
+   * Update Google Place ID for a location, then immediately sync rating data
    */
   async updatePlaceId(locationId, googlePlaceId) {
     try {
@@ -250,13 +351,25 @@ class GooglePlacesService {
 
       await location.update({ googlePlaceId });
 
+      // Immediately sync rating after setting place ID
+      let syncData = null;
+      try {
+        const syncResult = await this.syncLocationRating(locationId);
+        if (syncResult.status) {
+          syncData = syncResult.data;
+        }
+      } catch (syncErr) {
+        console.warn("[GooglePlaces] Auto-sync after place ID update failed:", syncErr.message);
+      }
+
       return {
         status: true,
-        message: "Google Place ID updated successfully",
+        message: "Google Place ID updated and rating synced successfully",
         data: {
           id: location.id,
           name: location.name,
           googlePlaceId,
+          ...syncData,
         },
       };
     } catch (error) {

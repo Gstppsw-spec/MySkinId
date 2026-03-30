@@ -1,4 +1,5 @@
 const googlePlacesService = require("../services/googlePlaces.service");
+const { getPagination, formatPagination } = require("../utils/pagination");
 
 class GooglePlacesController {
   /**
@@ -23,16 +24,25 @@ class GooglePlacesController {
   async getGoogleReviews(req, res) {
     try {
       const { locationId } = req.params;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const { page, pageSize } = req.query;
+      const { limit, offset } = getPagination(page, pageSize);
 
       const result = await googlePlacesService.getGoogleReviews(
         locationId,
-        page,
-        limit
+        limit,
+        offset
       );
 
-      return res.status(result.status ? 200 : 404).json(result);
+      if (!result.status) {
+        return res.status(404).json(result);
+      }
+
+      return res.status(200).json({
+        status: true,
+        message: result.message,
+        data: result.data.reviews,
+        pagination: formatPagination(result.data.totalCount, page, pageSize),
+      });
     } catch (error) {
       return res.status(500).json({ status: false, message: error.message });
     }
@@ -54,17 +64,34 @@ class GooglePlacesController {
 
   /**
    * PUT /api/v2/google-places/:locationId/place-id
-   * Update Google Place ID for a location
+   * Update Google Place ID for a location.
+   * Accepts either: { googlePlaceId: "ChIJ..." } or { googleMapsUrl: "https://maps..." }
    */
   async updatePlaceId(req, res) {
     try {
       const { locationId } = req.params;
-      const { googlePlaceId } = req.body;
+      let { googlePlaceId, googleMapsUrl } = req.body;
+
+      // If user provides a Google Maps URL, extract the place_id from it
+      if (!googlePlaceId && googleMapsUrl) {
+        const extractResult =
+          await googlePlacesService.extractPlaceIdFromUrl(googleMapsUrl);
+
+        if (!extractResult.status) {
+          return res.status(400).json({
+            status: false,
+            message: extractResult.message,
+          });
+        }
+
+        googlePlaceId = extractResult.placeId;
+      }
 
       if (!googlePlaceId) {
-        return res
-          .status(400)
-          .json({ status: false, message: "googlePlaceId is required" });
+        return res.status(400).json({
+          status: false,
+          message: "googlePlaceId atau googleMapsUrl harus diisi",
+        });
       }
 
       const result = await googlePlacesService.updatePlaceId(

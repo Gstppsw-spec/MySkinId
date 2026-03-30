@@ -111,6 +111,54 @@ class MasterLocationService {
         console.warn("[Location Create] Xendit sub-account creation failed (non-blocking):", xenditError.message);
       }
 
+      // Auto-lookup Google Place ID (non-blocking)
+      try {
+        const googlePlacesService = require("./googlePlaces.service");
+        let placeId = null;
+
+        // Priority 1: User provided a Google Maps URL
+        if (data.googleMapsUrl) {
+          const extractResult = await googlePlacesService.extractPlaceIdFromUrl(data.googleMapsUrl);
+          if (extractResult.status) {
+            placeId = extractResult.placeId;
+          } else {
+            console.warn(`[Location Create] Could not extract Place ID from URL: ${extractResult.message}`);
+          }
+        }
+
+        // Priority 2: Auto-search by name + coordinates
+        if (!placeId) {
+          const findResult = await googlePlacesService.findPlaceId(newLocation.id);
+          if (findResult.status && findResult.data?.candidates?.length === 1) {
+            placeId = findResult.data.candidates[0].googlePlaceId;
+          } else if (findResult.status && findResult.data?.candidates?.length > 1) {
+            console.warn(`[Location Create] Multiple Google Places candidates found for "${newLocation.name}" — set manually via PUT /google-places/:id/place-id`);
+          } else {
+            console.warn(`[Location Create] Google Place ID not found for "${newLocation.name}"`);
+          }
+        }
+
+        if (placeId) {
+          await newLocation.update({ googlePlaceId: placeId });
+          newLocation.googlePlaceId = placeId;
+          console.log(`[Location Create] Google Place ID set: ${placeId}`);
+
+          // Immediately sync rating
+          try {
+            const syncResult = await googlePlacesService.syncLocationRating(newLocation.id);
+            if (syncResult.status) {
+              newLocation.googleRating = syncResult.data.googleRating;
+              newLocation.googleRatingCount = syncResult.data.googleRatingCount;
+              console.log(`[Location Create] Google rating synced: ${syncResult.data.googleRating} (${syncResult.data.googleRatingCount} reviews)`);
+            }
+          } catch (syncErr) {
+            console.warn("[Location Create] Google rating sync failed (non-blocking):", syncErr.message);
+          }
+        }
+      } catch (googleError) {
+        console.warn("[Location Create] Google Place ID lookup failed (non-blocking):", googleError.message);
+      }
+
       return {
         status: true,
         message: "Location created successfully",
