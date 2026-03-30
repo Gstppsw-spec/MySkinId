@@ -1,4 +1,4 @@
-const {
+﻿const {
   masterPackage,
   customerFavorites,
   masterLocation,
@@ -771,7 +771,7 @@ module.exports = {
         };
       }
 
-      // 1️⃣ Ambil item yang mau di-update
+      // 1ï¸âƒ£ Ambil item yang mau di-update
       const existing = await masterPackageItems.findOne({
         where: { id: packageItemId },
         transaction,

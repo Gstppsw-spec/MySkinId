@@ -53,6 +53,10 @@ module.exports = (sequelize, DataTypes) => {
       roleId: DataTypes.UUID,
       avatar: DataTypes.STRING,
       isactive: DataTypes.BOOLEAN,
+      isAvailableConsul: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+      },
 
     },
     {

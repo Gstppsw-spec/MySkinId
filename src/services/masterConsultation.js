@@ -20,6 +20,7 @@ const {
   masterQuestionnaire,
   masterQuestionnaireAnswer,
   consultationRecommendationCategory,
+  masterUser,
 } = require("../models");
 
 const { Op, Sequelize, where, Model } = require("sequelize");
@@ -541,6 +542,21 @@ module.exports = {
 
   async getAllReadyToAssign(userId, role, page = 1, pageSize = 10) {
     try {
+      // Check if the doctor is available for consultation
+      const doctor = await masterUser.findByPk(userId);
+      if (!doctor || !doctor.isAvailableConsul) {
+        return {
+          status: true,
+          message: "Dokter belum mengaktifkan status konsultasi",
+          data: {
+            totalItems: 0,
+            totalPages: 0,
+            currentPage: page,
+            rows: [],
+          },
+        };
+      }
+
       const offset = (page - 1) * pageSize;
 
       let locationIncludeOptions = {

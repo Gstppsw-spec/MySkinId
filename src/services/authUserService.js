@@ -466,7 +466,7 @@ module.exports = {
   async getUserById(id) {
     try {
       const user = await masterUser.findByPk(id, {
-        attributes: ["id", "name", "email", "phone", "avatar", "isactive", "roleId"],
+        attributes: ["id", "name", "email", "phone", "avatar", "isactive", "roleId", "isAvailableConsul"],
         include: [
           {
             model: masterRole,
@@ -562,6 +562,29 @@ module.exports = {
       await user.update({ password: hashedPassword });
 
       return { status: true, message: "Password berhasil direset", data: null };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async toggleAvailableConsul(id, isAvailableConsul) {
+    try {
+      const user = await masterUser.findByPk(id);
+      if (!user) {
+        return { status: false, message: "User tidak ditemukan", data: null };
+      }
+
+      await user.update({ isAvailableConsul });
+
+      return {
+        status: true,
+        message: `Status konsultasi berhasil ${isAvailableConsul ? "diaktifkan" : "dinonaktifkan"}`,
+        data: {
+          id: user.id,
+          name: user.name,
+          isAvailableConsul: user.isAvailableConsul,
+        },
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }

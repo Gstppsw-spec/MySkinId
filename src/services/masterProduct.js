@@ -92,6 +92,7 @@ module.exports = {
         {
           model: masterProductImage,
           as: "images",
+          separate: true,
           attributes: ["id", "imageUrl"],
         },
         {

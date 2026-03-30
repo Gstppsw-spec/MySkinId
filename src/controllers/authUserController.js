@@ -149,4 +149,23 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  async toggleAvailableConsul(req, res) {
+    try {
+      const { id } = req.params;
+      const { isAvailableConsul } = req.body;
+
+      if (typeof isAvailableConsul !== "boolean") {
+        return response.error(res, "isAvailableConsul harus berupa boolean", null);
+      }
+
+      const result = await authService.toggleAvailableConsul(id, isAvailableConsul);
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };
