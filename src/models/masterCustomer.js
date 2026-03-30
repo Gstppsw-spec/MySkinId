@@ -38,10 +38,15 @@ module.exports = (sequelize, DataTypes) => {
         unique: true,
         allowNull: true,
       },
+      appleId: {
+        type: DataTypes.STRING(100),
+        unique: true,
+        allowNull: true,
+      },
 
       // ===== LOGIN META =====
       loginMethod: {
-        type: DataTypes.ENUM("phone", "email", "google"),
+        type: DataTypes.ENUM("phone", "email", "google", "apple"),
         allowNull: false,
         defaultValue: "phone",
       },

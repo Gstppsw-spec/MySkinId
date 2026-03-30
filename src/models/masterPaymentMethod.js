@@ -21,6 +21,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
+    gateway: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'xendit'
+    },
     logoUrl: DataTypes.STRING,
     createdAt: DataTypes.DATE,
     updatedAt: DataTypes.DATE,

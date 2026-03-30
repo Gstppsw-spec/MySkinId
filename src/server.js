@@ -98,6 +98,11 @@ app.use("/api/v2/user", userRoute);
 app.use("/api/v2/role", roleRoute);
 
 app.use("/api/v2/customer-cart", customerCartRoute);
+
+// Dedicated route for Yokke Webhook
+const transactionOrderController = require("./controllers/transactionOrder");
+app.post("/api/yokke/webhook", transactionOrderController.yokkeWebhook);
+
 app.use("/api/v2/transaction/order", transactionOrderRoute);
 app.use("/api/v2/shipping", shippingRoute);
 app.use("/api/v2/flash-sale", flashSaleRoute);

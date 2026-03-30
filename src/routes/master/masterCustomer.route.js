@@ -11,6 +11,7 @@ router.get("/google", masterCustomerController.googleRedirect);
 router.post("/google/android", masterCustomerController.googleMobileLogin);
 router.post("/google/ios", masterCustomerController.googleIosLogin);
 router.get("/google/callback", masterCustomerController.googleCallback);
+router.post("/apple/ios", masterCustomerController.appleIosLogin);
 router.post("/verifyOtp", masterCustomerController.verifyOTP);
 router.post("/resendOtpAuthentication", masterCustomerController.resendOtpAuthentication);
 

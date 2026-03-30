@@ -736,6 +736,74 @@ class masterCustomerService {
     }
   }
 
+  async appleLogin(profile) {
+    try {
+      const { id, displayName, emails } = profile;
+      const email = emails && emails.length > 0 ? emails[0].value : null;
+
+      let customer = await masterCustomer.findOne({
+        where: { appleId: id },
+      });
+
+      if (!customer && email) {
+        // If appleId not found, check by email (existing account linking)
+        customer = await masterCustomer.findOne({
+          where: { email },
+        });
+
+        if (customer) {
+          // Link existing account with appleId
+          await customer.update({
+            appleId: id,
+            loginMethod: "apple", // Switch to or record apple as login method
+            isActive: true,
+            emailVerified: true,
+          });
+        }
+      }
+
+      if (!customer) {
+        // Create new customer
+        customer = await masterCustomer.create({
+          name: displayName || "Apple User", // Apple only sends the name on first login. If not provided, fallback.
+          email: email,
+          appleId: id,
+          loginMethod: "apple",
+          isActive: true, // Auto-active for Apple sign-in
+          emailVerified: !!email,
+        });
+      }
+
+      const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
+        expiresIn: "7d",
+      });
+
+      const customerData = customer.toJSON();
+      customerData.jwtToken = jwtToken;
+
+      // Clean sensitive data
+      delete customerData.appleId;
+      delete customerData.googleId;
+      delete customerData.loginMethod;
+      delete customerData.password;
+      delete customerData.otpCode;
+      delete customerData.otpType;
+      delete customerData.otpExpiresAt;
+
+      return {
+        status: true,
+        message: "Apple login successful",
+        data: customerData,
+      };
+    } catch (error) {
+      console.error("Apple login error:", error);
+      return {
+        status: false,
+        message: error.message || "Error during Apple login",
+      };
+    }
+  }
+
   static normalizeNumber(phoneNumber, countryCode = "62") {
     phoneNumber = phoneNumber.toString().replace(/[^0-9]/g, "");
     countryCode = countryCode.toString().replace(/[^0-9]/g, "");

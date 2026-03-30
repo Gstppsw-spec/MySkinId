@@ -76,6 +76,25 @@ module.exports = {
         }
     },
 
+    async yokkeWebhook(req, res) {
+        try {
+            const signature = req.headers["signature"] || req.headers["x-signature"];
+            const result = await transactionOrder.handleYokkeWebhook(req.body, signature);
+            
+            // Yokke requires a specific response format, including validateSignature
+            return res.status(200).json({
+                responseCode: "2002500",
+                responseMessage: "Success",
+                validateSignature: result.validateSignature || ""
+            });
+        } catch (error) {
+            return res.status(500).json({
+                responseCode: "5002500",
+                responseMessage: "Internal Server Error"
+            });
+        }
+    },
+
     async xenditCallback(req, res) {
         try {
             // Xendit sends callback data in req.body

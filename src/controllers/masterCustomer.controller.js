@@ -2,6 +2,7 @@ const masterCustomerService = require("../services/masterCustomer.service");
 const response = require("../helpers/response");
 const { google } = require("googleapis");
 const jwt = require("jsonwebtoken");
+const appleSignIn = require("apple-signin-auth");
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
@@ -181,6 +182,54 @@ class masterCustomerController {
       return response.success(res, result.message, result.data);
     } catch (err) {
       console.error("Google iOS Login Error:", err);
+      return response.serverError(res, err);
+    }
+  }
+
+  async appleIosLogin(req, res) {
+    try {
+      const { identityToken, name } = req.body;
+      
+      if (!identityToken) {
+        return response.error(res, "identityToken is required", null);
+      }
+
+      console.log("Starting Apple iOS Login verification...");
+
+      // Verify the Apple identity token
+      // By default, it fetches Apple's public keys, verifies signature, expiration, and issuer.
+      // Ideally, the audience should be validated against your Apple App ID (bundle identifier).
+      let payload;
+      try {
+        payload = await appleSignIn.verifyIdToken(identityToken, {
+          audience: process.env.APPLE_CLIENT_ID, // Use Apple App ID if defined
+          ignoreExpiration: false, // strictly check expiration
+        });
+      } catch (verifyError) {
+        console.error("Apple token verification failed:", verifyError.message);
+        return response.error(res, `Verification failed: ${verifyError.message}`, null);
+      }
+
+      console.log("Apple Token payload received for user:", payload.email);
+
+      // Create a profile object similar to what Google returns
+      // Apple's sub is the unique Apple ID identifier
+      // Name is only provided by Apple on initial sign in, so it must be passed by the frontend if available
+      const profile = {
+        id: payload.sub,
+        displayName: name || null,
+        emails: [{ value: payload.email }],
+      };
+
+      const result = await masterCustomerService.appleLogin(profile);
+
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+
+      return response.success(res, result.message, result.data);
+    } catch (err) {
+      console.error("Apple iOS Login Error:", err);
       return response.serverError(res, err);
     }
   }
