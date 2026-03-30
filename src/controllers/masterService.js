@@ -20,6 +20,12 @@ module.exports = {
       const { page, pageSize } = req.query;
       const pagination = getPagination(page, pageSize);
 
+      const categoryIdsArray = categoryIds
+        ? Array.isArray(categoryIds)
+          ? categoryIds
+          : categoryIds.toString().split(",")
+        : undefined;
+
       const result = await service.getAll({
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
         maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,

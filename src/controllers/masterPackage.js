@@ -23,6 +23,18 @@ module.exports = {
       const { page, pageSize } = req.query;
       const pagination = getPagination(page, pageSize);
 
+      const categoryIdsArray = categoryIds
+        ? Array.isArray(categoryIds)
+          ? categoryIds
+          : categoryIds.toString().split(",")
+        : undefined;
+
+      const consultationCategoryIdsArray = consultationCategoryIds
+        ? Array.isArray(consultationCategoryIds)
+          ? consultationCategoryIds
+          : consultationCategoryIds.toString().split(",")
+        : undefined;
+
       const result = await packageService.getAllPackage({
         name: name || undefined,
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
@@ -35,7 +47,7 @@ module.exports = {
         isCustomer: isCustomer,
         categoryIds: categoryIdsArray,
         cityId: cityId || undefined,
-        consultationCategoryIds: consultationCategoryIds ? (Array.isArray(consultationCategoryIds) ? consultationCategoryIds : consultationCategoryIds.toString().split(",")) : undefined,
+        consultationCategoryIds: consultationCategoryIdsArray,
       }, pagination);
 
       if (!result.status) {
