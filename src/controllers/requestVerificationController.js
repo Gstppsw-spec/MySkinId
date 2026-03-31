@@ -17,10 +17,10 @@ class RequestVerificationController {
     }
 
     async list(req, res) {
-        const { status, type, page, pageSize } = req.query;
+        const { status, type, page, pageSize, name } = req.query;
         const pagination = getPagination(page, pageSize);
 
-        const result = await RequestVerificationService.list(status, type, pagination);
+        const result = await RequestVerificationService.list(status, type, pagination, name);
 
         if (!result.status) {
             return res.status(400).json(result);

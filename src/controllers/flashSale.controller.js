@@ -18,10 +18,10 @@ module.exports = {
 
   async getAll(req, res) {
     try {
-      const { status, page, pageSize } = req.query;
+      const { status, page, pageSize, name } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await flashSaleService.getAll(status, pagination);
+      const result = await flashSaleService.getAll(status, pagination, name);
 
       if (!result.status) return response.error(res, result.message, result.data);
 

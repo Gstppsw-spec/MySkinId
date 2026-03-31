@@ -53,10 +53,10 @@ class RelationshipUserCompanyController {
 
   async getAllCompany(req, res) {
     try {
-      const { page, pageSize } = req.query;
+      const { page, pageSize, name } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await RelationshipUserCompanyService.getAllCompany(pagination);
+      const result = await RelationshipUserCompanyService.getAllCompany(pagination, name);
 
       return res.status(200).json({
         success: true,

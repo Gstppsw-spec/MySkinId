@@ -91,25 +91,33 @@ class RequestVerificationService {
         }
     }
 
-    async list(status, type, pagination = {}) {
+    async list(status, type, pagination = {}, name = null) {
         try {
-            //allowed type
-            const allowedType = ["location", "company", "product", "service", "package"];
-
             const { limit, offset } = pagination;
+            const allowedType = ["location", "company", "product", "service", "package"];
+            const { Op } = require("sequelize");
 
             const where = {};
             if (status) where.status = status;
 
             let include = [];
+            const nameFilter = name ? { name: { [Op.like]: `%${name}%` } } : null;
 
             if (type && allowedType.includes(type)) {
                 where.refferenceType = type;
-                if (type === "location") include.push({ model: masterLocation, as: "location" });
-                if (type === "company") include.push({ model: masterCompany, as: "company" });
-                if (type === "product") include.push({ model: masterProduct, as: "product" });
-                if (type === "service") include.push({ model: masterService, as: "service" });
-                if (type === "package") include.push({ model: masterPackage, as: "package" });
+                const modelInclude = {
+                    location: { model: masterLocation, as: "location" },
+                    company: { model: masterCompany, as: "company" },
+                    product: { model: masterProduct, as: "product" },
+                    service: { model: masterService, as: "service" },
+                    package: { model: masterPackage, as: "package" }
+                }[type];
+
+                if (nameFilter) {
+                    modelInclude.where = nameFilter;
+                    modelInclude.required = true;
+                }
+                include.push(modelInclude);
             } else if (type && !allowedType.includes(type)) {
                 return {
                     status: false,
@@ -117,14 +125,29 @@ class RequestVerificationService {
                     data: null,
                 };
             } else {
-                // If no type filter, include all to support mixed list
+                // If no type filter, include all.
+                // If name filter is present, it's harder to filter across different polymorphic relations in one query with Sequelize's findAndCountAll and required includes.
+                // For simplicity, we'll apply the filter to each and if name is provided, we'll use an OR logic if possible, or just filter each include.
+                // Actually, a common way is to use subqueries or a more manual approach.
+                // But let's try to add the where to each include and see if anything matches.
+
                 include = [
-                    { model: masterLocation, as: "location" },
-                    { model: masterCompany, as: "company" },
-                    { model: masterProduct, as: "product" },
-                    { model: masterService, as: "service" },
-                    { model: masterPackage, as: "package" },
+                    { model: masterLocation, as: "location", ...(nameFilter && { where: nameFilter, required: false }) },
+                    { model: masterCompany, as: "company", ...(nameFilter && { where: nameFilter, required: false }) },
+                    { model: masterProduct, as: "product", ...(nameFilter && { where: nameFilter, required: false }) },
+                    { model: masterService, as: "service", ...(nameFilter && { where: nameFilter, required: false }) },
+                    { model: masterPackage, as: "package", ...(nameFilter && { where: nameFilter, required: false }) },
                 ];
+
+                if (nameFilter) {
+                    where[Op.or] = [
+                        { "$location.name$": { [Op.like]: `%${name}%` } },
+                        { "$company.name$": { [Op.like]: `%${name}%` } },
+                        { "$product.name$": { [Op.like]: `%${name}%` } },
+                        { "$service.name$": { [Op.like]: `%${name}%` } },
+                        { "$package.name$": { [Op.like]: `%${name}%` } },
+                    ];
+                }
             }
 
             const { count, rows: requests } = await requestVerification.findAndCountAll({
@@ -144,6 +167,7 @@ class RequestVerificationService {
                 totalCount: count,
             };
         } catch (error) {
+            console.error("List Request Verification Error:", error);
             return { status: false, message: error.message, data: null };
         }
     }

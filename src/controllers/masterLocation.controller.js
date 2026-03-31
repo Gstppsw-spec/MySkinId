@@ -96,10 +96,10 @@ class masterLocationController {
   async getLocationByUser(req, res) {
     try {
       const user = req.user;
-      const { page, pageSize } = req.query;
+      const { page, pageSize, name } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await masterLocationService.getLocationByUser(user, pagination);
+      const result = await masterLocationService.getLocationByUser({ ...user, name }, pagination);
       if (!result.status) {
         return response.error(res, result.message, null);
       }
@@ -156,6 +156,51 @@ class masterLocationController {
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
+  }
+
+  async getPremiumLocations(req, res) {
+    try {
+      const { latt, long, page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
+
+      const result = await masterLocationService.getPremiumLocations(
+        latt,
+        long,
+        pagination
+      );
+
+      if (!result.status) {
+        return response.error(res, result.message, null);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+
+  async getMyPremiumStatus(req, res) {
+    try {
+      const { locationIds } = req.user;
+      const { latt, long } = req.query;
+
+      const result = await masterLocationService.getMyPremiumStatus(
+        locationIds,
+        latt,
+        long
+      );
+
+      return result.status
+        ? response.success(res, result.message, result.data)
+        : response.error(res, result.message, null);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   }
 
   async getCityByLatitudeLongitude(req, res) {

@@ -9,10 +9,10 @@ class CompanyVerificationController {
   }
 
   async list(req, res) {
-    const { status, page, pageSize } = req.query;
+    const { status, page, pageSize, name } = req.query;
     const pagination = getPagination(page, pageSize);
 
-    const result = await companyVerificationService.list(status, pagination);
+    const result = await companyVerificationService.list(status, pagination, name);
 
     if (!result.status) {
       return res.status(400).json(result);

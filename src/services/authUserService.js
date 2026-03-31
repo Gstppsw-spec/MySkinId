@@ -291,10 +291,14 @@ module.exports = {
     }
   },
 
-  async getAllUser(pagination = {}) {
+  async getAllUser(pagination = {}, name = null) {
     try {
       const { limit, offset } = pagination;
+      const where = { isactive: true };
+      if (name) where.name = { [Op.like]: `%${name}%` };
+
       const { count, rows } = await masterUser.findAndCountAll({
+        where,
         attributes: ["id", "name", "email", "phone", "avatar"],
         distinct: true,
         limit,
@@ -374,10 +378,14 @@ module.exports = {
     }
   },
 
-  async getAllUserCompany(pagination = {}) {
+  async getAllUserCompany(pagination = {}, name = null) {
     try {
       const { limit, offset } = pagination;
+      const where = { isactive: true };
+      if (name) where.name = { [Op.like]: `%${name}%` };
+
       const { count, rows } = await masterUser.findAndCountAll({
+        where,
         attributes: ["id", "name", "email", "phone", "avatar"],
         distinct: true,
         limit,

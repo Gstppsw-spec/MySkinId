@@ -28,9 +28,14 @@ class RelationshipUserCompanyService {
     return data?.company || null;
   }
 
-  async getAllCompany(pagination = {}) {
+  async getAllCompany(pagination = {}, name = null) {
     const { limit, offset } = pagination;
+    const { Op } = require("sequelize");
+    const where = {};
+    if (name) where.name = { [Op.like]: `%${name}%` };
+
     const { count, rows } = await masterCompany.findAndCountAll({
+      where,
       limit,
       offset,
       order: [["createdAt", "DESC"]],

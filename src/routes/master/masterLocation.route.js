@@ -7,6 +7,13 @@ const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 // >>> STATIC ROUTES FIRST <<<
 router.get("/newly-added", masterLocationController.getNewArrivalOutlets);
+router.get("/premium", masterLocationController.getPremiumLocations);
+router.get(
+  "/my-premium",
+  verifyToken,
+  allowRoles("OUTLET_ADMIN"),
+  masterLocationController.getMyPremiumStatus,
+);
 router.get("/company/:companyId", masterLocationController.getByCompanyId);
 
 router.get("/user", verifyToken, masterLocationController.getLocationByUser);

@@ -223,10 +223,41 @@ class MasterLocationService {
         }
       }
 
+      // Resolve Google Place ID if googleMapsUrl provided
+      if (data.googleMapsUrl) {
+        try {
+          const googlePlacesService = require("./googlePlaces.service");
+          const extractResult = await googlePlacesService.extractPlaceIdFromUrl(data.googleMapsUrl);
+          if (extractResult.status) {
+            data.googlePlaceId = extractResult.placeId;
+          } else {
+            console.warn(`[Location Update] Could not extract Place ID from URL: ${extractResult.message}`);
+          }
+        } catch (googleError) {
+          console.warn("[Location Update] Google Place ID lookup failed (non-blocking):", googleError.message);
+        }
+      }
+
       await location.update({
         ...data,
         updatedBy: userId,
       });
+
+      // Auto-sync rating if googlePlaceId provided/updated
+      if (data.googlePlaceId) {
+        try {
+          const googlePlacesService = require("./googlePlaces.service");
+          const syncResult = await googlePlacesService.syncLocationRating(id);
+          if (syncResult.status) {
+            // Re-fetch location to get updated rating data (optional, but good for returning data)
+            await location.reload();
+            console.log(`[Location Update] Google rating synced: ${syncResult.data.googleRating} (${syncResult.data.googleRatingCount} reviews)`);
+          }
+        } catch (syncErr) {
+          console.warn("[Location Update] Google rating sync failed (non-blocking):", syncErr.message);
+        }
+      }
+
       if (files && files.length > 0) {
         for (const file of files) {
           await masterLocationImage.create({
@@ -422,10 +453,11 @@ class MasterLocationService {
     }
   }
 
-  async getLocationByUser({ id: userId, roleCode, locationIds }, pagination = {}) {
+  async getLocationByUser({ id: userId, roleCode, locationIds, name }, pagination = {}) {
     try {
       const { limit, offset } = pagination;
       const options = {
+        where: {},
         include: [
           {
             model: masterLocationImage,
@@ -438,6 +470,10 @@ class MasterLocationService {
         subQuery: false,
       };
 
+      if (name) {
+        options.where.name = { [Op.like]: `%${name}%` };
+      }
+
       if (roleCode === "SUPER_ADMIN") {
         const { count, rows } = await masterLocation.findAndCountAll(options);
         return {
@@ -448,10 +484,8 @@ class MasterLocationService {
         };
       }
 
-      options.where = {
-        id: {
-          [Op.in]: locationIds,
-        },
+      options.where.id = {
+        [Op.in]: locationIds,
       };
 
       const { count, rows } = await masterLocation.findAndCountAll(options);
@@ -690,6 +724,164 @@ class MasterLocationService {
       };
     } catch (error) {
       console.error("Get New Arrival Outlets Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  }
+
+  async getPremiumLocations(latt = null, long = null, pagination = {}) {
+    try {
+      const { limit, offset } = pagination;
+      const now = new Date();
+      const { count, rows: locations } = await masterLocation.findAndCountAll({
+        where: {
+          isactive: true,
+          isPremium: true,
+          premiumExpiredAt: { [Op.gt]: now }
+        },
+        include: [{ model: masterLocationImage, as: "images" }],
+        distinct: true,
+        limit,
+        offset,
+        subQuery: false,
+        order: [["createdAt", "DESC"]],
+      });
+
+      const result = locations.map((loc) => {
+        const plain = loc.get({ plain: true });
+
+        let distance = 0;
+        if (latt && long && plain.latitude && plain.longitude) {
+          const lat1 = parseFloat(latt);
+          const lon1 = parseFloat(long);
+          const lat2 = parseFloat(plain.latitude);
+          const lon2 = parseFloat(plain.longitude);
+
+          const R = 6371e3; // meters
+          const φ1 = (lat1 * Math.PI) / 180;
+          const φ2 = (lat2 * Math.PI) / 180;
+          const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+          const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+          const a =
+            Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+          distance = Math.round(R * c);
+        }
+
+        return {
+          id: plain.id,
+          name: plain.name,
+          code: plain.code,
+          address: plain.address,
+          phone: plain.phone,
+          operationHours: plain.operationHours,
+          operationDays: plain.operationDays,
+          latitude: plain.latitude,
+          longitude: plain.longitude,
+          isactive: plain.isactive,
+          isPremium: true,
+          premiumExpiredAt: plain.premiumExpiredAt,
+          ratingAvg: plain.ratingAvg,
+          ratingCount: plain.ratingCount,
+          googleRating: plain.googleRating,
+          googleRatingCount: plain.googleRatingCount,
+          distance: distance,
+          images: plain.images ? plain.images.map(img => ({
+            id: img.id,
+            imageUrl: img.imageUrl
+          })) : []
+        };
+      });
+
+      return {
+        status: true,
+        message: "Successfully fetched premium locations",
+        data: result,
+        totalCount: count,
+      };
+    } catch (error) {
+      console.error("Get Premium Locations Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  }
+
+  async getMyPremiumStatus(locationIds, latt = null, long = null) {
+    try {
+      if (!locationIds || locationIds.length === 0) {
+        return { status: false, message: "User tidak terdaftar di outlet manapun", data: null };
+      }
+
+      const locations = await masterLocation.findAll({
+        where: {
+          id: { [Op.in]: locationIds }
+        },
+        include: [{ model: masterLocationImage, as: "images" }],
+      });
+
+      if (!locations || locations.length === 0) {
+        return { status: false, message: "Outlet tidak ditemukan", data: null };
+      }
+
+      const result = locations.map((loc) => {
+        const plain = loc.get({ plain: true });
+
+        let distance = 0;
+        if (latt && long && plain.latitude && plain.longitude) {
+          const lat1 = parseFloat(latt);
+          const lon1 = parseFloat(long);
+          const lat2 = parseFloat(plain.latitude);
+          const lon2 = parseFloat(plain.longitude);
+
+          const R = 6371e3; // meters
+          const φ1 = (lat1 * Math.PI) / 180;
+          const φ2 = (lat2 * Math.PI) / 180;
+          const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+          const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+          const a =
+            Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+            Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+          distance = Math.round(R * c);
+        }
+
+        const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+
+        return {
+          id: plain.id,
+          name: plain.name,
+          code: plain.code,
+          address: plain.address,
+          phone: plain.phone,
+          operationHours: plain.operationHours,
+          operationDays: plain.operationDays,
+          latitude: plain.latitude,
+          longitude: plain.longitude,
+          isactive: plain.isactive,
+          isPremium: isPremiumValid,
+          premiumExpiredAt: plain.premiumExpiredAt,
+          ratingAvg: plain.ratingAvg,
+          ratingCount: plain.ratingCount,
+          googleRating: plain.googleRating,
+          googleRatingCount: plain.googleRatingCount,
+          distance: distance,
+          images: plain.images ? plain.images.map(img => ({
+            id: img.id,
+            imageUrl: img.imageUrl
+          })) : []
+        };
+      });
+
+      return {
+        status: true,
+        message: "Berhasil mengambil data outlet",
+        data: result,
+      };
+    } catch (error) {
+      console.error("Get My Premium Status Error:", error);
       return { status: false, message: error.message, data: null };
     }
   }

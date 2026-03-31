@@ -105,7 +105,7 @@ module.exports = {
   /**
    * List semua flash sale.
    */
-  async getAll(statusFilter, pagination = {}) {
+  async getAll(statusFilter, pagination = {}, name = null) {
     try {
       await syncStatuses();
 
@@ -113,6 +113,7 @@ module.exports = {
 
       const where = {};
       if (statusFilter) where.status = statusFilter;
+      if (name) where.title = { [Op.like]: `%${name}%` };
 
       const { count, rows: data } = await flashSale.findAndCountAll({
         where,

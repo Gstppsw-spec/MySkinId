@@ -31,15 +31,27 @@ class CompanyVerificationService {
       return { status: false, message: error.message, data: null };
     }
   }
-  async list(status, pagination = {}) {
+  async list(status, pagination = {}, name = null) {
     try {
       const { limit, offset } = pagination;
+      const { Op } = require("sequelize");
       const where = {};
       if (status) where.status = status;
 
+      const include = [
+        {
+          model: masterCompany,
+          as: "company",
+          ...(name && {
+            where: { name: { [Op.like]: `%${name}%` } },
+            required: true,
+          }),
+        },
+      ];
+
       const { count, rows: requests } = await CompanyVerificationRequest.findAndCountAll({
         where,
-        include: [{ model: masterCompany, as: "company" }],
+        include,
         order: [["createdAt", "DESC"]],
         limit,
         offset,

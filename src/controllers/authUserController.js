@@ -59,10 +59,10 @@ module.exports = {
 
   async getAllUser(req, res) {
     try {
-      const { page, pageSize } = req.query;
+      const { page, pageSize, name } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await authService.getAllUser(pagination);
+      const result = await authService.getAllUser(pagination, name);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
@@ -80,10 +80,10 @@ module.exports = {
 
   async getAllUserCompany(req, res) {
     try {
-      const { page, pageSize } = req.query;
+      const { page, pageSize, name } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await authService.getAllUserCompany(pagination);
+      const result = await authService.getAllUserCompany(pagination, name);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
@@ -152,14 +152,14 @@ module.exports = {
 
   async toggleAvailableConsul(req, res) {
     try {
-      const { id } = req.params;
+      const { userId } = req.user;
       const { isAvailableConsul } = req.body;
 
       if (typeof isAvailableConsul !== "boolean") {
         return response.error(res, "isAvailableConsul harus berupa boolean", null);
       }
 
-      const result = await authService.toggleAvailableConsul(id, isAvailableConsul);
+      const result = await authService.toggleAvailableConsul(userId, isAvailableConsul);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }

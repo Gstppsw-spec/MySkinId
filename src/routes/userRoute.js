@@ -18,5 +18,5 @@ router.put(
     allowRoles("SUPER_ADMIN"),
     authController.resetPassword,
 );
-router.put("/:id/available-consul", authController.toggleAvailableConsul);
+router.put("/available-consul", verifyToken, authController.toggleAvailableConsul);
 module.exports = router;
