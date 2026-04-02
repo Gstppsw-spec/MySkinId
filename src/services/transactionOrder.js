@@ -102,7 +102,8 @@ module.exports = {
                                     ? { mobile_number: formattedPhone || "+6281234567890" }
                                     : {
                                         success_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_success`,
-                                        failure_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_failure`
+                                        failure_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_failure`,
+                                        cancel_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_cancel`
                                     }
                             }
                         }
