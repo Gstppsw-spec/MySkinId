@@ -11,7 +11,7 @@ router.get("/premium", masterLocationController.getPremiumLocations);
 router.get(
   "/my-premium",
   verifyToken,
-  allowRoles("OUTLET_ADMIN"),
+  // allowRoles("OUTLET_ADMIN"),
   masterLocationController.getMyPremiumStatus,
 );
 router.get("/company/:companyId", masterLocationController.getByCompanyId);

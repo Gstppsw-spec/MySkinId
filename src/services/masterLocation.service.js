@@ -348,7 +348,7 @@ class MasterLocationService {
 
       const processedLocations = locations.map(loc => {
         const plain = loc.get({ plain: true });
-        const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+        const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
         return { ...plain, isPremium: isPremiumValid };
       });
 
@@ -549,7 +549,7 @@ class MasterLocationService {
         distance = Math.round(R * c);
       }
 
-      const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+      const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
 
       return {
         status: true,
@@ -599,7 +599,10 @@ class MasterLocationService {
       const locations = await masterLocation.findAll({
         where,
         include,
-        order: [["createdAt", "DESC"]],
+        order: [
+          ["isPremium", "DESC"],
+          ["createdAt", "DESC"],
+        ],
       });
 
       if (!locations) {
@@ -630,7 +633,7 @@ class MasterLocationService {
           distance = Math.round(R * c);
         }
 
-        const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+        const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
 
         return {
           ...plain,
@@ -708,7 +711,7 @@ class MasterLocationService {
           distance = Math.round(R * c);
         }
 
-        const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+        const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
 
         return {
           ...plain,
@@ -848,7 +851,7 @@ class MasterLocationService {
           distance = Math.round(R * c);
         }
 
-        const isPremiumValid = plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt);
+        const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
 
         return {
           id: plain.id,
