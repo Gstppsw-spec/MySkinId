@@ -1110,6 +1110,10 @@ module.exports = {
                 { transaction: t }
             );
 
+            console.log(`[DEBUG] buyPremiumBadge: Created order ${newOrder.orderNumber} with status ${newOrder.paymentStatus}`);
+            console.log(`[DEBUG] buyPremiumBadge: Created transaction ${newTransaction.transactionNumber} with status ${newTransaction.orderStatus}`);
+
+
             await transactionItem.create(
                 {
                     transactionId: newTransaction.id,
@@ -1166,6 +1170,8 @@ module.exports = {
             );
 
             await t.commit();
+            console.log(`[DEBUG] buyPremiumBadge: Transaction committed for ${newOrder.orderNumber}`);
+
 
             // Schedule auto-expiry after 10 minutes if unpaid
             schedulePaymentTimeout(newOrder.id, newOrder.orderNumber, this._expireOrder.bind(this));
@@ -1175,7 +1181,12 @@ module.exports = {
                 message: "Premium badge purchase initiated",
                 data: {
                     ...newOrder.toJSON(),
-                    paymentDetails: gatewayPayment
+                    paymentDetails: gatewayPayment,
+                    _debug: {
+                        initialPaymentStatus: newOrder.paymentStatus,
+                        initialOrderStatus: newTransaction.orderStatus,
+                        gateway: gateway
+                    }
                 }
             };
         } catch (error) {
@@ -1370,6 +1381,8 @@ module.exports = {
             let _status = payload.transaction ? payload.transaction.status : null; // "captured", etc
             
             console.log(`Yokke Webhook Processed: Event=${eventType}, Order=${_external_id}, Status=${_status}`);
+            console.log(`[DEBUG] handleYokkeWebhook: Processing event ${eventType} for order ${_external_id} with status ${_status}`);
+
 
             if (!_external_id) {
                 await t.rollback();
@@ -1394,7 +1407,9 @@ module.exports = {
 
                     for (const trx of orderData.transactions) {
                         await trx.update({ orderStatus: "PAID" }, { transaction: t });
+                        console.log(`[DEBUG] handleYokkeWebhook: Updated transaction ${trx.transactionNumber} to PAID`);
                     }
+
 
                     const paymentChannel = payload.transaction?.paymentSource;
 
@@ -1525,6 +1540,8 @@ module.exports = {
             }
 
             console.log(`Xendit Callback Processed: ID=${_external_id}, Status=${_status}, Channel=${_payment_channel}`);
+            console.log(`[DEBUG] handleXenditCallback: Payload type check - external_id: ${_external_id}, status: ${_status}`);
+
 
             if (!_external_id) {
                 throw new Error("Missing reference/external ID in callback");
@@ -1549,6 +1566,7 @@ module.exports = {
                     // Update all transactions in this order to PAID
                     for (const trx of orderData.transactions) {
                         await trx.update({ orderStatus: "PAID" }, { transaction: t });
+                        console.log(`[DEBUG] handleXenditCallback: Updated transaction ${trx.transactionNumber} to PAID`);
                     }
 
                     // Update payment record with detailed info
@@ -2428,10 +2446,16 @@ module.exports = {
 
             const result = rows.map(r => {
                 const plain = r.get({ plain: true });
+                console.log(`[DEBUG] getOutletTransactions: Transaction ${plain.transactionNumber}, orderStatus: ${plain.orderStatus}, order paymentStatus: ${plain.order?.paymentStatus}`);
                 const res = {
                     ...plain,
                     customerPhone: plain.order?.customer?.phoneNumber || null,
                     outletPhone: plain.location?.phone || null,
+                    _debug: {
+                        orderPaymentStatus: plain.order?.paymentStatus,
+                        orderStatus: plain.orderStatus,
+                        paymentCount: plain.order?.payments?.length
+                    }
                 };
                 if (res.order?.customer) {
                     delete res.order.customer.phoneNumber;
