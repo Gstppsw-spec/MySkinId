@@ -693,11 +693,11 @@ module.exports = {
                 message: "Checkout successful",
                 data: {
                     ...newOrder.toJSON(),
-                    paymentDetails: xenditPayment
+                    paymentDetails: gatewayPayment
                 }
             };
         } catch (error) {
-            await t.rollback();
+            if (t && !t.finished) await t.rollback();
             return { status: false, message: error.message };
         }
     },
@@ -1063,11 +1063,11 @@ module.exports = {
                 message: "Direct checkout successful",
                 data: {
                     ...newOrder.toJSON(),
-                    paymentDetails: xenditPayment
+                    paymentDetails: gatewayPayment
                 }
             };
         } catch (error) {
-            await t.rollback();
+            if (t && !t.finished) await t.rollback();
             return { status: false, message: error.message };
         }
     },
@@ -1174,11 +1174,11 @@ module.exports = {
                 message: "Premium badge purchase initiated",
                 data: {
                     ...newOrder.toJSON(),
-                    paymentDetails: xenditPayment
+                    paymentDetails: gatewayPayment
                 }
             };
         } catch (error) {
-            await t.rollback();
+            if (t && !t.finished) await t.rollback();
             return { status: false, message: error.message };
         }
     },
