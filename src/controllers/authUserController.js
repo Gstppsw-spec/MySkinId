@@ -83,7 +83,7 @@ module.exports = {
       const { page, pageSize, name } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await authService.getAllUserCompany(pagination, name);
+      const result = await authService.getAllUserCompany(req.user, pagination, name);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }

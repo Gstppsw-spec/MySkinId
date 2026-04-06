@@ -572,10 +572,13 @@ class MasterLocationService {
         });
       }
 
-      const location = await masterLocation.findByPk(id, { include });
+      const location = await masterLocation.findOne({
+        where: { id, isactive: true, isVerified: true },
+        include
+      });
 
       if (!location) {
-        return { status: false, message: "Location not found", data: null };
+        return { status: false, message: "Location not found or not verified", data: null };
       }
 
       const plain = location.get({ plain: true });
@@ -640,7 +643,7 @@ class MasterLocationService {
         });
       }
 
-      const where = { isactive: true };
+      const where = { isactive: true, isVerified: true };
       if (name) {
         where.name = { [Op.like]: `%${name}%` };
       }
@@ -806,6 +809,7 @@ class MasterLocationService {
       const { count, rows: locations } = await masterLocation.findAndCountAll({
         where: {
           isactive: true,
+          isVerified: true,
           isPremium: true,
           premiumExpiredAt: { [Op.gt]: now }
         },

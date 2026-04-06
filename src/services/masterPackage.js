@@ -58,6 +58,7 @@ module.exports = {
 
       if (isCustomer == 1 || isCustomer == "1") {
         where.isActive = true;
+        where.isVerified = true;
       }
 
       if (minPrice !== undefined || maxPrice !== undefined) {
@@ -582,6 +583,7 @@ module.exports = {
 
       if (isCustomer == 1 || isCustomer == "1") {
         where.isActive = true;
+        where.isVerified = true;
       }
 
       const include = [

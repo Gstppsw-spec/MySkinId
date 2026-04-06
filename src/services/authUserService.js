@@ -297,11 +297,21 @@ module.exports = {
       const where = { isactive: true };
       if (name) where.name = { [Op.like]: `%${name}%` };
 
-      const locationWhere = { isactive: true };
+      const allowedRoles = ["OUTLET_ADMIN", "OUTLET_DOCTOR"];
+
       if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
-        if (userObj.locationIds && userObj.locationIds.length > 0) {
-          locationWhere.id = { [Op.in]: userObj.locationIds };
-        }
+        allowedRoles.push("COMPANY_ADMIN");
+        // find user IDs in admin's locations
+        const locIds = userObj.locationIds || [];
+        const staff = await relationshipUserLocation.findAll({
+          where: { locationId: { [Op.in]: locIds }, isactive: true },
+          attributes: ["userId"],
+          raw: true,
+        });
+        const allowedUserIds = staff.map(s => s.userId);
+        allowedUserIds.push(userObj.id); // allow their own account
+
+        where.id = { [Op.in]: allowedUserIds };
       }
 
       const { count, rows } = await masterUser.findAndCountAll({
@@ -318,23 +328,21 @@ module.exports = {
             attributes: ["id", "name"],
             where: {
               roleCode: {
-                [Op.in]: ["OUTLET_ADMIN", "OUTLET_DOCTOR"],
+                [Op.in]: allowedRoles,
               },
             },
           },
           {
             model: relationshipUserLocation,
             as: "userLocations",
-            required: true,
-            where: {
-              isactive: true,
-            },
+            required: false,
+            where: { isactive: true },
             include: [
               {
                 model: masterLocation,
                 as: "location",
-                required: true,
-                where: locationWhere,
+                required: false,
+                where: { isactive: true },
                 include: [
                   {
                     model: masterCompany,
@@ -342,6 +350,19 @@ module.exports = {
                     attributes: ["id", "name"],
                   },
                 ],
+              },
+            ],
+          },
+          {
+            model: relationshipUserCompany,
+            as: "userCompanies",
+            required: false,
+            where: { isactive: true },
+            include: [
+              {
+                model: masterCompany,
+                as: "company",
+                attributes: ["id", "name"],
               },
             ],
           },
@@ -357,16 +378,29 @@ module.exports = {
         };
       }
 
-      const data = rows.map((user) => ({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        avatar: user.avatar,
-        role: user.role?.name || null,
-        location: user.userLocations?.[0]?.location?.name || null,
-        companyName: user.userLocations?.[0]?.location?.company?.name || null,
-      }));
+      const data = rows.map((user) => {
+        let locationName = null;
+        let companyName = null;
+        
+        if (user.userLocations && user.userLocations.length > 0) {
+          locationName = user.userLocations[0].location?.name || null;
+          companyName = user.userLocations[0].location?.company?.name || null;
+        } else if (user.userCompanies && user.userCompanies.length > 0) {
+          companyName = user.userCompanies[0].company?.name || null;
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          avatar: user.avatar,
+          role: user.role?.name || null,
+          roleCode: user.role?.roleCode || null,
+          location: locationName,
+          companyName: companyName,
+        };
+      });
 
       return {
         status: true,
@@ -383,11 +417,27 @@ module.exports = {
     }
   },
 
-  async getAllUserCompany(pagination = {}, name = null) {
+  async getAllUserCompany(userObj, pagination = {}, name = null) {
     try {
       const { limit, offset } = pagination;
       const where = { isactive: true };
       if (name) where.name = { [Op.like]: `%${name}%` };
+
+      const allowedRoles = ["OUTLET_ADMIN", "OUTLET_DOCTOR"];
+
+      if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
+        allowedRoles.push("COMPANY_ADMIN");
+        const locIds = userObj.locationIds || [];
+        const staff = await relationshipUserLocation.findAll({
+          where: { locationId: { [Op.in]: locIds }, isactive: true },
+          attributes: ["userId"],
+          raw: true,
+        });
+        const allowedUserIds = staff.map(s => s.userId);
+        allowedUserIds.push(userObj.id);
+
+        where.id = { [Op.in]: allowedUserIds };
+      }
 
       const { count, rows } = await masterUser.findAndCountAll({
         where,
@@ -403,7 +453,7 @@ module.exports = {
             attributes: ["id", "name"],
             where: {
               roleCode: {
-                [Op.in]: ["OUTLET_ADMIN", "OUTLET_DOCTOR"],
+                [Op.in]: allowedRoles,
               },
             },
           },
@@ -411,7 +461,7 @@ module.exports = {
             model: relationshipUserCompany,
             as: "userCompanies",
             where: { isactive: true },
-            required: true,
+            required: false,
             include: [
               {
                 model: masterCompany,
@@ -423,7 +473,7 @@ module.exports = {
           {
             model: relationshipUserLocation,
             as: "userLocations",
-            required: true,
+            required: false,
             where: {
               isactive: true,
             },
@@ -431,7 +481,7 @@ module.exports = {
               {
                 model: masterLocation,
                 as: "location",
-                required: true,
+                required: false,
                 where: {
                   isactive: true,
                 },
@@ -450,16 +500,29 @@ module.exports = {
         };
       }
 
-      const data = rows.map((user) => ({
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        avatar: user.avatar,
-        role: user.role?.name || null,
-        location: user.userLocations?.[0]?.location?.name || null,
-        companyName: user.userCompanies?.[0]?.company?.name || null,
-      }));
+      const data = rows.map((user) => {
+        let locationName = null;
+        let companyName = null;
+        
+        if (user.userLocations && user.userLocations.length > 0) {
+          locationName = user.userLocations[0].location?.name || null;
+          companyName = user.userLocations[0].location?.company?.name || null;
+        } else if (user.userCompanies && user.userCompanies.length > 0) {
+          companyName = user.userCompanies[0].company?.name || null;
+        }
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          avatar: user.avatar,
+          role: user.role?.name || null,
+          roleCode: user.role?.roleCode || null,
+          location: locationName,
+          companyName: companyName,
+        };
+      });
 
       return {
         status: true,
