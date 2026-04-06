@@ -291,11 +291,18 @@ module.exports = {
     }
   },
 
-  async getAllUser(pagination = {}, name = null) {
+  async getAllUser(userObj, pagination = {}, name = null) {
     try {
       const { limit, offset } = pagination;
       const where = { isactive: true };
       if (name) where.name = { [Op.like]: `%${name}%` };
+
+      const locationWhere = { isactive: true };
+      if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
+        if (userObj.locationIds && userObj.locationIds.length > 0) {
+          locationWhere.id = { [Op.in]: userObj.locationIds };
+        }
+      }
 
       const { count, rows } = await masterUser.findAndCountAll({
         where,
@@ -327,9 +334,7 @@ module.exports = {
                 model: masterLocation,
                 as: "location",
                 required: true,
-                where: {
-                  isactive: true,
-                },
+                where: locationWhere,
                 include: [
                   {
                     model: masterCompany,

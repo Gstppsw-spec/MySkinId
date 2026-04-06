@@ -246,6 +246,35 @@ module.exports = {
           if (pkg.locationId !== locationId) throw new Error("Package does not belong to this outlet");
         }
 
+        // Cek duplikasi di jam flash sale yang sama
+        const overlappingFs = await flashSale.findAll({
+          where: {
+            status: { [Op.in]: ["UPCOMING", "ACTIVE"] },
+            [Op.and]: [
+              { startDate: { [Op.lt]: fs.endDate } },
+              { endDate: { [Op.gt]: fs.startDate } }
+            ]
+          },
+          transaction: t
+        });
+        const fsIds = overlappingFs.map(f => f.id);
+        if (!fsIds.includes(flashSaleId)) fsIds.push(flashSaleId);
+
+        const isDuplicate = await flashSaleItem.findOne({
+          where: {
+            flashSaleId: { [Op.in]: fsIds },
+            locationId,
+            itemType,
+            productId: itemType === "PRODUCT" ? productId : null,
+            packageId: itemType === "PACKAGE" ? packageId : null,
+          },
+          transaction: t
+        });
+
+        if (isDuplicate) {
+          throw new Error(`Produk/Paket sudah terdaftar di Flash Sale pada waktu yang sama.`);
+        }
+
         const newItem = await flashSaleItem.create({
           flashSaleId,
           locationId,

@@ -203,6 +203,20 @@ class masterLocationController {
     }
   }
 
+  async removePremium(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id || null;
+      const result = await masterLocationService.removePremium(id, userId);
+
+      return result.status
+        ? response.success(res, result.message, result.data)
+        : response.error(res, result.message, null);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+
   async getCityByLatitudeLongitude(req, res) {
     const { latitude, longitude } = req.query;
     const result = await masterLocationService.getCityByLatitudeLongitude(

@@ -320,6 +320,28 @@ class MasterLocationService {
     }
   }
 
+  async removePremium(id, userId) {
+    try {
+      const location = await masterLocation.findByPk(id);
+      if (!location) {
+        return { status: false, message: "Location not found", data: null };
+      }
+      location.isPremium = false;
+      location.premiumExpiredAt = null;
+      location.updatedBy = userId;
+      await location.save();
+
+      return {
+        status: true,
+        message: "Premium status removed successfully",
+        data: location,
+      };
+    } catch (error) {
+      console.error("Remove premium error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  }
+
   async detail(id) {
     try {
       const location = await masterLocation.findByPk(id, {
@@ -328,6 +350,7 @@ class MasterLocationService {
           { model: masterUser, as: "creator" },
           { model: masterUser, as: "updater" },
           { model: masterLocationImage, as: "images" },
+          { model: masterCity, as: "cityDetail" },
           {
             model: LocationVerificationRequest,
             as: "verificationRequests",
@@ -342,7 +365,15 @@ class MasterLocationService {
         return { status: false, message: "Location not found", data: null };
       }
 
-      return { status: true, message: "Location found", data: location };
+      const plain = location.get({ plain: true });
+      const googleMapsUrl = plain.googlePlaceId
+          ? `https://www.google.com/maps/search/?api=1&query=${plain.latitude || 0},${plain.longitude || 0}&query_place_id=${plain.googlePlaceId}`
+          : (plain.latitude && plain.longitude ? `https://www.google.com/maps?q=${plain.latitude},${plain.longitude}` : null);
+      
+      plain.googleMapsUrl = googleMapsUrl;
+      plain.city = plain.cityDetail ? plain.cityDetail.name : plain.city;
+
+      return { status: true, message: "Location found", data: plain };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
@@ -658,6 +689,22 @@ class MasterLocationService {
 
         return {
           ...plain,
+          address: undefined,
+          province: undefined,
+          district: undefined,
+          subdistrict: undefined,
+          postalCode: undefined,
+          cityId: undefined,
+          districtId: undefined,
+          latitude: undefined,
+          longitude: undefined,
+          phone: undefined,
+          email: undefined,
+          bankName: undefined,
+          bankAccountName: undefined,
+          bankAccountNumber: undefined,
+          xenditAccountId: undefined,
+          googlePlaceId: undefined,
           isPremium: isPremiumValid,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0

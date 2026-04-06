@@ -248,10 +248,27 @@ module.exports = {
           }
         }
 
-        if (plain.locations && plain.locations.length > 0) {
-          return plain.locations.map(loc => {
+        const lightPlain = {
+          ...plain,
+          description: undefined,
+          function: undefined,
+          compotition: undefined,
+          dose: undefined,
+          rulesOfUse: undefined,
+          attention: undefined,
+          lengthCm: undefined,
+          widthCm: undefined,
+          heightCm: undefined,
+          categories: undefined,
+          consultationCategories: undefined,
+          groupProduct: undefined,
+        };
+
+        if (lightPlain.locations && lightPlain.locations.length > 0) {
+          return lightPlain.locations.map(loc => {
             return {
-              ...plain,
+              ...lightPlain,
+              biteshipId: loc.biteshipAreaId || null,
               isFlashSale,
               flashSale: flashSaleInfo,
               isFavorite: customerId
@@ -265,7 +282,8 @@ module.exports = {
         }
 
         return [{
-          ...plain,
+          ...lightPlain,
+          biteshipId: null,
           isFlashSale,
           flashSale: flashSaleInfo,
           isFavorite: customerId
@@ -343,6 +361,7 @@ module.exports = {
             "longitude",
             "cityId",
             "districtId",
+            "biteshipAreaId",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
           include: [
@@ -418,6 +437,7 @@ module.exports = {
         message: "Success",
         data: {
           ...mapped,
+          biteshipId: mapped.location?.biteshipAreaId || null,
           isFlashSale,
           flashSale: flashSaleInfo,
           isFavorite: plain.favorites?.length > 0 || false,
@@ -684,6 +704,16 @@ module.exports = {
             attributes: ["isActive"],
             ...(isCustomer == 1 || isCustomer == "1" ? { where: { isActive: true } } : {}),
           },
+          attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"],
+          include: [
+            {
+              model: masterLocationImage,
+              as: "images",
+              attributes: ["id", "imageUrl"],
+              limit: 1,
+              separate: true,
+            },
+          ],
           required: true,
         },
       ];
@@ -748,9 +778,26 @@ module.exports = {
           }
         }
 
-        const mapped = mapProductWithBackwardCompat(plain, customerId);
+        const lightPlain = {
+          ...plain,
+          description: undefined,
+          function: undefined,
+          compotition: undefined,
+          dose: undefined,
+          rulesOfUse: undefined,
+          attention: undefined,
+          lengthCm: undefined,
+          widthCm: undefined,
+          heightCm: undefined,
+          categories: undefined,
+          consultationCategories: undefined,
+          groupProduct: undefined,
+        };
+
+        const mapped = mapProductWithBackwardCompat(lightPlain, customerId);
         return {
           ...mapped,
+          biteshipId: mapped.location?.biteshipAreaId || null,
           isFlashSale,
           flashSale: flashSaleInfo,
           isFavorite: customerId

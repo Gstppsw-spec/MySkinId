@@ -14,6 +14,12 @@ router.get(
   allowRoles("OUTLET_ADMIN"),
   masterLocationController.getMyPremiumStatus,
 );
+router.delete(
+  "/premium/:id",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterLocationController.removePremium,
+);
 router.get("/company/:companyId", masterLocationController.getByCompanyId);
 
 router.get("/user", verifyToken, masterLocationController.getLocationByUser);

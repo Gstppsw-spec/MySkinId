@@ -272,10 +272,17 @@ module.exports = {
           }
         }
 
-        if (plain.locations && plain.locations.length > 0) {
-          return plain.locations.map(loc => {
+        const lightPlain = {
+          ...plain,
+          description: undefined,
+          items: undefined,
+        };
+
+        if (lightPlain.locations && lightPlain.locations.length > 0) {
+          return lightPlain.locations.map(loc => {
             return {
-              ...plain,
+              ...lightPlain,
+              biteshipId: loc.biteshipAreaId || null,
               isFlashSale,
               flashSale: flashSaleInfo,
               isFavorite: customerId
@@ -289,7 +296,8 @@ module.exports = {
         }
 
         return [{
-          ...plain,
+          ...lightPlain,
+          biteshipId: null,
           isFlashSale,
           flashSale: flashSaleInfo,
           isFavorite: customerId
@@ -365,6 +373,16 @@ module.exports = {
         },
         { transaction },
       );
+
+      // Create items if provided
+      if (data.items && Array.isArray(data.items)) {
+        const itemRecords = data.items.map(it => ({
+          serviceId: it.serviceId,
+          qty: it.qty || 1,
+          packageId: newPackage.id
+        }));
+        await masterPackageItems.bulkCreate(itemRecords, { transaction });
+      }
 
       await transaction.commit();
 
@@ -576,12 +594,12 @@ module.exports = {
             ...(isCustomer == 1 || isCustomer == "1" ? { where: { isActive: true } } : {}),
           },
           required: true,
-          attributes: ["id"],
+          attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"],
           include: [
             {
               model: masterLocationImage,
               as: "images",
-              attributes: ["imageUrl"],
+              attributes: ["imageUrl", "id"],
               limit: 1,
               separate: true,
             },
@@ -661,8 +679,17 @@ module.exports = {
           }
         }
 
-        return {
+        const lightPlain = {
           ...plain,
+          description: undefined,
+          items: undefined,
+        };
+
+        const mapped = mapPackageWithBackwardCompat(lightPlain);
+
+        return {
+          ...mapped,
+          biteshipId: mapped.location?.biteshipAreaId || null,
           image: plain.locations?.[0]?.images?.[0]?.imageUrl || null,
           isFlashSale,
           flashSale: flashSaleInfo,
@@ -670,7 +697,6 @@ module.exports = {
             ? plain.favorites && plain.favorites.length > 0
             : false,
           favorites: undefined,
-          locationId: plain.locations?.[0]?.id || null, // backward compat
         };
       });
 
