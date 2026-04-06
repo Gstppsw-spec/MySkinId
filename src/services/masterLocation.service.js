@@ -5,6 +5,7 @@ const {
   masterUser,
   masterLocationImage,
   relationshipUserLocation,
+  relationshipUserCompany,
   LocationVerificationRequest,
   customerFavorites,
   masterProvince,
@@ -25,6 +26,26 @@ const { sleep, retryRequest } = require("../helpers/request.helper");
 class MasterLocationService {
   async create(data, files, userId) {
     try {
+      // Resolve companyId if missing (for COMPANY_ADMIN)
+      if (!data.companyId && userId) {
+        const userComp = await relationshipUserCompany.findOne({
+          where: { userId },
+          attributes: ["companyId"],
+        });
+        if (userComp) {
+          data.companyId = userComp.companyId;
+        }
+      }
+
+      // Final validation to prevent database crash
+      if (!data.companyId) {
+        return {
+          status: false,
+          message: "companyId is required",
+          data: null,
+        };
+      }
+
       const lastLocation = await masterLocation.findOne({
         order: [["createdAt", "DESC"]],
         attributes: ["code"],

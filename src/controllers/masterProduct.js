@@ -162,4 +162,16 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  async toggleLocationActive(req, res) {
+    try {
+      const { productId, locationId } = req.params;
+      const result = await productService.toggleLocationActive(productId, locationId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

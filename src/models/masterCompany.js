@@ -29,6 +29,26 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "companyId",
         as: "verificationRequests",
       });
+
+      this.belongsTo(models.masterProvince, {
+        foreignKey: "provinceId",
+        as: "provinceDetails",
+      });
+
+      this.belongsTo(models.masterCity, {
+        foreignKey: "cityId",
+        as: "cityDetails",
+      });
+
+      this.belongsTo(models.masterDistrict, {
+        foreignKey: "districtId",
+        as: "districtDetails",
+      });
+
+      this.belongsTo(models.masterSubDistrict, {
+        foreignKey: "subDistrictId",
+        as: "subDistrictDetails",
+      });
     }
   }
 
@@ -49,6 +69,11 @@ module.exports = (sequelize, DataTypes) => {
       district: DataTypes.STRING(100),
       subDistrict: DataTypes.STRING(100),
       postalCode: DataTypes.STRING(10),
+
+      provinceId: DataTypes.UUID,
+      cityId: DataTypes.UUID,
+      districtId: DataTypes.UUID,
+      subDistrictId: DataTypes.UUID,
 
       phone: DataTypes.STRING(20),
       fax: DataTypes.STRING(20),

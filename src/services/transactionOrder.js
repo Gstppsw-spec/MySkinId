@@ -22,6 +22,8 @@ const {
     flashSale,
     flashSaleItem,
     Rating,
+    relationshipProductLocation,
+    relationshipPackageLocation,
     sequelize,
 } = require("../models");
 const { nanoid } = require("nanoid");
@@ -306,7 +308,16 @@ module.exports = {
                     throw new Error("Item not found");
                 }
 
-                const locationId = actualItem.locationId;
+                // Resolve locationId: get first active location from pivot table
+                const pivotModel = type === "product" ? relationshipProductLocation : relationshipPackageLocation;
+                const fkField = type === "product" ? "productId" : "packageId";
+                const firstPivot = await pivotModel.findOne({
+                    where: { [fkField]: actualItem.id, isActive: true },
+                });
+                if (!firstPivot) {
+                    throw new Error(`${actualItem.name} tidak tersedia di lokasi manapun`);
+                }
+                const locationId = firstPivot.locationId;
                 if (!itemsByLocation[locationId]) {
                     itemsByLocation[locationId] = [];
                 }
@@ -682,7 +693,19 @@ module.exports = {
                     throw new Error("Item not found");
                 }
 
-                const locationId = actualItem.locationId;
+                // locationId from client request, with pivot validation
+                const locationId = item.locationId;
+                if (!locationId) {
+                    throw new Error("locationId is required for each item in direct checkout");
+                }
+                const pivotModel = item.type === "product" ? relationshipProductLocation : relationshipPackageLocation;
+                const fkField = item.type === "product" ? "productId" : "packageId";
+                const pivotRow = await pivotModel.findOne({
+                    where: { [fkField]: actualItem.id, locationId, isActive: true },
+                });
+                if (!pivotRow) {
+                    throw new Error(`${actualItem.name} tidak tersedia di lokasi yang dipilih`);
+                }
                 if (!itemsByLocation[locationId]) {
                     itemsByLocation[locationId] = [];
                 }

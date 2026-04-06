@@ -4,9 +4,22 @@ const {
   masterLocation,
   masterLocationImage,
   customerFavorites,
+  relationshipServiceLocation,
 } = require("../models");
 
 const { Op, Sequelize } = require("sequelize");
+
+/**
+ * Helper: backward compat — add singular location/locationId from locations array
+ */
+function mapServiceWithBackwardCompat(plain) {
+  const firstLoc = plain.locations?.[0] || null;
+  return {
+    ...plain,
+    locationId: firstLoc?.id || null,
+    location: firstLoc,
+  };
+}
 
 module.exports = {
   async getAll(filters = {}, pagination = {}) {
@@ -43,13 +56,21 @@ module.exports = {
           ? Sequelize.literal(`
             6371 * acos(
               cos(radians(${userLat})) *
-              cos(radians(CAST(location.latitude AS FLOAT))) *
-              cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+              cos(radians(CAST(\`locations\`.latitude AS FLOAT))) *
+              cos(radians(CAST(\`locations\`.longitude AS FLOAT)) - radians(${userLng})) +
               sin(radians(${userLat})) *
-              sin(radians(CAST(location.latitude AS FLOAT)))
+              sin(radians(CAST(\`locations\`.latitude AS FLOAT)))
             )
           `)
           : null;
+
+      // Pivot through config
+      const throughConfig = {
+        attributes: ["isActive"],
+      };
+      if (isCustomer == 1 || isCustomer == "1") {
+        throughConfig.where = { isActive: true };
+      }
 
       const include = [
         {
@@ -62,7 +83,8 @@ module.exports = {
         },
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          through: throughConfig,
           attributes: [
             "id",
             "name",
@@ -153,15 +175,32 @@ module.exports = {
         };
       }
 
-      const result = services.map((prod) => {
+      const result = services.flatMap((prod) => {
         const plain = prod.get({ plain: true });
-        return {
+
+        if (plain.locations && plain.locations.length > 0) {
+          return plain.locations.map(loc => {
+            return {
+              ...plain,
+              isFavorite: customerId
+                ? plain.favorites && plain.favorites.length > 0
+                : false,
+              favorites: undefined,
+              locationId: loc.id,
+              location: loc
+            };
+          });
+        }
+
+        return [{
           ...plain,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
           favorites: undefined,
-        };
+          locationId: null,
+          location: null
+        }];
       });
       return {
         status: true,
@@ -181,10 +220,10 @@ module.exports = {
           ? Sequelize.literal(`
             6371 * acos(
               cos(radians(${userLat})) *
-              cos(radians(CAST(location.latitude AS FLOAT))) *
-              cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+              cos(radians(CAST(\`locations\`.latitude AS FLOAT))) *
+              cos(radians(CAST(\`locations\`.longitude AS FLOAT)) - radians(${userLng})) +
               sin(radians(${userLat})) *
-              sin(radians(CAST(location.latitude AS FLOAT)))
+              sin(radians(CAST(\`locations\`.latitude AS FLOAT)))
             )
           `)
           : null;
@@ -192,7 +231,8 @@ module.exports = {
       const include = [
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          through: { attributes: ["isActive"] },
           attributes: [
             "id",
             "name",
@@ -238,16 +278,17 @@ module.exports = {
       });
 
       if (!service) {
-        return { status: false, message: "Product not found", data: null };
+        return { status: false, message: "Service not found", data: null };
       }
 
       const plain = service.get({ plain: true });
+      const mapped = mapServiceWithBackwardCompat(plain);
 
       return {
         status: true,
         message: "Success",
         data: {
-          ...plain,
+          ...mapped,
           isFavorite: plain.favorites?.length > 0 || false,
           favorites: undefined,
         },
@@ -270,7 +311,7 @@ module.exports = {
         indicationOfUse,
         benefit,
         duration,
-        locationId,
+        locationIds,
         price,
         discountPercent = 0,
         isActive = true,
@@ -285,10 +326,10 @@ module.exports = {
         };
       }
 
-      if (!locationId) {
+      if (!locationIds || !Array.isArray(locationIds) || locationIds.length === 0) {
         return {
           status: false,
-          message: "Lokasi tidak boleh kosong",
+          message: "Lokasi tidak boleh kosong (kirim locationIds array)",
           data: null,
         };
       }
@@ -311,11 +352,13 @@ module.exports = {
         indicationOfUse,
         benefit,
         duration,
-        locationId,
         price: Number(price),
         discountPercent,
         isActive,
       });
+
+      // Many-to-many: assign locations
+      await newService.setLocations(locationIds);
 
       if (categoryIds && Array.isArray(categoryIds)) {
         await newService.setCategories(categoryIds);
@@ -347,7 +390,7 @@ module.exports = {
         indicationOfUse,
         benefit,
         duration,
-        locationId,
+        locationIds,
         price,
         discountPercent = 0,
         isActive = true,
@@ -358,18 +401,6 @@ module.exports = {
       const service = await masterService.findByPk(id);
       if (!service) {
         return { status: false, message: "Service not found", data: null };
-      }
-
-      // Validasi locationId
-      if (locationId) {
-        const location = await masterLocation.findByPk(locationId);
-        if (!location) {
-          return {
-            status: false,
-            message: "Invalid locationId. Location not found.",
-            data: null,
-          };
-        }
       }
 
       // Validasi name
@@ -392,11 +423,15 @@ module.exports = {
         indicationOfUse,
         benefit,
         duration,
-        locationId,
         price: np,
         discountPercent: dp,
         isActive,
       });
+
+      // Many-to-many: update locations
+      if (locationIds && Array.isArray(locationIds)) {
+        await service.setLocations(locationIds);
+      }
 
       if (categoryIds) {
         if (Array.isArray(categoryIds)) {
@@ -428,8 +463,6 @@ module.exports = {
         where.isActive = true;
       }
 
-      where.locationId = locationId;
-
       const service = await masterService.findAll({
         where,
         attributes: {
@@ -443,6 +476,16 @@ module.exports = {
             through: { attributes: [] },
             attributes: ["id", "name"],
           },
+          {
+            model: masterLocation,
+            as: "locations",
+            where: { id: locationId },
+            through: {
+              attributes: ["isActive"],
+              ...(isCustomer == 1 || isCustomer == "1" ? { where: { isActive: true } } : {}),
+            },
+            required: true,
+          },
         ],
       });
 
@@ -452,8 +495,9 @@ module.exports = {
 
       const result = service.map((prod) => {
         const plain = prod.get({ plain: true });
+        const mapped = mapServiceWithBackwardCompat(plain);
         return {
-          ...plain,
+          ...mapped,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
@@ -477,7 +521,8 @@ module.exports = {
         },
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          through: { attributes: ["isActive"] },
           attributes: ["id", "name", "latitude", "longitude"],
           include: [
             {
@@ -502,29 +547,72 @@ module.exports = {
         return {
           status: true,
           message: "Success",
-          data: service,
+          data: service.map((s) => {
+            const plain = s.get({ plain: true });
+            return mapServiceWithBackwardCompat(plain);
+          }),
         };
       }
 
+      // Filter: services linked to user's locations
+      const locationInclude = include.map((inc) => {
+        if (inc.as === "locations") {
+          return {
+            ...inc,
+            where: { id: { [Op.in]: locationIds } },
+            required: true,
+          };
+        }
+        return inc;
+      });
+
       const service = await masterService.findAll({
-        include,
+        include: locationInclude,
         attributes: {
           exclude: ["createdAt", "updatedAt"],
-        },
-        where: {
-          locationId: {
-            [Op.in]: locationIds,
-          },
         },
       });
 
       return {
         status: true,
         message: "Success",
-        data: service,
+        data: service.map((s) => {
+          const plain = s.get({ plain: true });
+          return mapServiceWithBackwardCompat(plain);
+        }),
       };
     } catch (error) {
       return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Toggle isActive for a specific service-location pivot entry
+   */
+  async toggleLocationActive(serviceId, locationId) {
+    try {
+      const pivot = await relationshipServiceLocation.findOne({
+        where: { serviceId, locationId },
+      });
+
+      if (!pivot) {
+        return {
+          status: false,
+          message: "Service tidak terdaftar di lokasi ini",
+          data: null,
+        };
+      }
+
+      pivot.isActive = !pivot.isActive;
+      await pivot.save();
+
+      return {
+        status: true,
+        message: `Service di lokasi ini sekarang ${pivot.isActive ? "aktif" : "non-aktif"}`,
+        data: pivot,
+      };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
     }
   },
 };

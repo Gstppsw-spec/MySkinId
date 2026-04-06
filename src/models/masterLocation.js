@@ -154,6 +154,28 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "locationId",
       as: "googleReviews",
     });
+
+    // Many-to-many: location ↔ products/services/packages
+    masterLocation.belongsToMany(models.masterProduct, {
+      through: models.relationshipProductLocation,
+      foreignKey: "locationId",
+      otherKey: "productId",
+      as: "products",
+    });
+
+    masterLocation.belongsToMany(models.masterService, {
+      through: models.relationshipServiceLocation,
+      foreignKey: "locationId",
+      otherKey: "serviceId",
+      as: "services",
+    });
+
+    masterLocation.belongsToMany(models.masterPackage, {
+      through: models.relationshipPackageLocation,
+      foreignKey: "locationId",
+      otherKey: "packageId",
+      as: "packages",
+    });
   };
 
   return masterLocation;

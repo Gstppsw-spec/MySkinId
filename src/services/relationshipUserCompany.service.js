@@ -2,6 +2,10 @@ const {
   relationshipUserCompany,
   masterCompany,
   CompanyVerificationRequest,
+  masterProvince,
+  masterCity,
+  masterDistrict,
+  masterSubDistrict,
 } = require("../models");
 
 class RelationshipUserCompanyService {
@@ -52,6 +56,10 @@ class RelationshipUserCompanyService {
   async updateCompany(id, payload) {
     const company = await masterCompany.findByPk(id);
     if (!company) throw new Error("Company tidak ditemukan");
+
+    // Resolve region IDs to names if provided in the payload properties (kept as province, city, etc.)
+    await this._resolveRegionData(payload);
+
     await company.update(payload);
     return company;
   }
@@ -61,6 +69,10 @@ class RelationshipUserCompanyService {
     if (!payload.code && payload.name) {
       payload.code = payload.name.toUpperCase().replace(/\s+/g, "_");
     }
+
+    // Resolve region IDs to names
+    await this._resolveRegionData(payload);
+
     return await masterCompany.create(payload);
   }
 
@@ -69,6 +81,9 @@ class RelationshipUserCompanyService {
     if (!payload.code && payload.name) {
       payload.code = payload.name.toUpperCase().replace(/\s+/g, "_");
     }
+
+    // Resolve region IDs to names
+    await this._resolveRegionData(payload);
 
     const [company, created] = await masterCompany.findOrCreate({
       where: { name: payload.name },
@@ -108,6 +123,49 @@ class RelationshipUserCompanyService {
     }
 
     return await company.destroy();
+  }
+
+  /**
+   * Helper to resolve IDs in payload to names and store both.
+   * Requirement: payload properties like 'province', 'city' contain UUIDs.
+   */
+  async _resolveRegionData(payload) {
+    // 1. Province
+    if (payload.province && this._isUUID(payload.province)) {
+      payload.provinceId = payload.province;
+      const data = await masterProvince.findByPk(payload.provinceId);
+      if (data) payload.province = data.name;
+    }
+
+    // 2. City
+    if (payload.city && this._isUUID(payload.city)) {
+      payload.cityId = payload.city;
+      const data = await masterCity.findByPk(payload.cityId);
+      if (data) payload.city = data.name;
+    }
+
+    // 3. District
+    if (payload.district && this._isUUID(payload.district)) {
+      payload.districtId = payload.district;
+      const data = await masterDistrict.findByPk(payload.districtId);
+      if (data) payload.district = data.name;
+    }
+
+    // 4. SubDistrict & PostalCode
+    if (payload.subDistrict && this._isUUID(payload.subDistrict)) {
+      payload.subDistrictId = payload.subDistrict;
+      const data = await masterSubDistrict.findByPk(payload.subDistrictId);
+      if (data) {
+        payload.subDistrict = data.name;
+        // Auto-fill postalCode from master data
+        if (data.zipCode) payload.postalCode = data.zipCode;
+      }
+    }
+  }
+
+  _isUUID(str) {
+    const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return typeof str === "string" && regex.test(str);
   }
 }
 

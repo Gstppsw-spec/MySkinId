@@ -37,11 +37,12 @@ module.exports = (sequelize, DataTypes) => {
         as: "favorites",
       });
 
-      // 🔹 lokasi pengiriman / gudang
-      masterProduct.belongsTo(models.masterLocation, {
-        foreignKey: "locationId",
-        as: "location",
-        constraints: false, // FK di DB boleh menyusul
+      // 🔹 many-to-many: product ↔ locations
+      masterProduct.belongsToMany(models.masterLocation, {
+        through: models.relationshipProductLocation,
+        foreignKey: "productId",
+        otherKey: "locationId",
+        as: "locations",
       });
 
       masterProduct.belongsTo(models.masterUser, {
@@ -107,10 +108,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
 
-      locationId: {
-        type: DataTypes.UUID,
-        allowNull: true,
-      },
+
 
       function: { type: DataTypes.TEXT, allowNull: true },
       compotition: { type: DataTypes.TEXT, allowNull: true },

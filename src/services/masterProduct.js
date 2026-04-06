@@ -9,12 +9,26 @@ const {
   masterLocation,
   masterLocationImage,
   relationshipUserLocation,
+  relationshipProductLocation,
   flashSale,
   flashSaleItem,
 } = require("../models");
 const fs = require("fs");
 const flashSaleService = require("./flashSale.service");
 const { Op, Sequelize } = require("sequelize");
+
+/**
+ * Helper: map product rows to add backward-compat locationId + location fields
+ */
+function mapProductWithBackwardCompat(plain, customerId) {
+  // backward compat: pick first active location
+  const firstLoc = plain.locations?.[0] || null;
+  return {
+    ...plain,
+    locationId: firstLoc?.id || null,
+    location: firstLoc,
+  };
+}
 
 module.exports = {
   async getAll(filters = {}, pagination = {}) {
@@ -53,18 +67,36 @@ module.exports = {
       `);
       }
 
+      // Distance literal uses the first joined location
       const distanceLiteral =
         userLat && userLng
           ? Sequelize.literal(`
             6371 * acos(
               cos(radians(${userLat})) *
-              cos(radians(CAST(location.latitude AS FLOAT))) *
-              cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+              cos(radians(CAST(\`locations\`.latitude AS FLOAT))) *
+              cos(radians(CAST(\`locations\`.longitude AS FLOAT)) - radians(${userLng})) +
               sin(radians(${userLat})) *
-              sin(radians(CAST(location.latitude AS FLOAT)))
+              sin(radians(CAST(\`locations\`.latitude AS FLOAT)))
             )
           `)
           : null;
+
+      // Build location where for cityId / distance filter
+      const locationWhere = {};
+      if (cityId) locationWhere.cityId = cityId;
+      if (distanceLiteral && maxDistance) {
+        locationWhere[Op.and] = Sequelize.where(distanceLiteral, {
+          [Op.lte]: maxDistance,
+        });
+      }
+
+      // Pivot through config
+      const throughConfig = {
+        attributes: ["isActive"],
+      };
+      if (isCustomer == 1 || isCustomer == "1") {
+        throughConfig.where = { isActive: true };
+      }
 
       const include = [
         {
@@ -97,19 +129,9 @@ module.exports = {
         },
         {
           model: masterLocation,
-          as: "location",
-          where: (cityId || (userLat && userLng && maxDistance))
-            ? {
-              ...(cityId ? { cityId } : {}),
-              ...(distanceLiteral && maxDistance
-                ? {
-                  [Op.and]: Sequelize.where(distanceLiteral, {
-                    [Op.lte]: maxDistance,
-                  }),
-                }
-                : {}),
-            }
-            : undefined,
+          as: "locations",
+          through: throughConfig,
+          where: Object.keys(locationWhere).length > 0 ? locationWhere : undefined,
           attributes: [
             "id",
             "name",
@@ -203,7 +225,7 @@ module.exports = {
         ],
       });
 
-      const result = products.map((prod) => {
+      const result = products.flatMap((prod) => {
         const plain = prod.get({ plain: true });
 
         let flashSaleInfo = null;
@@ -226,7 +248,23 @@ module.exports = {
           }
         }
 
-        return {
+        if (plain.locations && plain.locations.length > 0) {
+          return plain.locations.map(loc => {
+            return {
+              ...plain,
+              isFlashSale,
+              flashSale: flashSaleInfo,
+              isFavorite: customerId
+                ? plain.favorites && plain.favorites.length > 0
+                : false,
+              favorites: undefined,
+              locationId: loc.id,
+              location: loc
+            };
+          });
+        }
+
+        return [{
           ...plain,
           isFlashSale,
           flashSale: flashSaleInfo,
@@ -234,7 +272,9 @@ module.exports = {
             ? plain.favorites && plain.favorites.length > 0
             : false,
           favorites: undefined,
-        };
+          locationId: null,
+          location: null
+        }];
       });
 
       return {
@@ -259,10 +299,10 @@ module.exports = {
           ? Sequelize.literal(`
             6371 * acos(
               cos(radians(${userLat})) *
-              cos(radians(CAST(location.latitude AS FLOAT))) *
-              cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+              cos(radians(CAST(\`locations\`.latitude AS FLOAT))) *
+              cos(radians(CAST(\`locations\`.longitude AS FLOAT)) - radians(${userLng})) +
               sin(radians(${userLat})) *
-              sin(radians(CAST(location.latitude AS FLOAT)))
+              sin(radians(CAST(\`locations\`.latitude AS FLOAT)))
             )
           `)
           : null;
@@ -293,7 +333,8 @@ module.exports = {
         },
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          through: { attributes: ["isActive"] },
           attributes: [
             "id",
             "name",
@@ -371,11 +412,12 @@ module.exports = {
         };
       }
 
+      const mapped = mapProductWithBackwardCompat(plain, customerId);
       return {
         status: true,
         message: "Success",
         data: {
-          ...plain,
+          ...mapped,
           isFlashSale,
           flashSale: flashSaleInfo,
           isFavorite: plain.favorites?.length > 0 || false,
@@ -431,13 +473,17 @@ module.exports = {
         rulesOfUse: data.rulesOfUse || null,
         attention: data.attention || null,
         packaging: data.packaging || null,
-        locationId: data.locationId || null,
         weightGram: data.weightGram || null,
         lengthCm: data.lengthCm || null,
         widthCm: data.widthCm || null,
         heightCm: data.heightCm || null,
         createdBy: userId,
       });
+
+      // Many-to-many: assign locations
+      if (data.locationIds && Array.isArray(data.locationIds)) {
+        await newProduct.setLocations(data.locationIds);
+      }
 
       if (files && files.length > 0) {
         for (const file of files) {
@@ -516,9 +562,6 @@ module.exports = {
       product.packaging =
         data.packaging !== undefined ? data.packaging : product.packaging;
 
-      product.locationId =
-        data.locationId !== undefined ? data.locationId : product.locationId;
-
       product.weightGram =
         data.weightGram !== undefined
           ? Number(data.weightGram)
@@ -537,6 +580,11 @@ module.exports = {
         data.createdBy !== undefined ? data.createdBy : product.createdBy;
 
       await product.save();
+
+      // Many-to-many: update locations
+      if (data.locationIds && Array.isArray(data.locationIds)) {
+        await product.setLocations(data.locationIds);
+      }
 
       if (data.categoryIds && Array.isArray(data.categoryIds)) {
         await product.setCategories(data.categoryIds);
@@ -604,8 +652,6 @@ module.exports = {
         where.isActive = true;
       }
 
-      where.locationId = locationId;
-
       const include = [
         {
           model: masterProductCategory,
@@ -629,6 +675,16 @@ module.exports = {
           model: masterProductImage,
           as: "images",
           attributes: ["id", "imageUrl"],
+        },
+        {
+          model: masterLocation,
+          as: "locations",
+          where: { id: locationId },
+          through: {
+            attributes: ["isActive"],
+            ...(isCustomer == 1 || isCustomer == "1" ? { where: { isActive: true } } : {}),
+          },
+          required: true,
         },
       ];
 
@@ -692,8 +748,9 @@ module.exports = {
           }
         }
 
+        const mapped = mapProductWithBackwardCompat(plain, customerId);
         return {
-          ...plain,
+          ...mapped,
           isFlashSale,
           flashSale: flashSaleInfo,
           isFavorite: customerId
@@ -751,7 +808,8 @@ module.exports = {
         },
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          through: { attributes: ["isActive"] },
           attributes: ["id", "name", "cityId", "districtId"],
         },
       ];
@@ -767,26 +825,39 @@ module.exports = {
         return {
           status: true,
           message: "Success",
-          data: product,
+          data: product.map((p) => {
+            const plain = p.get({ plain: true });
+            return mapProductWithBackwardCompat(plain);
+          }),
         };
       }
 
+      // Filter: products linked to any of the user's locationIds
+      const locationInclude = include.map((inc) => {
+        if (inc.as === "locations") {
+          return {
+            ...inc,
+            where: { id: { [Op.in]: locationIds } },
+            required: true,
+          };
+        }
+        return inc;
+      });
+
       const product = await masterProduct.findAll({
-        include,
+        include: locationInclude,
         attributes: {
           exclude: ["createdAt", "updatedAt"],
-        },
-        where: {
-          locationId: {
-            [Op.in]: locationIds,
-          },
         },
       });
 
       return {
         status: true,
         message: "Success",
-        data: product,
+        data: product.map((p) => {
+          const plain = p.get({ plain: true });
+          return mapProductWithBackwardCompat(plain);
+        }),
       };
     } catch (error) {
       return { status: false, message: error.message };
@@ -821,7 +892,8 @@ module.exports = {
         },
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          through: { attributes: ["isActive"] },
           attributes: ["id", "name", "cityId", "districtId"],
         },
       ];
@@ -838,10 +910,43 @@ module.exports = {
       return {
         status: true,
         message: "Success",
-        data: products,
+        data: products.map((p) => {
+          const plain = p.get({ plain: true });
+          return mapProductWithBackwardCompat(plain);
+        }),
       };
     } catch (error) {
       return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Toggle isActive for a specific product-location pivot entry
+   */
+  async toggleLocationActive(productId, locationId) {
+    try {
+      const pivot = await relationshipProductLocation.findOne({
+        where: { productId, locationId },
+      });
+
+      if (!pivot) {
+        return {
+          status: false,
+          message: "Product tidak terdaftar di lokasi ini",
+          data: null,
+        };
+      }
+
+      pivot.isActive = !pivot.isActive;
+      await pivot.save();
+
+      return {
+        status: true,
+        message: `Product di lokasi ini sekarang ${pivot.isActive ? "aktif" : "non-aktif"}`,
+        data: pivot,
+      };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
     }
   },
 };

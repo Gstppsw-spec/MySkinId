@@ -50,10 +50,7 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
       },
-      locationId: {
-        type: DataTypes.UUID,
-        allowNull: false,
-      },
+
       price: {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: false,
@@ -103,11 +100,11 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   masterService.associate = (models) => {
-    masterService.belongsTo(models.masterLocation, {
-      foreignKey: "locationId",
-      as: "location",
-      onDelete: "CASCADE",
-      onUpdate: "CASCADE",
+    masterService.belongsToMany(models.masterLocation, {
+      through: models.relationshipServiceLocation,
+      foreignKey: "serviceId",
+      otherKey: "locationId",
+      as: "locations",
     });
 
     masterService.belongsToMany(models.masterSubCategoryService, {

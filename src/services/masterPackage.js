@@ -1,4 +1,4 @@
-﻿const {
+const {
   masterPackage,
   customerFavorites,
   masterLocation,
@@ -8,6 +8,8 @@
   masterSubCategoryService,
   relationshipUserLocation,
   masterConsultationCategory,
+  relationshipPackageLocation,
+  relationshipServiceLocation,
   flashSale,
   flashSaleItem,
 } = require("../models");
@@ -15,6 +17,18 @@ const sequelize = require("../models").sequelize;
 const flashSaleService = require("./flashSale.service");
 
 const { Op, Sequelize } = require("sequelize");
+
+/**
+ * Helper: backward compat — add singular location/locationId from locations array
+ */
+function mapPackageWithBackwardCompat(plain) {
+  const firstLoc = plain.locations?.[0] || null;
+  return {
+    ...plain,
+    locationId: firstLoc?.id || null,
+    location: firstLoc,
+  };
+}
 
 module.exports = {
   async getAllPackage(filters = {}, pagination = {}) {
@@ -80,30 +94,37 @@ module.exports = {
           ? Sequelize.literal(`
             6371 * acos(
               cos(radians(${userLat})) *
-              cos(radians(CAST(location.latitude AS FLOAT))) *
-              cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+              cos(radians(CAST(\`locations\`.latitude AS FLOAT))) *
+              cos(radians(CAST(\`locations\`.longitude AS FLOAT)) - radians(${userLng})) +
               sin(radians(${userLat})) *
-              sin(radians(CAST(location.latitude AS FLOAT)))
+              sin(radians(CAST(\`locations\`.latitude AS FLOAT)))
             )
           `)
           : null;
 
+      // Build location where
+      const locationWhere = {};
+      if (cityId) locationWhere.cityId = cityId;
+      if (distanceLiteral && maxDistance) {
+        locationWhere[Op.and] = Sequelize.where(distanceLiteral, {
+          [Op.lte]: maxDistance,
+        });
+      }
+
+      // Pivot through config
+      const throughConfig = {
+        attributes: ["isActive"],
+      };
+      if (isCustomer == 1 || isCustomer == "1") {
+        throughConfig.where = { isActive: true };
+      }
+
       const include = [
         {
           model: masterLocation,
-          as: "location",
-          where: (cityId || (userLat && userLng && maxDistance))
-            ? {
-              ...(cityId ? { cityId } : {}),
-              ...(distanceLiteral && maxDistance
-                ? {
-                  [Op.and]: Sequelize.where(distanceLiteral, {
-                    [Op.lte]: maxDistance,
-                  }),
-                }
-                : {}),
-            }
-            : undefined,
+          as: "locations",
+          through: throughConfig,
+          where: Object.keys(locationWhere).length > 0 ? locationWhere : undefined,
           include: [
             {
               model: masterLocationImage,
@@ -228,7 +249,7 @@ module.exports = {
         ],
       });
 
-      const result = packages.map((prod) => {
+      const result = packages.flatMap((prod) => {
         const plain = prod.get({ plain: true });
 
         let flashSaleInfo = null;
@@ -251,7 +272,23 @@ module.exports = {
           }
         }
 
-        return {
+        if (plain.locations && plain.locations.length > 0) {
+          return plain.locations.map(loc => {
+            return {
+              ...plain,
+              isFlashSale,
+              flashSale: flashSaleInfo,
+              isFavorite: customerId
+                ? plain.favorites && plain.favorites.length > 0
+                : false,
+              favorites: undefined,
+              locationId: loc.id,
+              location: loc
+            };
+          });
+        }
+
+        return [{
           ...plain,
           isFlashSale,
           flashSale: flashSaleInfo,
@@ -259,7 +296,9 @@ module.exports = {
             ? plain.favorites && plain.favorites.length > 0
             : false,
           favorites: undefined,
-        };
+          locationId: null,
+          location: null
+        }];
       });
 
       return {
@@ -322,24 +361,18 @@ module.exports = {
           price: data.price ?? 0,
           discountPercent: data.discountPercent ?? 0,
           isActive: data.isActive ?? true,
-          locationId: data.locationId,
           createdBy: userId,
         },
         { transaction },
       );
 
-      // if (Array.isArray(data.items) && data.items.length > 0) {
-      //   const itemsPayload = data.items.map((item) => ({
-      //     packageId: newPackage.id,
-      //     serviceId: item.serviceId,
-      //     qty: item.qty ?? 1,
-      //   }));
-
-      //   await masterPackageItems.bulkCreate(itemsPayload, {
-      //     transaction,
-      //   });
-      // }
       await transaction.commit();
+
+      // Many-to-many: assign locations (outside transaction since setLocations uses its own)
+      if (data.locationIds && Array.isArray(data.locationIds)) {
+        await newPackage.setLocations(data.locationIds);
+      }
+
       return {
         status: true,
         message: "Package & items created successfully",
@@ -365,34 +398,6 @@ module.exports = {
         };
       }
 
-      // if (!Array.isArray(data.items) || data.items.length === 0) {
-      //   await transaction.rollback();
-      //   return {
-      //     status: false,
-      //     message: "Package must have at least one item",
-      //     data: null,
-      //   };
-      // }
-
-      // for (const item of data.items) {
-      //   if (!item.serviceId) {
-      //     await transaction.rollback();
-      //     return {
-      //       status: false,
-      //       message: "Each item must have serviceId",
-      //       data: null,
-      //     };
-      //   }
-      //   if (item.qty !== undefined && item.qty < 1) {
-      //     await transaction.rollback();
-      //     return {
-      //       status: false,
-      //       message: "Item qty must be at least 1",
-      //       data: null,
-      //     };
-      //   }
-      // }
-
       await pkg.update(
         {
           name: data.name ?? pkg.name,
@@ -401,27 +406,16 @@ module.exports = {
           discountPercent: data.discountPercent ?? pkg.discountPercent,
           isActive: data.isActive ?? pkg.isActive,
           createdBy: data.createdBy ?? pkg.createdBy,
-          // locationId: data.locationId ?? pkg.locationId,
         },
         { transaction },
       );
 
-      // await masterPackageItems.destroy({
-      //   where: { packageId: id },
-      //   transaction,
-      // });
-
-      // const itemsPayload = data.items.map((item) => ({
-      //   packageId: id,
-      //   serviceId: item.serviceId,
-      //   qty: item.qty ?? 1,
-      // }));
-
-      // await masterPackageItems.bulkCreate(itemsPayload, {
-      //   transaction,
-      // });
-
       await transaction.commit();
+
+      // Many-to-many: update locations
+      if (data.locationIds && Array.isArray(data.locationIds)) {
+        await pkg.setLocations(data.locationIds);
+      }
 
       return {
         status: true,
@@ -445,10 +439,10 @@ module.exports = {
           ? Sequelize.literal(`
             6371 * acos(
               cos(radians(${userLat})) *
-              cos(radians(CAST(location.latitude AS FLOAT))) *
-              cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+              cos(radians(CAST(\`locations\`.latitude AS FLOAT))) *
+              cos(radians(CAST(\`locations\`.longitude AS FLOAT)) - radians(${userLng})) +
               sin(radians(${userLat})) *
-              sin(radians(CAST(location.latitude AS FLOAT)))
+              sin(radians(CAST(\`locations\`.latitude AS FLOAT)))
             )
           `)
           : null;
@@ -456,7 +450,8 @@ module.exports = {
       const include = [
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          through: { attributes: ["isActive"] },
           include: [
             {
               model: masterLocationImage,
@@ -476,13 +471,6 @@ module.exports = {
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
           required: !!(userLat && userLng),
-          ...(distanceLiteral && maxDistance
-            ? {
-              where: Sequelize.where(distanceLiteral, {
-                [Op.lte]: maxDistance,
-              }),
-            }
-            : {}),
         },
         {
           model: masterPackageItems,
@@ -511,19 +499,19 @@ module.exports = {
         });
       }
 
-      const package = await masterPackage.findByPk(id, {
+      const pkg = await masterPackage.findByPk(id, {
         include,
       });
 
-      if (!package) {
-        return { status: false, message: "Product not found", data: null };
+      if (!pkg) {
+        return { status: false, message: "Package not found", data: null };
       }
 
-      const plain = package.get({ plain: true });
+      const plain = pkg.get({ plain: true });
 
       // Flash Sale Integration
-      const flashSaleService = require("./flashSale.service");
-      await flashSaleService.syncStatuses();
+      const flashSaleServiceLocal = require("./flashSale.service");
+      await flashSaleServiceLocal.syncStatuses();
       const activeFlashSales = await flashSale.findAll({
         where: { status: "ACTIVE" },
         include: [
@@ -553,11 +541,12 @@ module.exports = {
         };
       }
 
+      const mapped = mapPackageWithBackwardCompat(plain);
       return {
         status: true,
         message: "Success",
         data: {
-          ...plain,
+          ...mapped,
           isFlashSale,
           flashSale: flashSaleInfo,
           isFavorite: plain.favorites?.length > 0 || false,
@@ -577,12 +566,16 @@ module.exports = {
         where.isActive = true;
       }
 
-      where.locationId = locationId;
-
       const include = [
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          where: { id: locationId },
+          through: {
+            attributes: ["isActive"],
+            ...(isCustomer == 1 || isCustomer == "1" ? { where: { isActive: true } } : {}),
+          },
+          required: true,
           attributes: ["id"],
           include: [
             {
@@ -630,7 +623,7 @@ module.exports = {
       });
 
       if (!packages) {
-        return { status: false, message: "Product not found", data: null };
+        return { status: false, message: "Package not found", data: null };
       }
 
       await flashSaleService.syncStatuses();
@@ -670,14 +663,14 @@ module.exports = {
 
         return {
           ...plain,
-          image: plain.location?.images?.[0]?.imageUrl || null,
+          image: plain.locations?.[0]?.images?.[0]?.imageUrl || null,
           isFlashSale,
           flashSale: flashSaleInfo,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
           favorites: undefined,
-          location: undefined,
+          locationId: plain.locations?.[0]?.id || null, // backward compat
         };
       });
 
@@ -699,12 +692,12 @@ module.exports = {
         return { status: false, message: "Data tidak lengkap", data: null };
       }
 
-      const package = await masterPackage.findOne({
+      const pkg = await masterPackage.findOne({
         where: { id: data.packageId },
         transaction,
       });
 
-      if (!package) {
+      if (!pkg) {
         await transaction.rollback();
         return { status: false, message: "Package tidak ditemukan", data: null };
       }
@@ -719,9 +712,31 @@ module.exports = {
         return { status: false, message: "Service tidak ditemukan", data: null };
       }
 
-      if (package.locationId !== service.locationId) {
+      // Validate: package and service must share at least 1 location
+      const pkgLocations = await relationshipPackageLocation.findAll({
+        where: { packageId: data.packageId },
+        attributes: ["locationId"],
+        raw: true,
+        transaction,
+      });
+      const svcLocations = await relationshipServiceLocation.findAll({
+        where: { serviceId: data.serviceId },
+        attributes: ["locationId"],
+        raw: true,
+        transaction,
+      });
+
+      const pkgLocIds = pkgLocations.map((r) => r.locationId);
+      const svcLocIds = svcLocations.map((r) => r.locationId);
+      const hasCommon = pkgLocIds.some((id) => svcLocIds.includes(id));
+
+      if (!hasCommon) {
         await transaction.rollback();
-        return { status: false, message: "Package dan Service harus berada di lokasi yang sama", data: null };
+        return {
+          status: false,
+          message: "Package dan Service harus memiliki minimal 1 lokasi yang sama",
+          data: null,
+        };
       }
 
       const existing = await masterPackageItems.findOne({
@@ -771,7 +786,6 @@ module.exports = {
         };
       }
 
-      // 1ï¸âƒ£ Ambil item yang mau di-update
       const existing = await masterPackageItems.findOne({
         where: { id: packageItemId },
         transaction,
@@ -836,9 +850,9 @@ module.exports = {
       if (!id) {
         return { status: false, message: "Data tidak lengkap", data: null };
       }
-      const package = await masterPackage.findByPk(id);
+      const pkg = await masterPackage.findByPk(id);
 
-      if (!package) {
+      if (!pkg) {
         return {
           status: false,
           message: "Package tidak ditemukan",
@@ -846,12 +860,12 @@ module.exports = {
         };
       }
 
-      await package.destroy();
+      await pkg.destroy();
 
       return {
         status: true,
         message: "Package berhasil di hapus",
-        data: package,
+        data: pkg,
       };
     } catch (error) {
       return { status: false, message: error.message };
@@ -898,7 +912,8 @@ module.exports = {
     const include = [
       {
         model: masterLocation,
-        as: "location",
+        as: "locations",
+        through: { attributes: ["isActive"] },
         attributes: ["id", "name", "cityId", "districtId"],
       },
       {
@@ -931,17 +946,27 @@ module.exports = {
         return {
           status: true,
           message: "Success",
-          data: packages,
+          data: packages.map((p) => {
+            const plain = p.get({ plain: true });
+            return mapPackageWithBackwardCompat(plain);
+          }),
         };
       }
 
+      // Filter by user's locations via pivot
+      const locationInclude = include.map((inc) => {
+        if (inc.as === "locations") {
+          return {
+            ...inc,
+            where: { id: { [Op.in]: locationIds } },
+            required: true,
+          };
+        }
+        return inc;
+      });
+
       const packages = await masterPackage.findAll({
-        where: {
-          locationId: {
-            [Op.in]: locationIds,
-          },
-        },
-        include,
+        include: locationInclude,
         attributes: {
           exclude: ["createdAt", "updatedAt"],
         },
@@ -950,7 +975,10 @@ module.exports = {
       return {
         status: true,
         message: "Success",
-        data: packages,
+        data: packages.map((p) => {
+          const plain = p.get({ plain: true });
+          return mapPackageWithBackwardCompat(plain);
+        }),
       };
 
     } catch (error) {
@@ -963,7 +991,8 @@ module.exports = {
       const include = [
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
+          through: { attributes: ["isActive"] },
           attributes: ["id", "name", "cityId", "districtId"],
         },
         {
@@ -979,7 +1008,6 @@ module.exports = {
           ],
         },
       ];
-      console.log("userId=", userId);
       const packages = await masterPackage.findAll({
         where: { createdBy: userId },
         include,
@@ -992,10 +1020,43 @@ module.exports = {
       return {
         status: true,
         message: "Success",
-        data: packages,
+        data: packages.map((p) => {
+          const plain = p.get({ plain: true });
+          return mapPackageWithBackwardCompat(plain);
+        }),
       };
     } catch (error) {
       return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Toggle isActive for a specific package-location pivot entry
+   */
+  async toggleLocationActive(packageId, locationId) {
+    try {
+      const pivot = await relationshipPackageLocation.findOne({
+        where: { packageId, locationId },
+      });
+
+      if (!pivot) {
+        return {
+          status: false,
+          message: "Package tidak terdaftar di lokasi ini",
+          data: null,
+        };
+      }
+
+      pivot.isActive = !pivot.isActive;
+      await pivot.save();
+
+      return {
+        status: true,
+        message: `Package di lokasi ini sekarang ${pivot.isActive ? "aktif" : "non-aktif"}`,
+        data: pivot,
+      };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
     }
   },
 };

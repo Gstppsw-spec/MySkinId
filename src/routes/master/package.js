@@ -5,17 +5,17 @@ const masterPackage = require("../../controllers/masterPackage");
 const { verifyToken } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
 
-router.post("/", verifyToken, allowRoles("OUTLET_ADMIN"), masterPackage.create);
+router.post("/", verifyToken, allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"), masterPackage.create);
 router.put(
   "/:id",
   verifyToken,
-  allowRoles("OUTLET_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterPackage.update,
 );
 router.delete(
   "/:packageId",
   verifyToken,
-  allowRoles("OUTLET_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterPackage.deletePackage,
 );
 
@@ -29,20 +29,27 @@ router.get("/:id", masterPackage.getById);
 router.post(
   "/item",
   verifyToken,
-  allowRoles("OUTLET_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterPackage.createItemPackage,
 );
 router.put(
   "/item/:packageItemId",
   verifyToken,
-  allowRoles("OUTLET_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterPackage.updateItemPackage,
 );
 router.delete(
   "/item/:packageItemId",
   verifyToken,
-  allowRoles("OUTLET_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterPackage.deletePackageItem,
+);
+
+router.put(
+  "/:packageId/location/:locationId/toggle-active",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  masterPackage.toggleLocationActive,
 );
 
 module.exports = router;

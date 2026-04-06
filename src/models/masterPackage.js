@@ -10,11 +10,11 @@ module.exports = (sequelize, DataTypes) => {
         as: "items",
       });
 
-      masterPackage.belongsTo(models.masterLocation, {
-        foreignKey: "locationId",
-        as: "location",
-        onDelete: "CASCADE",
-        onUpdate: "CASCADE",
+      masterPackage.belongsToMany(models.masterLocation, {
+        through: models.relationshipPackageLocation,
+        foreignKey: "packageId",
+        otherKey: "locationId",
+        as: "locations",
       });
 
       masterPackage.hasMany(models.customerFavorites, {
@@ -84,10 +84,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
-      locationId: {
-        type: DataTypes.UUID,
-        allowNull: false,
-      },
+
       isVerified: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

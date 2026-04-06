@@ -33,14 +33,14 @@ const uploadProductImages = multer({
 router.post(
   "/",
   verifyToken,
-  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadProductImages.array("photos", 10),
   masterProduct.create,
 );
 router.put(
   "/:id",
   verifyToken,
-  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadProductImages.array("photos", 10),
   masterProduct.update,
 );
@@ -48,7 +48,7 @@ router.put(
 router.patch(
   "/image/:id",
   verifyToken,
-  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterProduct.deleteImage,
 );
 router.get("/creator", verifyToken, masterProduct.getByCreator);
@@ -57,5 +57,12 @@ router.get("/user", verifyToken, masterProduct.getProductByUser);
 router.get("/by-user-location", verifyToken, masterProduct.getProductByUser);
 router.get("/", masterProduct.getAll);
 router.get("/:id", masterProduct.getById);
+
+router.put(
+  "/:productId/location/:locationId/toggle-active",
+  verifyToken,
+  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
+  masterProduct.toggleLocationActive,
+);
 
 module.exports = router;

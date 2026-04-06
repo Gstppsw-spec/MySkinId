@@ -211,4 +211,16 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  async toggleLocationActive(req, res) {
+    try {
+      const { packageId, locationId } = req.params;
+      const result = await packageService.toggleLocationActive(packageId, locationId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };
