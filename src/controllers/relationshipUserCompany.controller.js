@@ -5,7 +5,7 @@ const { getPagination, formatPagination } = require("../utils/pagination");
 class RelationshipUserCompanyController {
   async getCompanyByUserId(req, res) {
     try {
-      const { userId } = req.params;
+      const userId = req.user?.id;
       const company = await RelationshipUserCompanyService.getCompanyByUserId(
         userId
       );
@@ -84,6 +84,27 @@ class RelationshipUserCompanyController {
 
       const data = await RelationshipUserCompanyService.addCompany(payload);
       return response.success(res, "Company berhasil ditambahkan", data);
+    } catch (error) {
+      console.error(error);
+      return response.serverError(res, error);
+    }
+  }
+
+  async upsertCompany(req, res) {
+    try {
+      const payload = {
+        ...req.body,
+        userId: req.user?.id, // ID dari token
+        createdBy: req.user?.id || null,
+        updatedBy: req.user?.id || null,
+      };
+
+      if (!payload.name) {
+        return response.error(res, "Nama company harus diisi", null, 400);
+      }
+
+      const data = await RelationshipUserCompanyService.upsertCompany(payload);
+      return response.success(res, "Company berhasil diproses (upsert)", data);
     } catch (error) {
       console.error(error);
       return response.serverError(res, error);

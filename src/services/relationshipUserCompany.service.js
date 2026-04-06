@@ -64,6 +64,40 @@ class RelationshipUserCompanyService {
     return await masterCompany.create(payload);
   }
 
+  async upsertCompany(payload) {
+    // Generate code if not provided
+    if (!payload.code && payload.name) {
+      payload.code = payload.name.toUpperCase().replace(/\s+/g, "_");
+    }
+
+    const [company, created] = await masterCompany.findOrCreate({
+      where: { name: payload.name },
+      defaults: payload,
+    });
+
+    if (!created) {
+      // Jika sudah ada, update datanya
+      await company.update(payload);
+    }
+
+    // Pastikan relasi ke user terbuat jika userId disediakan
+    if (payload.userId) {
+      await relationshipUserCompany.findOrCreate({
+        where: {
+          userId: payload.userId,
+          companyId: company.id,
+        },
+        defaults: {
+          userId: payload.userId,
+          companyId: company.id,
+          isactive: true,
+        },
+      });
+    }
+
+    return company;
+  }
+
   async deleteCompany(id, deletedBy = null) {
     const company = await masterCompany.findByPk(id);
     if (!company) throw new Error("Company tidak ditemukan");

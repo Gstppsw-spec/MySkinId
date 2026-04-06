@@ -31,11 +31,6 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.DECIMAL(18, 2),
                 allowNull: false,
             },
-            paymentGateway: {
-                type: DataTypes.STRING(20),
-                allowNull: false,
-                defaultValue: "xendit",
-            },
             referenceNumber: {
                 type: DataTypes.STRING(100),
             },

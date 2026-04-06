@@ -27,7 +27,6 @@ const {
 const { nanoid } = require("nanoid");
 const axios = require("axios");
 const biteshipService = require("./biteship.service");
-const yokkePaymentService = require("./yokkePayment.service");
 const socketInstance = require("../socket/socketInstance");
 const { schedulePaymentTimeout, cancelPaymentTimeout } = require("../utils/paymentTimeout");
 const ExcelJS = require('exceljs');
@@ -237,49 +236,6 @@ module.exports = {
             "Ikuti instruksi sesuai metode yang dipilih",
             "Bayar sebelum batas waktu berakhir"
         ];
-    },
-
-    async _createYokkePayment(orderNumber, amount, customer, paymentMethodCode, items) {
-        try {
-            const methodRecord = await masterPaymentMethod.findOne({
-                where: { code: paymentMethodCode, isActive: true }
-            });
-
-            if (!methodRecord) {
-                throw new Error(`Payment method ${paymentMethodCode} is not available or inactive.`);
-            }
-
-            // Fallback for gateway
-            const gateway = methodRecord.gateway || 'xendit';
-            if(gateway !== 'yokke') {
-                throw new Error(`Payment method ${paymentMethodCode} is not configured for Yokke.`);
-            }
-
-            // Yokke uses paymentSources strings like ovo, gopay, mtiiso, briapiva
-            // We assume the paymentMethodCode matches Yokke's paymentSource (or is mapped)
-            const paymentSource = paymentMethodCode.toLowerCase();
-
-            const inquiry = await yokkePaymentService.createInquiry({
-                orderNumber,
-                amount,
-                customer: customer || {},
-                items: items || [{ name: "Order Payment", quantity: 1, amount }], // Default item if not passed
-                paymentSource
-            });
-
-            return {
-                paymentType: methodRecord.type,
-                id: inquiry.id,
-                referenceId: inquiry.id,
-                checkoutUrl: inquiry.checkoutUrl,
-                paymentSource: paymentSource,
-                instructions: this._getPaymentInstructions("EWALLET", paymentMethodCode, { checkoutUrl: inquiry.checkoutUrl }),
-                rawPayload: inquiry.rawPayload
-            };
-        } catch (error) {
-            console.error("Yokke Payment Creation Error:", error.message);
-            throw new Error(`Failed to create Yokke Payment for ${paymentMethodCode}: ${error.message}`);
-        }
     },
 
     async getAvailablePaymentMethods() {
@@ -668,7 +624,6 @@ module.exports = {
                 {
                     orderId: newOrder.id,
                     paymentMethod: paymentMethod,
-                    paymentGateway: gateway,
                     amount: totalOrderAmount,
                     paymentStatus: "PENDING",
                     referenceNumber: gatewayPayment.id,
@@ -1021,29 +976,12 @@ module.exports = {
                 return { status: false, message: `Payment method ${paymentMethod} not found or inactive` };
             }
 
-            const gateway = methodRecord.gateway || 'xendit';
-            let gatewayPayment;
-
-            if (gateway === 'yokke') {
-                let allItems = [];
-                for (const locId in itemsByLocation) {
-                    allItems = allItems.concat(itemsByLocation[locId]);
-                }
-                const actualItemsTotal = allItems.reduce((acc, i) => acc + (i.totalPrice || 0), 0);
-                if (totalOrderAmount > actualItemsTotal) {
-                    allItems.push({ name: "Shipping Fee", quantity: 1, amount: totalOrderAmount - actualItemsTotal });
-                }
-                
-                gatewayPayment = await this._createYokkePayment(newOrder.orderNumber, totalOrderAmount, customer, paymentMethod, allItems);
-            } else {
-                gatewayPayment = await this._createXenditPayment(newOrder.orderNumber, totalOrderAmount, customer, paymentMethod);
-            }
+            const gatewayPayment = await this._createXenditPayment(newOrder.orderNumber, totalOrderAmount, customer, paymentMethod);
 
             await orderPayment.create(
                 {
                     orderId: newOrder.id,
                     paymentMethod: paymentMethod,
-                    paymentGateway: gateway,
                     amount: totalOrderAmount,
                     paymentStatus: "PENDING",
                     referenceNumber: gatewayPayment.id,
@@ -1110,9 +1048,6 @@ module.exports = {
                 { transaction: t }
             );
 
-            console.log(`[DEBUG] buyPremiumBadge: Created order ${newOrder.orderNumber} with status ${newOrder.paymentStatus}`);
-            console.log(`[DEBUG] buyPremiumBadge: Created transaction ${newTransaction.transactionNumber} with status ${newTransaction.orderStatus}`);
-
 
             await transactionItem.create(
                 {
@@ -1143,22 +1078,13 @@ module.exports = {
                 return { status: false, message: `Payment method ${paymentMethod} not found or inactive` };
             }
 
-            const gateway = methodRecord.gateway || 'xendit';
-            let gatewayPayment;
-
-            if (gateway === 'yokke') {
-                const items = [{ name: `Premium Badge - ${location.name}`.substring(0, 30), quantity: 1, amount: totalOrderAmount }];
-                gatewayPayment = await this._createYokkePayment(newOrder.orderNumber, totalOrderAmount, customer, paymentMethod, items);
-            } else {
-                gatewayPayment = await this._createXenditPayment(newOrder.orderNumber, totalOrderAmount, customer, paymentMethod);
-            }
+            const gatewayPayment = await this._createXenditPayment(newOrder.orderNumber, totalOrderAmount, customer, paymentMethod);
 
             // Create Payment Record
             await orderPayment.create(
                 {
                     orderId: newOrder.id,
                     paymentMethod: paymentMethod,
-                    paymentGateway: gateway,
                     amount: totalOrderAmount,
                     paymentStatus: "PENDING",
                     referenceNumber: gatewayPayment.id,
@@ -1170,7 +1096,6 @@ module.exports = {
             );
 
             await t.commit();
-            console.log(`[DEBUG] buyPremiumBadge: Transaction committed for ${newOrder.orderNumber}`);
 
 
             // Schedule auto-expiry after 10 minutes if unpaid
@@ -1181,12 +1106,7 @@ module.exports = {
                 message: "Premium badge purchase initiated",
                 data: {
                     ...newOrder.toJSON(),
-                    paymentDetails: gatewayPayment,
-                    _debug: {
-                        initialPaymentStatus: newOrder.paymentStatus,
-                        initialOrderStatus: newTransaction.orderStatus,
-                        gateway: gateway
-                    }
+                    paymentDetails: gatewayPayment
                 }
             };
         } catch (error) {
@@ -1368,133 +1288,6 @@ module.exports = {
         }
     },
 
-    async handleYokkeWebhook(payload, signatureHeader) {
-        console.log("Yokke Webhook RAW Payload:", JSON.stringify(payload, null, 2));
-        const t = await sequelize.transaction();
-        try {
-            // Generate response signature
-            const responseTimestamp = new Date().toISOString();
-            const validateSignature = yokkePaymentService.generateValidateSignature(signatureHeader || '', responseTimestamp);
-
-            let eventType = payload.type; // payment.validate or payment.received
-            let _external_id = payload.inquiry ? payload.inquiry.order?.id : null;
-            let _status = payload.transaction ? payload.transaction.status : null; // "captured", etc
-            
-            console.log(`Yokke Webhook Processed: Event=${eventType}, Order=${_external_id}, Status=${_status}`);
-            console.log(`[DEBUG] handleYokkeWebhook: Processing event ${eventType} for order ${_external_id} with status ${_status}`);
-
-
-            if (!_external_id) {
-                await t.rollback();
-                return { status: "ack", validateSignature }; // Still return ack to Yokke
-            }
-
-            const orderData = await order.findOne({
-                where: { orderNumber: _external_id },
-                include: [{ model: transaction, as: "transactions" }],
-            });
-
-            if (!orderData) {
-                await t.rollback();
-                return { status: "ack", validateSignature };
-            }
-
-            if (eventType === 'payment.received' && _status === 'captured') {
-                if (orderData.paymentStatus !== "PAID") {
-                    cancelPaymentTimeout(orderData.id);
-
-                    await orderData.update({ paymentStatus: "PAID" }, { transaction: t });
-
-                    for (const trx of orderData.transactions) {
-                        await trx.update({ orderStatus: "PAID" }, { transaction: t });
-                        console.log(`[DEBUG] handleYokkeWebhook: Updated transaction ${trx.transactionNumber} to PAID`);
-                    }
-
-
-                    const paymentChannel = payload.transaction?.paymentSource;
-
-                    await orderPayment.update(
-                        {
-                            paymentStatus: "SUCCESS",
-                            gatewayResponse: payload,
-                            paymentMethod: paymentChannel || orderData.paymentMethod
-                        },
-                        { where: { orderId: orderData.id }, transaction: t }
-                    );
-
-                    socketInstance.emitPaymentUpdate(orderData.orderNumber, "PAID", {
-                        orderId: orderData.id,
-                        paymentChannel: paymentChannel,
-                    });
-
-                    // Activate vouchers
-                    const transactionIds = orderData.transactions.map(trx => trx.id);
-                    if (transactionIds.length > 0) {
-                        const trxItems = await transactionItem.findAll({
-                            where: { transactionId: transactionIds },
-                        });
-
-                        for (const item of trxItems) {
-                            if (item.voucherCode) {
-                                const now = new Date();
-                                const expiredAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); 
-
-                                await customerVoucher.update(
-                                    { status: "BOOKED", expiredAt: expiredAt },
-                                    { where: { voucherCode: item.voucherCode, status: "NOT_ACTIVE" }, transaction: t }
-                                );
-                            }
-
-                            if (item.itemType === "product") {
-                                await masterProduct.increment({ totalSold: item.quantity }, { where: { id: item.itemId }, transaction: t });
-                            } else if (item.itemType === "package") {
-                                await masterPackage.increment({ totalSold: item.quantity }, { where: { id: item.itemId }, transaction: t });
-                            } else if (item.itemType === "premium_badge") {
-                                const now = new Date();
-                                const expiredAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-                                await masterLocation.update(
-                                    { isPremium: true, premiumExpiredAt: expiredAt },
-                                    { where: { id: item.itemId }, transaction: t }
-                                );
-                            }
-
-                            if (item.flashSaleItemId) {
-                                await flashSaleItem.increment(
-                                    { sold: item.quantity },
-                                    { where: { id: item.flashSaleItemId }, transaction: t }
-                                );
-                            }
-                        }
-                    }
-                }
-            } else if (eventType === 'payment.received' && (_status === 'failed' || _status === 'declined')) {
-                if (orderData.paymentStatus !== "PAID") {
-                    await orderData.update({ paymentStatus: "FAILED" }, { transaction: t });
-                    for (const trx of orderData.transactions) {
-                        await trx.update({ orderStatus: "CANCELLED" }, { transaction: t });
-                    }
-
-                    await orderPayment.update(
-                        { paymentStatus: "FAILED", gatewayResponse: payload },
-                        { where: { orderId: orderData.id }, transaction: t }
-                    );
-
-                    socketInstance.emitPaymentUpdate(orderData.orderNumber, "FAILED", {
-                        orderId: orderData.id,
-                    });
-                }
-            }
-
-            await t.commit();
-            return { status: "ack", validateSignature };
-        } catch (error) {
-            await t.rollback();
-            console.error("Yokke Webhook Error:", error.message);
-            // Even on error, Yokke expects a response
-            return { status: "NOK", message: error.message };
-        }
-    },
-
     async handleXenditCallback(payload, callbackTokenHeader) {
         console.log("Xendit Callback RAW Payload:", JSON.stringify(payload, null, 2));
         const t = await sequelize.transaction();
@@ -1540,7 +1333,6 @@ module.exports = {
             }
 
             console.log(`Xendit Callback Processed: ID=${_external_id}, Status=${_status}, Channel=${_payment_channel}`);
-            console.log(`[DEBUG] handleXenditCallback: Payload type check - external_id: ${_external_id}, status: ${_status}`);
 
 
             if (!_external_id) {
@@ -1566,7 +1358,6 @@ module.exports = {
                     // Update all transactions in this order to PAID
                     for (const trx of orderData.transactions) {
                         await trx.update({ orderStatus: "PAID" }, { transaction: t });
-                        console.log(`[DEBUG] handleXenditCallback: Updated transaction ${trx.transactionNumber} to PAID`);
                     }
 
                     // Update payment record with detailed info
@@ -2446,16 +2237,10 @@ module.exports = {
 
             const result = rows.map(r => {
                 const plain = r.get({ plain: true });
-                console.log(`[DEBUG] getOutletTransactions: Transaction ${plain.transactionNumber}, orderStatus: ${plain.orderStatus}, order paymentStatus: ${plain.order?.paymentStatus}`);
                 const res = {
                     ...plain,
                     customerPhone: plain.order?.customer?.phoneNumber || null,
                     outletPhone: plain.location?.phone || null,
-                    _debug: {
-                        orderPaymentStatus: plain.order?.paymentStatus,
-                        orderStatus: plain.orderStatus,
-                        paymentCount: plain.order?.payments?.length
-                    }
                 };
                 if (res.order?.customer) {
                     delete res.order.customer.phoneNumber;
