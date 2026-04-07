@@ -240,7 +240,7 @@ module.exports = {
             include: [
               {
                 model: masterLocation,
-                as: "location",
+                as: "locations",
               },
             ],
           },
@@ -459,7 +459,7 @@ module.exports = {
             include: [
               {
                 model: masterLocation,
-                as: "location",
+                as: "locations",
               },
             ],
           },

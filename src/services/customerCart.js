@@ -37,7 +37,7 @@ module.exports = {
               },
               {
                 model: masterLocation,
-                as: "location",
+                as: "locations",
                 attributes: ["id", "name", "address", "cityId", "districtId", "postalCode", "biteshipAreaId"],
               },
             ],
@@ -51,7 +51,7 @@ module.exports = {
             include: [
               {
                 model: masterLocation,
-                as: "location",
+                as: "locations",
                 attributes: ["id", "name"],
                 include: [
                   {
@@ -79,7 +79,7 @@ module.exports = {
             include: [
               {
                 model: masterLocation,
-                as: "location",
+                as: "locations",
                 attributes: ["id", "name"],
                 include: [
                   {
@@ -138,7 +138,7 @@ module.exports = {
             isPromoActive: isPromoActive,
             discountpercent: cart.product.discountPercent,
             images: cart.product.images,
-            location: cart.product.location,
+            location: cart.product.locations?.[0] || null,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
             isOnPayment: cart.isOnPayment,
@@ -159,7 +159,7 @@ module.exports = {
             finalPrice: finalPrice,
             isPromoActive: isPromoActive,
             discpercent: cart.package.discountPercent,
-            location: cart.package.location,
+            location: cart.package.locations?.[0] || null,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
             isOnPayment: cart.isOnPayment,

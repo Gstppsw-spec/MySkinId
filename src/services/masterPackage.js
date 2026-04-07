@@ -417,6 +417,31 @@ module.exports = {
         };
       }
 
+      if (pkg.isVerified) {
+        await pkg.update(
+          {
+            price: data.price ?? pkg.price,
+            discountPercent: data.discountPercent ?? pkg.discountPercent,
+            isActive: data.isActive ?? pkg.isActive,
+          },
+          { transaction }
+        );
+        
+        await transaction.commit();
+        
+        if (data.locationIds && Array.isArray(data.locationIds)) {
+          await pkg.setLocations(data.locationIds);
+        }
+
+        // Jika ke depan package memakai categories, bisa ditambahkan juga di sini
+
+        return {
+          status: true,
+          message: "Data paket sudah diverifikasi. Hanya harga, diskon, status aktif, dan lokasi yang diperbarui.",
+          data: pkg,
+        };
+      }
+
       await pkg.update(
         {
           name: data.name ?? pkg.name,
@@ -428,6 +453,21 @@ module.exports = {
         },
         { transaction },
       );
+
+      // Update items if provided
+      if (data.items && Array.isArray(data.items)) {
+        await masterPackageItems.destroy({
+          where: { packageId: pkg.id },
+          transaction
+        });
+
+        const itemRecords = data.items.map(it => ({
+          serviceId: it.serviceId,
+          qty: it.qty || 1,
+          packageId: pkg.id
+        }));
+        await masterPackageItems.bulkCreate(itemRecords, { transaction });
+      }
 
       await transaction.commit();
 

@@ -199,6 +199,14 @@ class MasterLocationService {
         return { status: false, message: "Location not found", data: null };
       }
 
+      if (location.isVerified) {
+        return {
+          status: false,
+          message: "Data lokasi sudah diverifikasi dan tidak dapat diubah",
+          data: null,
+        };
+      }
+
       // Resolve Biteship area ID if updated and not provided
       const inputSubDist = data.subdistrict || data.subDistrict;
       const needsResolve = (inputSubDist && inputSubDist !== location.subdistrict) ||

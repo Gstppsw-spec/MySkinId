@@ -45,6 +45,13 @@ router.put(
   masterProduct.update,
 );
 
+router.delete(
+  "/:id",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  masterProduct.delete,
+);
+
 router.patch(
   "/image/:id",
   verifyToken,

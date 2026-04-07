@@ -549,6 +549,30 @@ module.exports = {
         return { status: false, message: "Product not found", data: null };
       }
 
+      if (product.isVerified) {
+        product.price = data.price !== undefined ? data.price : product.price;
+        product.discountPercent =
+          data.discount !== undefined ? data.discount : product.discountPercent;
+        product.isActive =
+          data.isActive !== undefined ? data.isActive : product.isActive;
+        
+        await product.save();
+
+        if (data.locationIds && Array.isArray(data.locationIds)) {
+          await product.setLocations(data.locationIds);
+        }
+  
+        if (data.categoryIds && Array.isArray(data.categoryIds)) {
+          await product.setCategories(data.categoryIds);
+        }
+        
+        return {
+          status: true,
+          message: "Produk sudah diverifikasi. Hanya harga, diskon, status aktif, lokasi, dan kategori yang diperbarui.",
+          data: product,
+        };
+      }
+
       if (data.name && data.name.trim() === "") {
         return { status: false, message: "Name cannot be empty", data: null };
       }
@@ -993,6 +1017,38 @@ module.exports = {
         status: true,
         message: `Product di lokasi ini sekarang ${pivot.isActive ? "aktif" : "non-aktif"}`,
         data: pivot,
+      };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async deleteProduct(id) {
+    try {
+      const product = await masterProduct.findByPk(id);
+      
+      if (!product) {
+        return {
+          status: false,
+          message: "Product not found",
+          data: null,
+        };
+      }
+
+      if (product.isVerified) {
+        return {
+          status: false,
+          message: "Product sudah diverifikasi dan tidak dapat dihapus",
+          data: null,
+        };
+      }
+
+      await product.destroy(); // Soft delete because of paranoid true
+
+      return {
+        status: true,
+        message: "Product deleted successfully",
+        data: null,
       };
     } catch (error) {
       return { status: false, message: error.message, data: null };

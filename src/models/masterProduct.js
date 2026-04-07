@@ -152,6 +152,8 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       createdAt: "createdAt",
       updatedAt: "updatedAt",
+      paranoid: true,
+      deletedAt: "deletedAt",
     },
   );
 

@@ -57,6 +57,10 @@ class RelationshipUserCompanyService {
     const company = await masterCompany.findByPk(id);
     if (!company) throw new Error("Company tidak ditemukan");
 
+    if (company.isVerified) {
+      throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
+    }
+
     // Resolve region IDs to names if provided in the payload properties (kept as province, city, etc.)
     await this._resolveRegionData(payload);
 
@@ -91,7 +95,10 @@ class RelationshipUserCompanyService {
     });
 
     if (!created) {
-      // Jika sudah ada, update datanya
+      // Jika sudah ada, check verifikasi lalu update datanya
+      if (company.isVerified) {
+        throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
+      }
       await company.update(payload);
     }
 
