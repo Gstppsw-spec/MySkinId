@@ -27,6 +27,7 @@ class RelationshipUserCompanyService {
           ],
         },
       ],
+      order: [["createdAt", "DESC"]],
     });
 
     return data?.company || null;
@@ -125,16 +126,35 @@ class RelationshipUserCompanyService {
       }
     });
 
-    // Coba cari data yang sudah ada (berdasarkan ID dulu, baru Nama)
+    // Coba cari data yang sudah ada berdasarkan PRIORITAS:
+    // 1. Apakah user ini sudah terhubung dengan suatu perusahaan? (Ownership focus)
+    // 2. Berdasarkan ID di payload
+    // 3. Berdasarkan Nama di payload
+    
     let company;
-    if (cleanPayload.id) {
+    let existingLink = null;
+
+    if (payload.userId) {
+      existingLink = await relationshipUserCompany.findOne({
+        where: { userId: payload.userId },
+        order: [["createdAt", "DESC"]]
+      });
+      if (existingLink) {
+        company = await masterCompany.findByPk(existingLink.companyId);
+        console.log(`[UPSERT] Found existing company by user link: ${company?.id}`);
+      }
+    }
+
+    if (!company && cleanPayload.id) {
       company = await masterCompany.findByPk(cleanPayload.id);
+      console.log(`[UPSERT] Found existing company by ID: ${company?.id}`);
     }
 
     if (!company) {
       company = await masterCompany.findOne({
         where: { name: cleanPayload.name }
       });
+      if (company) console.log(`[UPSERT] Found existing company by Name: ${company?.id}`);
     }
 
     if (company) {

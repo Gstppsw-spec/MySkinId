@@ -7,6 +7,7 @@ const {
   masterLocationImage,
   masterPackage,
 } = require("../models");
+const { Sequelize } = require("sequelize");
 const validateReference = require("../helpers/validateReference");
 
 module.exports = {
@@ -14,18 +15,22 @@ module.exports = {
     try {
       if (!customerId)
         return { status: false, message: "Customer tidak boleh kosong" };
-      const distanceLiteral =
-        userLat && userLng
-          ? Sequelize.literal(`
+
+      const getDistanceLiteral = (alias) => {
+        if (!userLat || !userLng) return null;
+        return Sequelize.literal(`
                   6371 * acos(
                     cos(radians(${userLat})) *
-                    cos(radians(CAST(location.latitude AS FLOAT))) *
-                    cos(radians(CAST(location.longitude AS FLOAT)) - radians(${userLng})) +
+                    cos(radians(CAST(${alias}.latitude AS FLOAT))) *
+                    cos(radians(CAST(${alias}.longitude AS FLOAT)) - radians(${userLng})) +
                     sin(radians(${userLat})) *
-                    sin(radians(CAST(location.latitude AS FLOAT)))
+                    sin(radians(CAST(${alias}.latitude AS FLOAT)))
                   )
-                `)
-          : null;
+                `);
+      };
+
+      const distanceLiteralDefault = getDistanceLiteral("location");
+      const distanceLiteralPlural = getDistanceLiteral("locations");
 
       const favorites = await customerFavorites.findAll({
         where: { customerId },
@@ -51,7 +56,9 @@ module.exports = {
             attributes: [
               "id",
               "name",
-              ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
+              ...(distanceLiteralDefault
+                ? [[distanceLiteralDefault, "distance"]]
+                : []),
             ],
             required: !!(userLat && userLng),
             include: [
@@ -71,12 +78,13 @@ module.exports = {
             include: [
               {
                 model: masterLocation,
-                as: "location",
+                as: "locations",
                 attributes: [
                   "id",
                   "name",
-
-                  ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
+                  ...(distanceLiteralPlural
+                    ? [[distanceLiteralPlural, "distance"]]
+                    : []),
                 ],
                 required: !!(userLat && userLng),
                 include: [
@@ -100,11 +108,13 @@ module.exports = {
             include: [
               {
                 model: masterLocation,
-                as: "location",
+                as: "locations",
                 attributes: [
                   "id",
                   "name",
-                  ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
+                  ...(distanceLiteralPlural
+                    ? [[distanceLiteralPlural, "distance"]]
+                    : []),
                 ],
                 required: !!(userLat && userLng),
                 include: [
@@ -131,13 +141,26 @@ module.exports = {
 
       favorites.forEach((fav) => {
         if (fav.product) result.product.push(fav.product);
-        if (fav.service) result.service.push(fav.service);
+        if (fav.service) {
+          const servicePlain = fav.service.get({ plain: true });
+          // Backward compatibility: map locations[0] to location
+          servicePlain.location = servicePlain.locations?.[0] || null;
+          delete servicePlain.locations;
+          result.service.push(servicePlain);
+        }
         if (fav.location) result.location.push(fav.location);
-        if (fav.package) result.package.push(fav.package);
+        if (fav.package) {
+          const packagePlain = fav.package.get({ plain: true });
+          // Backward compatibility: map locations[0] to location
+          packagePlain.location = packagePlain.locations?.[0] || null;
+          delete packagePlain.locations;
+          result.package.push(packagePlain);
+        }
       });
 
       return { status: true, message: "Berhasil", data: result };
     } catch (error) {
+      console.error(error);
       return { status: false, message: error.message };
     }
   },
