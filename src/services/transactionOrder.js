@@ -3343,7 +3343,7 @@ module.exports = {
 
             // B. Total Pendapatan (Status SUCCESS in platformTransfers)
             const incomeWhere = {
-                locationId,
+                locationId: { [Op.in]: locationIds },
                 status: "SUCCESS"
             };
             if (startDate && endDate) {
@@ -3376,7 +3376,7 @@ module.exports = {
                     {
                         model: transactionItem,
                         as: "transactionItem",
-                        where: { locationId },
+                        where: { locationId: { [Op.in]: locationIds } },
                         include: [
                             {
                                 model: transaction,
