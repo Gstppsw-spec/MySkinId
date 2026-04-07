@@ -74,7 +74,7 @@ module.exports = {
   async registerItems(req, res) {
     try {
       const { id } = req.params;
-      const result = await flashSaleService.registerItems(id, req.body);
+      const result = await flashSaleService.registerItems(id, req.body, req.user);
       if (!result.status) return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
     } catch (error) {

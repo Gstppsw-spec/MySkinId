@@ -13,6 +13,7 @@ const {
     customerVoucher,
     masterCustomer,
     relationshipUserLocation,
+    relationshipUserCompany,
     customerAddress,
     masterPaymentMethod,
     masterService,
@@ -35,6 +36,38 @@ const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 
 module.exports = {
+    async _getAdminLocationIds(adminId) {
+        // 1. Check direct outlet assignment (OUTLET_ADMIN)
+        const userLocations = await relationshipUserLocation.findAll({
+            where: { userId: adminId, isactive: true },
+            attributes: ["locationId"],
+            raw: true
+        });
+
+        if (userLocations.length > 0) {
+            return userLocations.map(ul => ul.locationId);
+        }
+
+        // 2. Check company assignment (COMPANY_ADMIN) fallback
+        const userCompanies = await relationshipUserCompany.findAll({
+            where: { userId: adminId, isactive: true },
+            attributes: ["companyId"],
+            raw: true
+        });
+
+        if (userCompanies.length > 0) {
+            const companyIds = userCompanies.map(uc => uc.companyId);
+            const companyLocations = await masterLocation.findAll({
+                where: { companyId: { [Op.in]: companyIds } },
+                attributes: ["id"],
+                raw: true
+            });
+            return companyLocations.map(loc => loc.id);
+        }
+
+        return [];
+    },
+
     async _createXenditPayment(orderNumber, amount, customer, paymentMethodCode) {
         try {
             const secretKey = process.env.XENDIT_SECRET_KEY;
@@ -1483,12 +1516,10 @@ module.exports = {
     async updateTransactionToShipped(transactionId, adminId, trackingNumber) {
         const t = await sequelize.transaction();
         try {
-            // 1. Get Admin's Location
-            const userLocation = await relationshipUserLocation.findOne({
-                where: { userId: adminId, isactive: true },
-            });
+            // 1. Get Admin's Locations
+            const locationIds = await this._getAdminLocationIds(adminId);
 
-            if (!userLocation) {
+            if (!locationIds || locationIds.length === 0) {
                 throw new Error("Admin not assigned to any location");
             }
 
@@ -1516,7 +1547,7 @@ module.exports = {
             }
 
             // 2. Security Check: Admin location must match transaction location
-            if (trx.locationId !== userLocation.locationId) {
+            if (!locationIds.includes(trx.locationId)) {
                 throw new Error("Unauthorized: You are not assigned to this outlet");
             }
 
@@ -1602,12 +1633,10 @@ module.exports = {
 
     async updateTransactionToDelivered(transactionId, adminId) {
         try {
-            // 1. Get Admin's Location
-            const userLocation = await relationshipUserLocation.findOne({
-                where: { userId: adminId, isactive: true },
-            });
+            // 1. Get Admin's Locations
+            const locationIds = await this._getAdminLocationIds(adminId);
 
-            if (!userLocation) {
+            if (!locationIds || locationIds.length === 0) {
                 throw new Error("Admin not assigned to any location");
             }
 
@@ -1626,7 +1655,7 @@ module.exports = {
             }
 
             // 2. Security Check: Admin location must match transaction location
-            if (trx.locationId !== userLocation.locationId) {
+            if (!locationIds.includes(trx.locationId)) {
                 throw new Error("Unauthorized: You are not assigned to this outlet");
             }
 
@@ -1894,12 +1923,10 @@ module.exports = {
     async claimVoucher(voucherCode, adminId) {
         const t = await sequelize.transaction();
         try {
-            // 1. Get Admin's Location
-            const userLocation = await relationshipUserLocation.findOne({
-                where: { userId: adminId, isactive: true },
-            });
+            // 1. Get Admin's Locations
+            const locationIds = await this._getAdminLocationIds(adminId);
 
-            if (!userLocation) {
+            if (!locationIds || locationIds.length === 0) {
                 throw new Error("Admin not assigned to any location");
             }
 
@@ -2034,12 +2061,10 @@ module.exports = {
 
     async checkVoucher(voucherCode, adminId) {
         try {
-            // 1. Get Admin's Location
-            const userLocation = await relationshipUserLocation.findOne({
-                where: { userId: adminId, isactive: true },
-            });
+            // 1. Get Admin's Locations
+            const locationIds = await this._getAdminLocationIds(adminId);
 
-            if (!userLocation) {
+            if (!locationIds || locationIds.length === 0) {
                 throw new Error("Admin not assigned to any location");
             }
 
@@ -2162,19 +2187,17 @@ module.exports = {
 
     async getOutletTransactions(adminId, { page = 1, pageSize = 10, search = "", status = "", productOnlyForPaid = false }) {
         try {
-            // 1. Get Admin's Location
-            const userLocation = await relationshipUserLocation.findOne({
-                where: { userId: adminId, isactive: true },
-            });
+            // 1. Get Admin's Locations
+            const locationIds = await this._getAdminLocationIds(adminId);
 
-            if (!userLocation) {
+            if (!locationIds || locationIds.length === 0) {
                 throw new Error("Admin not assigned to any location");
             }
 
             const limit = parseInt(pageSize);
             const offset = (page - 1) * limit;
             const whereClause = {
-                locationId: userLocation.locationId,
+                locationId: { [Op.in]: locationIds },
             };
 
             if (search) {
@@ -3300,17 +3323,14 @@ module.exports = {
 
     async getOutletStats(adminId, { startDate, endDate }) {
         try {
-            // 1. Get Admin's Location
-            const userLocation = await relationshipUserLocation.findOne({
-                where: { userId: adminId, isactive: true },
-            });
+            // 1. Get Admin's Locations
+            const locationIds = await this._getAdminLocationIds(adminId);
 
-            if (!userLocation) {
+            if (!locationIds || locationIds.length === 0) {
                 throw new Error("Admin not assigned to any location");
             }
 
-            const locationId = userLocation.locationId;
-            const whereClause = { locationId };
+            const whereClause = { locationId: { [Op.in]: locationIds } };
 
             if (startDate && endDate) {
                 whereClause.createdAt = {
@@ -3399,16 +3419,14 @@ module.exports = {
 
     async exportTransactions(adminId, { startDate, endDate, format = 'excel' }) {
         try {
-            const userLocation = await relationshipUserLocation.findOne({
-                where: { userId: adminId, isactive: true },
-            });
+            const locationIds = await this._getAdminLocationIds(adminId);
 
-            if (!userLocation) {
+            if (!locationIds || locationIds.length === 0) {
                 throw new Error("Admin not assigned to any location");
             }
 
             const whereClause = {
-                locationId: userLocation.locationId,
+                locationId: { [Op.in]: locationIds },
             };
 
             if (startDate && endDate) {

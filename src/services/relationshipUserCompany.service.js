@@ -84,6 +84,11 @@ class RelationshipUserCompanyService {
     if (!company) throw new Error("Company tidak ditemukan");
 
     if (company.isVerified) {
+      const statusValue = payload.isactive !== undefined ? payload.isactive : payload.isActive;
+      if (statusValue !== undefined) {
+        await company.update({ isactive: statusValue });
+        return company;
+      }
       throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
     }
 
@@ -173,6 +178,11 @@ class RelationshipUserCompanyService {
     if (company) {
       // Jika sudah ada, check verifikasi lalu update datanya
       if (company.isVerified) {
+        const statusValue = payload.isactive !== undefined ? payload.isactive : payload.isActive;
+        if (statusValue !== undefined) {
+          await company.update({ isactive: statusValue });
+          return company;
+        }
         throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
       }
       await company.update(cleanPayload);

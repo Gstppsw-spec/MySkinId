@@ -224,6 +224,15 @@ class MasterLocationService {
       }
 
       if (location.isVerified) {
+        const statusValue = data.isactive !== undefined ? data.isactive : data.isActive;
+        if (statusValue !== undefined) {
+          await location.update({ isactive: statusValue, updatedBy: userId });
+          return {
+            status: true,
+            message: "Status updated successfully (other fields ignored because location is verified)",
+            data: location,
+          };
+        }
         return {
           status: false,
           message: "Data lokasi sudah diverifikasi dan tidak dapat diubah",
@@ -546,6 +555,7 @@ class MasterLocationService {
           {
             model: masterLocationImage,
             as: "images",
+            separate: true,
           },
           {
             model: requestVerification,
@@ -557,7 +567,6 @@ class MasterLocationService {
         distinct: true, // Important for findAndCountAll with includes
         limit,
         offset,
-        subQuery: false,
       };
 
       if (name) {

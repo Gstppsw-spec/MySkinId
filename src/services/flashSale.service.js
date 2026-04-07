@@ -9,6 +9,7 @@ const {
   masterLocationImage,
   relationshipProductLocation,
   relationshipPackageLocation,
+  relationshipUserCompany,
   sequelize,
 } = require("../models");
 
@@ -219,15 +220,25 @@ module.exports = {
   /**
    * Outlet mendaftarkan items ke flash sale.
    */
-  async registerItems(flashSaleId, data) {
+  async registerItems(flashSaleId, data, user = {}) {
     const t = await sequelize.transaction();
     try {
       const { locationId, items } = data;
+      const { roleCode, id: userId } = user;
+
       const fs = await flashSale.findByPk(flashSaleId);
       if (!fs) throw new Error("Flash sale not found");
 
       if (!locationId) throw new Error("locationId is required");
       if (!items || !Array.isArray(items) || items.length === 0) throw new Error("items array is required");
+
+      // For COMPANY_ADMIN, we need to know the target company
+      let targetCompanyId = null;
+      if (roleCode === "COMPANY_ADMIN") {
+        const loc = await masterLocation.findByPk(locationId, { attributes: ["companyId"], transaction: t });
+        if (!loc) throw new Error("Target outlet not found");
+        targetCompanyId = loc.companyId;
+      }
 
       const results = [];
       for (const item of items) {
@@ -235,25 +246,68 @@ module.exports = {
 
         if (!itemType || !["PRODUCT", "PACKAGE"].includes(itemType)) throw new Error("itemType must be PRODUCT or PACKAGE");
         
-        // Ownership Validation (Checking pivot tables for Multi-Location support)
-        if (itemType === "PRODUCT") {
-          if (!productId) throw new Error("productId is required for PRODUCT type");
-          
-          const isLinked = await relationshipProductLocation.findOne({
-            where: { productId, locationId, isActive: true },
-            transaction: t
-          });
-          
-          if (!isLinked) throw new Error(`Product ${productId} does not belong to outlet ${locationId} or is not active`);
-        } else if (itemType === "PACKAGE") {
-          if (!packageId) throw new Error("packageId is required for PACKAGE type");
-          
-          const isLinked = await relationshipPackageLocation.findOne({
-            where: { packageId, locationId, isActive: true },
-            transaction: t
-          });
-          
-          if (!isLinked) throw new Error(`Package ${packageId} does not belong to outlet ${locationId} or is not active`);
+        // Ownership Validation
+        if (roleCode !== "SUPER_ADMIN") {
+          if (itemType === "PRODUCT") {
+            if (!productId) throw new Error("productId is required for PRODUCT type");
+            
+            const isLinked = await relationshipProductLocation.findOne({
+              where: { productId, locationId, isActive: true },
+              transaction: t
+            });
+            
+            if (!isLinked) {
+              // Fallback for COMPANY_ADMIN: Check if product belongs to any outlet of the same company
+              if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
+                const belongsToCompany = await relationshipProductLocation.findOne({
+                  where: { productId, isActive: true },
+                  include: [{
+                    model: masterLocation,
+                    as: "location",
+                    where: { companyId: targetCompanyId },
+                    attributes: ["id"]
+                  }],
+                  transaction: t
+                });
+
+                if (!belongsToCompany) {
+                  throw new Error(`Product ${productId} does not belong to your company's outlets`);
+                }
+                
+                // Optional: Auto-link to target outlet if needed, but for now just allow registration
+              } else {
+                throw new Error(`Product ${productId} does not belong to outlet ${locationId} or is not active`);
+              }
+            }
+          } else if (itemType === "PACKAGE") {
+            if (!packageId) throw new Error("packageId is required for PACKAGE type");
+            
+            const isLinked = await relationshipPackageLocation.findOne({
+              where: { packageId, locationId, isActive: true },
+              transaction: t
+            });
+            
+            if (!isLinked) {
+              if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
+                const belongsToCompany = await relationshipPackageLocation.findOne({
+                  where: { packageId, isActive: true },
+                  include: [{
+                    model: masterLocation,
+                    as: "location",
+                    where: { companyId: targetCompanyId },
+                    attributes: ["id"]
+                  }],
+                  transaction: t
+                });
+
+                if (!belongsToCompany) {
+                  throw new Error(`Package ${packageId} does not belong to your company's outlets`);
+                }
+              } else {
+                throw new Error(`Package ${packageId} does not belong to outlet ${locationId} or is not active`);
+              }
+            }
+          }
         }
 
         // Cek duplikasi di jam flash sale yang sama
