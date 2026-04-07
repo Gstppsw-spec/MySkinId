@@ -244,7 +244,7 @@ module.exports = {
             transaction: t
           });
           
-          if (!isLinked) throw new Error("Product does not belong to this outlet");
+          if (!isLinked) throw new Error(`Product ${productId} does not belong to outlet ${locationId} or is not active`);
         } else if (itemType === "PACKAGE") {
           if (!packageId) throw new Error("packageId is required for PACKAGE type");
           
@@ -253,7 +253,7 @@ module.exports = {
             transaction: t
           });
           
-          if (!isLinked) throw new Error("Package does not belong to this outlet");
+          if (!isLinked) throw new Error(`Package ${packageId} does not belong to outlet ${locationId} or is not active`);
         }
 
         // Cek duplikasi di jam flash sale yang sama
