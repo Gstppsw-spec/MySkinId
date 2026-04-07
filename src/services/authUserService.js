@@ -325,7 +325,7 @@ module.exports = {
           {
             model: masterRole,
             as: "role",
-            attributes: ["id", "name"],
+            attributes: ["id", "name", "roleCode"],
             where: {
               roleCode: {
                 [Op.in]: allowedRoles,
@@ -336,13 +336,12 @@ module.exports = {
             model: relationshipUserLocation,
             as: "userLocations",
             required: false,
-            where: { isactive: true },
+            // Hapus isactive: true di sini agar left join tetap jalan meskipun status bermasalah
             include: [
               {
                 model: masterLocation,
                 as: "location",
                 required: false,
-                where: { isactive: true },
                 include: [
                   {
                     model: masterCompany,
@@ -357,7 +356,6 @@ module.exports = {
             model: relationshipUserCompany,
             as: "userCompanies",
             required: false,
-            where: { isactive: true },
             include: [
               {
                 model: masterCompany,
@@ -379,14 +377,25 @@ module.exports = {
       }
 
       const data = rows.map((user) => {
-        let locationName = null;
+        const locations = (user.userLocations || [])
+          .map(ul => ul.location?.name)
+          .filter(name => !!name);
+        
+        let locationName = locations.length > 0 ? locations.join(", ") : null;
         let companyName = null;
         
+        // Prioritas Company Name: Dari lokasi dulu, fallback ke User-Company link
         if (user.userLocations && user.userLocations.length > 0) {
-          locationName = user.userLocations[0].location?.name || null;
-          companyName = user.userLocations[0].location?.company?.name || null;
-        } else if (user.userCompanies && user.userCompanies.length > 0) {
-          companyName = user.userCompanies[0].company?.name || null;
+          companyName = user.userLocations.find(ul => ul.location?.company?.name)?.location?.company?.name || null;
+        }
+        
+        if (!companyName && user.userCompanies && user.userCompanies.length > 0) {
+          companyName = user.userCompanies.find(uc => uc.company?.name)?.company?.name || null;
+        }
+
+        // Kalau role adalah COMPANY_ADMIN dan lokasi kosong, coba isi location dengan companyName
+        if (!locationName && user.role?.roleCode === "COMPANY_ADMIN" && companyName) {
+          locationName = companyName;
         }
 
         return {
@@ -450,7 +459,7 @@ module.exports = {
           {
             model: masterRole,
             as: "role",
-            attributes: ["id", "name"],
+            attributes: ["id", "name", "roleCode"],
             where: {
               roleCode: {
                 [Op.in]: allowedRoles,
@@ -460,7 +469,6 @@ module.exports = {
           {
             model: relationshipUserCompany,
             as: "userCompanies",
-            where: { isactive: true },
             required: false,
             include: [
               {
@@ -474,17 +482,11 @@ module.exports = {
             model: relationshipUserLocation,
             as: "userLocations",
             required: false,
-            where: {
-              isactive: true,
-            },
             include: [
               {
                 model: masterLocation,
                 as: "location",
                 required: false,
-                where: {
-                  isactive: true,
-                },
               },
             ],
           },
@@ -501,14 +503,23 @@ module.exports = {
       }
 
       const data = rows.map((user) => {
-        let locationName = null;
+        const locations = (user.userLocations || [])
+          .map(ul => ul.location?.name)
+          .filter(name => !!name);
+        
+        let locationName = locations.length > 0 ? locations.join(", ") : null;
         let companyName = null;
         
         if (user.userLocations && user.userLocations.length > 0) {
-          locationName = user.userLocations[0].location?.name || null;
-          companyName = user.userLocations[0].location?.company?.name || null;
-        } else if (user.userCompanies && user.userCompanies.length > 0) {
-          companyName = user.userCompanies[0].company?.name || null;
+          companyName = user.userLocations.find(ul => ul.location?.company?.name)?.location?.company?.name || null;
+        }
+        
+        if (!companyName && user.userCompanies && user.userCompanies.length > 0) {
+          companyName = user.userCompanies.find(uc => uc.company?.name)?.company?.name || null;
+        }
+
+        if (!locationName && user.role?.roleCode === "COMPANY_ADMIN" && companyName) {
+          locationName = companyName;
         }
 
         return {

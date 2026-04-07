@@ -56,6 +56,12 @@ router.put(
   uploadLocationImages.array("photos", 10),
   masterLocationController.update,
 );
+router.delete(
+  "/:id",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  masterLocationController.delete,
+);
 router.patch(
   "/:id/status",
   verifyToken,

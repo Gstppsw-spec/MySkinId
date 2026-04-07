@@ -191,6 +191,29 @@ class MasterLocationService {
     }
   }
 
+  async delete(id, userId) {
+    try {
+      const location = await masterLocation.findByPk(id);
+      if (!location) {
+        return { status: false, message: "Location not found", data: null };
+      }
+
+      // Update deletedBy before destroying (soft-delete)
+      location.deletedBy = userId;
+      await location.save();
+      await location.destroy();
+
+      return {
+        status: true,
+        message: "Location deleted successfully",
+        data: { id },
+      };
+    } catch (error) {
+      console.error("Delete Location Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  }
+
   async update(id, data, files, userId) {
     try {
       const location = await masterLocation.findByPk(id);

@@ -32,6 +32,17 @@ class masterLocationController {
       : response.error(res, result.message, null);
   }
 
+  async delete(req, res) {
+    const { id } = req.params;
+    const userId = req.user?.id || null;
+
+    const result = await masterLocationService.delete(id, userId);
+
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  }
+
   async updateStatus(req, res) {
     const { id } = req.params;
     const { isactive } = req.body;
