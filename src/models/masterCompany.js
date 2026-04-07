@@ -49,6 +49,11 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "subDistrictId",
         as: "subDistrictDetails",
       });
+
+      this.hasMany(models.relationshipUserCompany, {
+        foreignKey: "companyId",
+        as: "userLinks",
+      });
     }
   }
 

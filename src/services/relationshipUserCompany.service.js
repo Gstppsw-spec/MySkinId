@@ -32,17 +32,29 @@ class RelationshipUserCompanyService {
     return data?.company || null;
   }
 
-  async getAllCompany(pagination = {}, name = null) {
+  async getAllCompany(pagination = {}, name = null, userId = null, roleCode = null) {
     const { limit, offset } = pagination;
     const { Op } = require("sequelize");
     const where = {};
     if (name) where.name = { [Op.like]: `%${name}%` };
 
+    const include = [];
+    if (roleCode && roleCode !== "SUPER_ADMIN") {
+      include.push({
+        model: relationshipUserCompany,
+        as: "userLinks",
+        where: { userId },
+        required: true,
+      });
+    }
+
     const { count, rows } = await masterCompany.findAndCountAll({
       where,
       limit,
       offset,
+      include,
       order: [["createdAt", "DESC"]],
+      distinct: true, // Untuk memastikan count benar saat ada join
     });
     return { data: rows, totalCount: count };
   }
@@ -113,17 +125,27 @@ class RelationshipUserCompanyService {
       }
     });
 
-    const [company, created] = await masterCompany.findOrCreate({
-      where: { name: cleanPayload.name },
-      defaults: cleanPayload,
-    });
+    // Coba cari data yang sudah ada (berdasarkan ID dulu, baru Nama)
+    let company;
+    if (cleanPayload.id) {
+      company = await masterCompany.findByPk(cleanPayload.id);
+    }
 
-    if (!created) {
+    if (!company) {
+      company = await masterCompany.findOne({
+        where: { name: cleanPayload.name }
+      });
+    }
+
+    if (company) {
       // Jika sudah ada, check verifikasi lalu update datanya
       if (company.isVerified) {
         throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
       }
       await company.update(cleanPayload);
+    } else {
+      // Jika tidak ada, buat baru
+      company = await masterCompany.create(cleanPayload);
     }
 
     // Pastikan relasi ke user terbuat jika userId disediakan
