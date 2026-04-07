@@ -9,9 +9,11 @@ const {
   masterLocation,
   masterLocationImage,
   relationshipUserLocation,
+  relationshipUserCompany,
   relationshipProductLocation,
   flashSale,
   flashSaleItem,
+  requestVerification,
 } = require("../models");
 const fs = require("fs");
 const flashSaleService = require("./flashSale.service");
@@ -846,13 +848,35 @@ module.exports = {
   async getProductByUser({ id: userId, roleCode, locationIds }, filters = {}, pagination = {}) {
     try {
       if (!locationIds || locationIds.length === 0) {
-        locationIds = await relationshipUserLocation
-          .findAll({
-            where: { userId },
-            attributes: ["locationId"],
-            raw: true,
-          })
-          .then((res) => res.map((r) => r.locationId));
+        if (roleCode === "COMPANY_ADMIN") {
+          const companyIds = await relationshipUserCompany
+            .findAll({
+              where: { userId },
+              attributes: ["companyId"],
+              raw: true,
+            })
+            .then((res) => res.map((r) => r.companyId));
+
+          if (companyIds.length) {
+            locationIds = await masterLocation
+              .findAll({
+                where: {
+                  companyId: { [Op.in]: companyIds },
+                },
+                attributes: ["id"],
+                raw: true,
+              })
+              .then((res) => res.map((r) => r.id));
+          }
+        } else if (roleCode !== "SUPER_ADMIN") {
+          locationIds = await relationshipUserLocation
+            .findAll({
+              where: { userId },
+              attributes: ["locationId"],
+              raw: true,
+            })
+            .then((res) => res.map((r) => r.locationId));
+        }
       }
 
       const { name } = filters;
@@ -892,6 +916,12 @@ module.exports = {
           as: "locations",
           through: { attributes: ["isActive"] },
           attributes: ["id", "name", "cityId", "districtId"],
+        },
+        {
+          model: requestVerification,
+          as: "verificationStatus",
+          attributes: ["status"],
+          required: false,
         },
       ];
 
@@ -945,7 +975,10 @@ module.exports = {
         },
         data: products.map((p) => {
           const plain = p.get({ plain: true });
-          return mapProductWithBackwardCompat(plain);
+          return {
+            ...mapProductWithBackwardCompat(plain),
+            statusVerification: plain.verificationStatus?.status || null,
+          };
         }),
       };
     } catch (error) {

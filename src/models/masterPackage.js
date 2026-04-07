@@ -33,6 +33,15 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "createdBy",
         as: "creator",
       });
+
+      masterPackage.hasOne(models.requestVerification, {
+        foreignKey: "refferenceId",
+        constraints: false,
+        scope: {
+          refferenceType: "package",
+        },
+        as: "verificationStatus",
+      });
     }
   }
 

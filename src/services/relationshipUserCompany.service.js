@@ -6,6 +6,7 @@ const {
   masterCity,
   masterDistrict,
   masterSubDistrict,
+  requestVerification,
 } = require("../models");
 
 class RelationshipUserCompanyService {
@@ -19,10 +20,16 @@ class RelationshipUserCompanyService {
           include: [
             {
               model: CompanyVerificationRequest,
-              as: "verificationRequests", // pastikan ini sesuai alias di association masterCompany
+              as: "verificationRequests",
               required: false,
-              order: [["createdAt", "DESC"]], // kalau mau urut terbaru
-              limit: 1, // ambil hanya request terakhir
+              order: [["createdAt", "DESC"]],
+              limit: 1,
+            },
+            {
+              model: requestVerification,
+              as: "verificationStatus",
+              attributes: ["status"],
+              required: false,
             },
           ],
         },
@@ -30,7 +37,13 @@ class RelationshipUserCompanyService {
       order: [["createdAt", "DESC"]],
     });
 
-    return data?.company || null;
+    if (!data?.company) return null;
+
+    const plain = data.company.get({ plain: true });
+    return {
+      ...plain,
+      statusVerification: plain.verificationStatus?.status || null,
+    };
   }
 
   async getAllCompany(pagination = {}, name = null, userId = null, roleCode = null) {

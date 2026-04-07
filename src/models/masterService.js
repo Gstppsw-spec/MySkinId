@@ -118,6 +118,15 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "refferenceId",
       as: "favorites",
     });
+
+    masterService.hasOne(models.requestVerification, {
+      foreignKey: "refferenceId",
+      constraints: false,
+      scope: {
+        refferenceType: "service",
+      },
+      as: "verificationStatus",
+    });
   };
 
   return masterService;

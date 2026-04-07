@@ -49,6 +49,15 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "createdBy",
         as: "creator",
       });
+
+      masterProduct.hasOne(models.requestVerification, {
+        foreignKey: "refferenceId",
+        constraints: false,
+        scope: {
+          refferenceType: "product",
+        },
+        as: "verificationStatus",
+      });
     }
   }
 

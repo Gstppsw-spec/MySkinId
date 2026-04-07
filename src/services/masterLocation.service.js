@@ -12,6 +12,7 @@ const {
   masterCity,
   masterDistrict,
   masterSubDistrict,
+  requestVerification,
 } = require("../models");
 
 const fs = require("fs");
@@ -546,6 +547,12 @@ class MasterLocationService {
             model: masterLocationImage,
             as: "images",
           },
+          {
+            model: requestVerification,
+            as: "verificationStatus",
+            attributes: ["status"],
+            required: false,
+          },
         ],
         distinct: true, // Important for findAndCountAll with includes
         limit,
@@ -557,26 +564,56 @@ class MasterLocationService {
         options.where.name = { [Op.like]: `%${name}%` };
       }
 
-      if (roleCode === "SUPER_ADMIN") {
-        const { count, rows } = await masterLocation.findAndCountAll(options);
-        return {
-          status: true,
-          message: "Location fetched successfully",
-          data: rows,
-          totalCount: count,
-        };
+      if (!locationIds || locationIds.length === 0) {
+        if (roleCode === "COMPANY_ADMIN") {
+          const companyIds = await relationshipUserCompany
+            .findAll({
+              where: { userId },
+              attributes: ["companyId"],
+              raw: true,
+            })
+            .then((res) => res.map((r) => r.companyId));
+
+          if (companyIds.length) {
+            locationIds = await masterLocation
+              .findAll({
+                where: {
+                  companyId: { [Op.in]: companyIds },
+                },
+                attributes: ["id"],
+                raw: true,
+              })
+              .then((res) => res.map((r) => r.id));
+          }
+        } else if (roleCode !== "SUPER_ADMIN") {
+          locationIds = await relationshipUserLocation
+            .findAll({
+              where: { userId },
+              attributes: ["locationId"],
+              raw: true,
+            })
+            .then((res) => res.map((r) => r.locationId));
+        }
       }
 
-      options.where.id = {
-        [Op.in]: locationIds,
-      };
+      if (roleCode !== "SUPER_ADMIN") {
+        options.where.id = { [Op.in]: locationIds };
+      }
 
       const { count, rows } = await masterLocation.findAndCountAll(options);
+
+      const mappedData = rows.map((loc) => {
+        const plain = loc.get({ plain: true });
+        return {
+          ...plain,
+          statusVerification: plain.verificationStatus?.status || null,
+        };
+      });
 
       return {
         status: true,
         message: "Location fetched successfully",
-        data: rows,
+        data: mappedData,
         totalCount: count,
       };
     } catch (error) {

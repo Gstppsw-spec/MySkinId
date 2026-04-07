@@ -181,6 +181,15 @@ module.exports = (sequelize, DataTypes) => {
       otherKey: "packageId",
       as: "packages",
     });
+
+    masterLocation.hasOne(models.requestVerification, {
+      foreignKey: "refferenceId",
+      constraints: false,
+      scope: {
+        refferenceType: "location",
+      },
+      as: "verificationStatus",
+    });
   };
 
   return masterLocation;

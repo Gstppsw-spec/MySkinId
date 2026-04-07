@@ -12,6 +12,8 @@ const {
   relationshipServiceLocation,
   flashSale,
   flashSaleItem,
+  requestVerification,
+  relationshipUserCompany,
 } = require("../models");
 const sequelize = require("../models").sequelize;
 const flashSaleService = require("./flashSale.service");
@@ -968,13 +970,35 @@ module.exports = {
   },
   async getPackageByUser({ id: userId, roleCode, locationIds }, filters = {}, pagination = {}) {
     if (!locationIds || locationIds.length === 0) {
-      locationIds = await relationshipUserLocation
-        .findAll({
-          where: { userId },
-          attributes: ["locationId"],
-          raw: true,
-        })
-        .then((res) => res.map((r) => r.locationId));
+      if (roleCode === "COMPANY_ADMIN") {
+        const companyIds = await relationshipUserCompany
+          .findAll({
+            where: { userId },
+            attributes: ["companyId"],
+            raw: true,
+          })
+          .then((res) => res.map((r) => r.companyId));
+
+        if (companyIds.length) {
+          locationIds = await masterLocation
+            .findAll({
+              where: {
+                companyId: { [Op.in]: companyIds },
+              },
+              attributes: ["id"],
+              raw: true,
+            })
+            .then((res) => res.map((r) => r.id));
+        }
+      } else if (roleCode !== "SUPER_ADMIN") {
+        locationIds = await relationshipUserLocation
+          .findAll({
+            where: { userId },
+            attributes: ["locationId"],
+            raw: true,
+          })
+          .then((res) => res.map((r) => r.locationId));
+      }
     }
     
     const { name } = filters;
@@ -991,6 +1015,12 @@ module.exports = {
         as: "locations",
         through: { attributes: ["isActive"] },
         attributes: ["id", "name", "cityId", "districtId"],
+      },
+      {
+        model: requestVerification,
+        as: "verificationStatus",
+        attributes: ["status"],
+        required: false,
       },
       {
         model: masterPackageItems,
@@ -1062,7 +1092,10 @@ module.exports = {
         },
         data: packages.map((p) => {
           const plain = p.get({ plain: true });
-          return mapPackageWithBackwardCompat(plain);
+          return {
+            ...mapPackageWithBackwardCompat(plain),
+            statusVerification: plain.verificationStatus?.status || null,
+          };
         }),
       };
     } catch (error) {

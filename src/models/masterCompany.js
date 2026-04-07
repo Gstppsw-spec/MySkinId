@@ -54,6 +54,15 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "companyId",
         as: "userLinks",
       });
+
+      this.hasOne(models.requestVerification, {
+        foreignKey: "refferenceId",
+        constraints: false,
+        scope: {
+          refferenceType: "company",
+        },
+        as: "verificationStatus",
+      });
     }
   }
 
