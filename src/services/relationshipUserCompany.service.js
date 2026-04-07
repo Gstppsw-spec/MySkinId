@@ -61,10 +61,16 @@ class RelationshipUserCompanyService {
       throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
     }
 
-    // Resolve region IDs to names if provided in the payload properties (kept as province, city, etc.)
-    await this._resolveRegionData(payload);
+    // Filter out association fields to avoid validation errors
+    const allowedFields = Object.keys(masterCompany.rawAttributes);
+    const cleanPayload = {};
+    Object.keys(payload).forEach((key) => {
+      if (allowedFields.includes(key)) {
+        cleanPayload[key] = payload[key];
+      }
+    });
 
-    await company.update(payload);
+    await company.update(cleanPayload);
     return company;
   }
 
@@ -77,7 +83,16 @@ class RelationshipUserCompanyService {
     // Resolve region IDs to names
     await this._resolveRegionData(payload);
 
-    return await masterCompany.create(payload);
+    // Filter out association fields to avoid validation errors
+    const allowedFields = Object.keys(masterCompany.rawAttributes);
+    const cleanPayload = {};
+    Object.keys(payload).forEach((key) => {
+      if (allowedFields.includes(key)) {
+        cleanPayload[key] = payload[key];
+      }
+    });
+
+    return await masterCompany.create(cleanPayload);
   }
 
   async upsertCompany(payload) {
@@ -89,9 +104,18 @@ class RelationshipUserCompanyService {
     // Resolve region IDs to names
     await this._resolveRegionData(payload);
 
+    // Filter out association fields to avoid validation errors
+    const allowedFields = Object.keys(masterCompany.rawAttributes);
+    const cleanPayload = {};
+    Object.keys(payload).forEach((key) => {
+      if (allowedFields.includes(key)) {
+        cleanPayload[key] = payload[key];
+      }
+    });
+
     const [company, created] = await masterCompany.findOrCreate({
-      where: { name: payload.name },
-      defaults: payload,
+      where: { name: cleanPayload.name },
+      defaults: cleanPayload,
     });
 
     if (!created) {
@@ -99,7 +123,7 @@ class RelationshipUserCompanyService {
       if (company.isVerified) {
         throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
       }
-      await company.update(payload);
+      await company.update(cleanPayload);
     }
 
     // Pastikan relasi ke user terbuat jika userId disediakan

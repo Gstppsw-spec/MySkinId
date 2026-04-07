@@ -106,7 +106,10 @@ class RelationshipUserCompanyController {
       const data = await RelationshipUserCompanyService.upsertCompany(payload);
       return response.success(res, "Company berhasil diproses (upsert)", data);
     } catch (error) {
-      console.error(error);
+      console.error("UPSERT_COMPANY_ERROR:", error);
+      if (error.name === "SequelizeValidationError") {
+        return response.error(res, "Validation error: " + error.errors.map(e => e.message).join(", "), error.errors, 400);
+      }
       return response.serverError(res, error);
     }
   }

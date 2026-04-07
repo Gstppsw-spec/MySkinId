@@ -121,10 +121,6 @@ module.exports = (sequelize, DataTypes) => {
       createdAt: DataTypes.DATE,
       updatedAt: DataTypes.DATE,
       deletedAt: DataTypes.DATE,
-      isactive: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false,
-      },
       isVerified: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
