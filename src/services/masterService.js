@@ -5,6 +5,7 @@ const {
   masterLocationImage,
   customerFavorites,
   relationshipServiceLocation,
+  relationshipUserLocation,
 } = require("../models");
 
 const { Op, Sequelize } = require("sequelize");
@@ -512,8 +513,26 @@ module.exports = {
     }
   },
 
-  async getServiceByUser({ locationIds, roleCode }) {
+  async getServiceByUser({ id: userId, locationIds, roleCode }, filters = {}, pagination = {}) {
     try {
+      if (!locationIds || locationIds.length === 0) {
+        locationIds = await relationshipUserLocation
+          .findAll({
+            where: { userId },
+            attributes: ["locationId"],
+            raw: true,
+          })
+          .then((res) => res.map((r) => r.locationId));
+      }
+
+      const { name } = filters;
+      const { limit, offset } = pagination;
+
+      const whereClause = {};
+      if (name) {
+        whereClause.name = { [Op.like]: `%${name}%` };
+      }
+
       const include = [
         {
           model: masterSubCategoryService,
@@ -538,46 +557,54 @@ module.exports = {
         },
       ];
 
+      let finalInclude;
       if (roleCode === "SUPER_ADMIN") {
-        const service = await masterService.findAll({
-          include,
-          attributes: {
-            exclude: ["createdAt", "updatedAt"],
-          },
+        finalInclude = include;
+      } else {
+        // Filter: services linked to user's locations
+        finalInclude = include.map((inc) => {
+          if (inc.as === "locations") {
+            return {
+              ...inc,
+              where: { id: { [Op.in]: locationIds } },
+              required: true,
+            };
+          }
+          return inc;
         });
-
-        return {
-          status: true,
-          message: "Success",
-          data: service.map((s) => {
-            const plain = s.get({ plain: true });
-            return mapServiceWithBackwardCompat(plain);
-          }),
-        };
       }
 
-      // Filter: services linked to user's locations
-      const locationInclude = include.map((inc) => {
-        if (inc.as === "locations") {
-          return {
-            ...inc,
-            where: { id: { [Op.in]: locationIds } },
-            required: true,
-          };
-        }
-        return inc;
-      });
-
-      const service = await masterService.findAll({
-        include: locationInclude,
+      const { count: totalCount, rows: service } = await masterService.findAndCountAll({
+        where: whereClause,
+        include: finalInclude,
         attributes: {
           exclude: ["createdAt", "updatedAt"],
         },
+        distinct: true,
+        limit,
+        offset,
+      });
+
+      const totalActiveItem = await masterService.count({
+        where: { ...whereClause, isActive: true },
+        include: finalInclude,
+        distinct: true,
+      });
+
+      const totalVerifiedItem = await masterService.count({
+        where: { ...whereClause, isVerified: true },
+        include: finalInclude,
+        distinct: true,
       });
 
       return {
         status: true,
         message: "Success",
+        totalCount,
+        stats: {
+          totalActiveItem,
+          totalVerifiedItem
+        },
         data: service.map((s) => {
           const plain = s.get({ plain: true });
           return mapServiceWithBackwardCompat(plain);

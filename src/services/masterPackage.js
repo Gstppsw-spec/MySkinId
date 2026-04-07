@@ -966,8 +966,7 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
-
-  async getPackageByUser({ id: userId, roleCode, locationIds }) {
+  async getPackageByUser({ id: userId, roleCode, locationIds }, filters = {}, pagination = {}) {
     if (!locationIds || locationIds.length === 0) {
       locationIds = await relationshipUserLocation
         .findAll({
@@ -977,6 +976,15 @@ module.exports = {
         })
         .then((res) => res.map((r) => r.locationId));
     }
+    
+    const { name } = filters;
+    const { limit, offset } = pagination;
+
+    const whereClause = {};
+    if (name) {
+      whereClause.name = { [Op.like]: `%${name}%` };
+    }
+
     const include = [
       {
         model: masterLocation,
@@ -1004,51 +1012,59 @@ module.exports = {
       },
     ];
     try {
+      let finalInclude;
       if (roleCode === "SUPER_ADMIN") {
-        const packages = await masterPackage.findAll({
-          include,
-          attributes: {
-            exclude: ["createdAt", "updatedAt"],
-          },
+        finalInclude = include;
+      } else {
+        // Filter by user's locations via pivot
+        finalInclude = include.map((inc) => {
+          if (inc.as === "locations") {
+            return {
+              ...inc,
+              where: { id: { [Op.in]: locationIds } },
+              required: true,
+            };
+          }
+          return inc;
         });
-        return {
-          status: true,
-          message: "Success",
-          data: packages.map((p) => {
-            const plain = p.get({ plain: true });
-            return mapPackageWithBackwardCompat(plain);
-          }),
-        };
       }
 
-      // Filter by user's locations via pivot
-      const locationInclude = include.map((inc) => {
-        if (inc.as === "locations") {
-          return {
-            ...inc,
-            where: { id: { [Op.in]: locationIds } },
-            required: true,
-          };
-        }
-        return inc;
-      });
-
-      const packages = await masterPackage.findAll({
-        include: locationInclude,
+      const { count: totalCount, rows: packages } = await masterPackage.findAndCountAll({
+        where: whereClause,
+        include: finalInclude,
         attributes: {
           exclude: ["createdAt", "updatedAt"],
         },
+        distinct: true,
+        limit,
+        offset,
+      });
+
+      const totalActiveItem = await masterPackage.count({
+        where: { ...whereClause, isActive: true },
+        include: finalInclude,
+        distinct: true,
+      });
+
+      const totalVerifiedItem = await masterPackage.count({
+        where: { ...whereClause, isVerified: true },
+        include: finalInclude,
+        distinct: true,
       });
 
       return {
         status: true,
         message: "Success",
+        totalCount,
+        stats: {
+          totalActiveItem,
+          totalVerifiedItem
+        },
         data: packages.map((p) => {
           const plain = p.get({ plain: true });
           return mapPackageWithBackwardCompat(plain);
         }),
       };
-
     } catch (error) {
       return { status: false, message: error.message };
     }

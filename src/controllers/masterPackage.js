@@ -138,11 +138,20 @@ module.exports = {
   async getPackageByUser(req, res) {
     try {
       const user = req.user;
-      console.log(user);
-      const result = await packageService.getPackageByUser(user);
+      const { name, page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
+
+      const result = await packageService.getPackageByUser(user, { name }, pagination);
       if (!result.status)
         return response.error(res, result.message, result.data);
-      return response.success(res, result.message, result.data);
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        stats: result.stats,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
     } catch (error) {
       return response.serverError(res, error);
     }

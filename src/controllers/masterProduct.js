@@ -154,10 +154,20 @@ module.exports = {
   async getProductByUser(req, res) {
     try {
       const user = req.user;
-      const result = await productService.getProductByUser(user);
+      const { name, page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
+
+      const result = await productService.getProductByUser(user, { name }, pagination);
       if (!result.status)
         return response.error(res, result.message, result.data);
-      return response.success(res, result.message, result.data);
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        stats: result.stats,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
     } catch (error) {
       return response.serverError(res, error);
     }

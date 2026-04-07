@@ -843,7 +843,7 @@ module.exports = {
     }
   },
 
-  async getProductByUser({ id: userId, roleCode, locationIds }) {
+  async getProductByUser({ id: userId, roleCode, locationIds }, filters = {}, pagination = {}) {
     try {
       if (!locationIds || locationIds.length === 0) {
         locationIds = await relationshipUserLocation
@@ -853,6 +853,14 @@ module.exports = {
             raw: true,
           })
           .then((res) => res.map((r) => r.locationId));
+      }
+
+      const { name } = filters;
+      const { limit, offset } = pagination;
+
+      const whereClause = {};
+      if (name) {
+        whereClause.name = { [Op.like]: `%${name}%` };
       }
 
       const include = [
@@ -887,47 +895,55 @@ module.exports = {
         },
       ];
 
+      let finalInclude;
       if (roleCode === "SUPER_ADMIN") {
-        const product = await masterProduct.findAll({
-          include,
-          attributes: {
-            exclude: ["createdAt", "updatedAt"],
-          },
+        finalInclude = include;
+      } else {
+        // Filter: products linked to any of the user's locationIds
+        finalInclude = include.map((inc) => {
+          if (inc.as === "locations") {
+            return {
+              ...inc,
+              where: { id: { [Op.in]: locationIds } },
+              required: true,
+            };
+          }
+          return inc;
         });
-
-        return {
-          status: true,
-          message: "Success",
-          data: product.map((p) => {
-            const plain = p.get({ plain: true });
-            return mapProductWithBackwardCompat(plain);
-          }),
-        };
       }
 
-      // Filter: products linked to any of the user's locationIds
-      const locationInclude = include.map((inc) => {
-        if (inc.as === "locations") {
-          return {
-            ...inc,
-            where: { id: { [Op.in]: locationIds } },
-            required: true,
-          };
-        }
-        return inc;
-      });
-
-      const product = await masterProduct.findAll({
-        include: locationInclude,
+      const { count: totalCount, rows: products } = await masterProduct.findAndCountAll({
+        where: whereClause,
+        include: finalInclude,
         attributes: {
           exclude: ["createdAt", "updatedAt"],
         },
+        distinct: true,
+        limit,
+        offset,
+      });
+
+      const totalActiveItem = await masterProduct.count({
+        where: { ...whereClause, isActive: true },
+        include: finalInclude,
+        distinct: true,
+      });
+
+      const totalVerifiedItem = await masterProduct.count({
+        where: { ...whereClause, isVerified: true },
+        include: finalInclude,
+        distinct: true,
       });
 
       return {
         status: true,
         message: "Success",
-        data: product.map((p) => {
+        totalCount,
+        stats: {
+          totalActiveItem,
+          totalVerifiedItem
+        },
+        data: products.map((p) => {
           const plain = p.get({ plain: true });
           return mapProductWithBackwardCompat(plain);
         }),
