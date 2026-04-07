@@ -199,6 +199,14 @@ class MasterLocationService {
         return { status: false, message: "Location not found", data: null };
       }
 
+      if (location.isVerified) {
+        return {
+          status: false,
+          message: "Location sudah diverifikasi dan tidak dapat dihapus",
+          data: null,
+        };
+      }
+
       // Update deletedBy before destroying (soft-delete)
       location.deletedBy = userId;
       await location.save();

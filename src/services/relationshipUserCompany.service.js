@@ -213,6 +213,10 @@ class RelationshipUserCompanyService {
     const company = await masterCompany.findByPk(id);
     if (!company) throw new Error("Company tidak ditemukan");
 
+    if (company.isVerified) {
+      throw new Error("Company sudah diverifikasi dan tidak dapat dihapus");
+    }
+
     // If we want to track who deleted it before soft delete
     if (deletedBy) {
       await company.update({ deletedBy });

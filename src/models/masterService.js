@@ -96,6 +96,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "masterService",
       timestamps: true,
+      paranoid: true,
     }
   );
 

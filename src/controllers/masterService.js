@@ -94,6 +94,18 @@ module.exports = {
     }
   },
 
+  async delete(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await service.deleteService(id);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async getByLocationId(req, res) {
     try {
       const { locationId } = req.params;

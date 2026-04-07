@@ -460,6 +460,34 @@ module.exports = {
     }
   },
 
+  async deleteService(id) {
+    try {
+      const service = await masterService.findByPk(id);
+
+      if (!service) {
+        return { status: false, message: "Service not found", data: null };
+      }
+
+      if (service.isVerified) {
+        return {
+          status: false,
+          message: "Service sudah diverifikasi dan tidak dapat dihapus",
+          data: null,
+        };
+      }
+
+      await service.destroy(); // Soft delete because of paranoid true
+      return {
+        status: true,
+        message: "Service deleted successfully",
+        data: null,
+      };
+    } catch (error) {
+      console.error("Delete Service Error:", error);
+      return { status: false, message: error.message, data: null };
+    }
+  },
+
   async getByLocationId(locationId, customerId, isCustomer) {
     try {
       const where = {};

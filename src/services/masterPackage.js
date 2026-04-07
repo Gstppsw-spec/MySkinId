@@ -921,11 +921,18 @@ module.exports = {
         return { status: false, message: "Data tidak lengkap", data: null };
       }
       const pkg = await masterPackage.findByPk(id);
-
       if (!pkg) {
         return {
           status: false,
           message: "Package tidak ditemukan",
+          data: null,
+        };
+      }
+
+      if (pkg.isVerified) {
+        return {
+          status: false,
+          message: "Package sudah diverifikasi dan tidak dapat dihapus",
           data: null,
         };
       }

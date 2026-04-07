@@ -10,6 +10,7 @@ router.get("/location/:locationId", service.getByLocationId);
 router.get("/user", verifyToken, service.getServiceByUser);
 router.get("/", service.getAll);
 router.get("/:id", service.getById);
+router.delete("/:id", verifyToken, allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"), service.delete);
 
 router.put(
   "/:serviceId/location/:locationId/toggle-active",
