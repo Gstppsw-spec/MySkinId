@@ -7,6 +7,8 @@ const {
   masterPackage,
   masterLocation,
   masterLocationImage,
+  relationshipProductLocation,
+  relationshipPackageLocation,
   sequelize,
 } = require("../models");
 
@@ -233,17 +235,25 @@ module.exports = {
 
         if (!itemType || !["PRODUCT", "PACKAGE"].includes(itemType)) throw new Error("itemType must be PRODUCT or PACKAGE");
         
-        // Ownership Validation
+        // Ownership Validation (Checking pivot tables for Multi-Location support)
         if (itemType === "PRODUCT") {
           if (!productId) throw new Error("productId is required for PRODUCT type");
-          const product = await masterProduct.findByPk(productId);
-          if (!product) throw new Error(`Product ${productId} not found`);
-          if (product.locationId !== locationId) throw new Error("Product does not belong to this outlet");
+          
+          const isLinked = await relationshipProductLocation.findOne({
+            where: { productId, locationId, isActive: true },
+            transaction: t
+          });
+          
+          if (!isLinked) throw new Error("Product does not belong to this outlet");
         } else if (itemType === "PACKAGE") {
           if (!packageId) throw new Error("packageId is required for PACKAGE type");
-          const pkg = await masterPackage.findByPk(packageId);
-          if (!pkg) throw new Error(`Package ${packageId} not found`);
-          if (pkg.locationId !== locationId) throw new Error("Package does not belong to this outlet");
+          
+          const isLinked = await relationshipPackageLocation.findOne({
+            where: { packageId, locationId, isActive: true },
+            transaction: t
+          });
+          
+          if (!isLinked) throw new Error("Package does not belong to this outlet");
         }
 
         // Cek duplikasi di jam flash sale yang sama
