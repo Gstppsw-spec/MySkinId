@@ -148,6 +148,20 @@ class GooglePlacesController {
       return res.status(500).json({ status: false, message: error.message });
     }
   }
+  /**
+   * GET /api/v2/google-places/search
+   * Search for Google Place ID candidates by name + coordinates
+   */
+  async searchPlaces(req, res) {
+    try {
+      const { name, lat, lng } = req.query;
+      const result = await googlePlacesService.searchPlaces(name, lat, lng);
+
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  }
 }
 
 module.exports = new GooglePlacesController();

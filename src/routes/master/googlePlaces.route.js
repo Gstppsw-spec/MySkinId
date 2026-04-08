@@ -4,6 +4,7 @@ const googlePlacesController = require("../../controllers/googlePlaces.controlle
 const { verifyToken } = require("../../middlewares/authMiddleware");
 
 // Public: Get Google rating for a location
+router.get("/search", verifyToken, googlePlacesController.searchPlaces);
 router.get("/:locationId/rating", googlePlacesController.getGoogleRating);
 
 // Public: Get Google reviews for a location

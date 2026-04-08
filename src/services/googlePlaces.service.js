@@ -577,6 +577,76 @@ class GooglePlacesService {
       return { status: false, message: error.message };
     }
   }
+  /**
+   * General Google Places Search by name/query
+   * Returns a list of candidates from Google Maps
+   */
+  async searchPlaces(query, lat, lng) {
+    try {
+      if (!query) {
+        return { status: false, message: "Query pencarian harus diisi" };
+      }
+
+      // Use Google Places Text Search (New) API
+      const requestBody = {
+        textQuery: query,
+      };
+
+      // Add location bias if coordinates available
+      if (lat && lng) {
+        requestBody.locationBias = {
+          circle: {
+            center: {
+              latitude: parseFloat(lat),
+              longitude: parseFloat(lng),
+            },
+            radius: 5000.0, // 5km radius
+          },
+        };
+      }
+
+      const response = await axios.post(
+        "https://places.googleapis.com/v1/places:searchText",
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY,
+            "X-Goog-FieldMask":
+              "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.location",
+          },
+        }
+      );
+
+      const places = response.data.places || [];
+
+      // Map results to a clearer format
+      const candidates = places.map((place, index) => ({
+        googlePlaceId: place.id,
+        name: place.displayName?.text || "",
+        address: place.formattedAddress || "",
+        rating: place.rating || null,
+        ratingCount: place.userRatingCount || 0,
+        latitude: place.location?.latitude || null,
+        longitude: place.location?.longitude || null,
+      }));
+
+      return {
+        status: true,
+        message: `Ditemukan ${candidates.length} lokasi`,
+        data: candidates,
+      };
+    } catch (error) {
+      console.error(
+        `[GooglePlaces] Error searching for "${query}":`,
+        error.response?.data || error.message
+      );
+      return {
+        status: false,
+        message: error.response?.data?.error?.message || error.message,
+      };
+    }
+  }
 }
 
 module.exports = new GooglePlacesService();

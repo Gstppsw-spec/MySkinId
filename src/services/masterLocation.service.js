@@ -137,19 +137,9 @@ class MasterLocationService {
       // Auto-lookup Google Place ID (non-blocking)
       try {
         const googlePlacesService = require("./googlePlaces.service");
-        let placeId = null;
+        let placeId = data.googlePlaceId || newLocation.googlePlaceId || null;
 
-        // Priority 1: User provided a Google Maps URL
-        if (data.googleMapsUrl) {
-          const extractResult = await googlePlacesService.extractPlaceIdFromUrl(data.googleMapsUrl);
-          if (extractResult.status) {
-            placeId = extractResult.placeId;
-          } else {
-            console.warn(`[Location Create] Could not extract Place ID from URL: ${extractResult.message}`);
-          }
-        }
-
-        // Priority 2: Auto-search by name + coordinates
+        // Priority 1: Auto-search by name + coordinates if no Place ID provided
         if (!placeId) {
           const findResult = await googlePlacesService.findPlaceId(newLocation.id);
           if (findResult.status && findResult.data?.candidates?.length === 1) {
