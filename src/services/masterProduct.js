@@ -485,6 +485,37 @@ module.exports = {
           paranoid: false,
         });
         if (existing) {
+          if (existing.deletedAt) {
+            // Restore and reuse
+            await existing.restore();
+            console.log(`[Product Create] Restored soft-deleted product with SKU: ${sku}`);
+            
+            // Redirect to update logic (or just update here)
+            // For now, we update it in place since we're in the create flow
+            const updateProps = {
+              name: data.name,
+              description: data.description || existing.description,
+              isAvailable: data.isAvailable ?? existing.isAvailable,
+              price: data.price ? Number(data.price) : existing.price,
+              discountPercent: data.discountPercent !== undefined ? Number(data.discountPercent) : existing.discountPercent,
+              isVerified: false, // Reset verification on significant recreation?
+            };
+            await existing.update(updateProps);
+            
+            // Re-assign associations (locations, categories, etc.)
+            if (locationIds && Array.isArray(locationIds)) {
+              await existing.setLocations(locationIds);
+            }
+            if (categoryIds && Array.isArray(categoryIds)) {
+              await existing.setCategories(categoryIds);
+            }
+            
+            return {
+              status: true,
+              message: "Product restored and updated successfully",
+              data: existing,
+            };
+          }
           return { status: false, message: "SKU already exists", data: null };
         }
       }

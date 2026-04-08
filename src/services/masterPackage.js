@@ -361,6 +361,54 @@ module.exports = {
         });
 
         if (existing) {
+          if (existing.deletedAt) {
+            // Restore and reuse
+            await existing.restore({ transaction });
+            console.log(`[Package Create] Restored soft-deleted package with code: ${code}`);
+
+            await existing.update(
+              {
+                name: data.name,
+                description: data.description || existing.description,
+                price: data.price ?? existing.price,
+                discountPercent: data.discountPercent ?? existing.discountPercent,
+                isActive: data.isActive ?? existing.isActive,
+                isVerified: false,
+              },
+              { transaction }
+            );
+
+            // Re-create items
+            if (data.items && Array.isArray(data.items)) {
+              await masterPackageItems.destroy({
+                where: { packageId: existing.id },
+                transaction,
+              });
+              const itemRecords = data.items.map(it => ({
+                serviceId: it.serviceId,
+                qty: it.qty || 1,
+                packageId: existing.id
+              }));
+              await masterPackageItems.bulkCreate(itemRecords, { transaction });
+            }
+
+            await transaction.commit();
+
+            // Re-assign associations (outside transaction)
+            if (locationIds && Array.isArray(locationIds)) {
+              await existing.setLocations(locationIds);
+            }
+            if (consultationCategoryIds && Array.isArray(consultationCategoryIds)) {
+              await existing.setConsultationCategories(consultationCategoryIds);
+            }
+
+            return {
+              status: true,
+              message: "Package restored and updated successfully",
+              data: existing,
+            };
+          }
+
           await transaction.rollback();
           return {
             status: false,

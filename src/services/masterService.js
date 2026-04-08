@@ -346,6 +346,55 @@ module.exports = {
           data: null,
         };
       }
+
+      // Check for duplicates (including soft-deleted)
+      const existing = await masterService.findOne({
+        where: { name },
+        paranoid: false,
+      });
+
+      if (existing) {
+        if (existing.deletedAt) {
+          // Restore and reuse
+          await existing.restore();
+          console.log(`[Service Create] Restored soft-deleted service with name: ${name}`);
+
+          await existing.update({
+            description,
+            compotition,
+            postTreatmentCare,
+            contraIndication,
+            securityAndCertification,
+            durationOfResults,
+            indicationOfUse,
+            benefit,
+            duration,
+            price: Number(price),
+            discountPercent,
+            isActive,
+            isVerified: false,
+          });
+
+          // Re-assign associations
+          await existing.setLocations(locationIds);
+          if (categoryIds && Array.isArray(categoryIds)) {
+            await existing.setCategories(categoryIds);
+          }
+
+          return {
+            status: true,
+            message: "Service restored and updated successfully",
+            data: existing,
+          };
+        }
+
+        return {
+          status: false,
+          message: "Service with this name already exists",
+          data: null,
+        };
+      }
+
       const newService = await masterService.create({
         name,
         description,

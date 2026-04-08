@@ -223,6 +223,12 @@ class RelationshipUserCompanyService {
     }
 
     if (company) {
+      // Jika dalam status soft-delete, restore dulu
+      if (company.deletedAt) {
+        await company.restore();
+        console.log(`[UPSERT] Restored soft-deleted company: ${company.id}`);
+      }
+
       // Jika sudah ada, check verifikasi lalu update datanya
       if (company.isVerified) {
         const statusValue = payload.isactive !== undefined ? payload.isactive : payload.isActive;
@@ -232,7 +238,14 @@ class RelationshipUserCompanyService {
         }
         throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
       }
-      await company.update(cleanPayload);
+
+      // Pastikan isactive true jika kita mereaktivasi atau mengupdate data yang belum diverifikasi
+      const finalPayload = { ...cleanPayload };
+      if (finalPayload.isactive === undefined && finalPayload.isActive === undefined) {
+        finalPayload.isactive = true;
+      }
+
+      await company.update(finalPayload);
     } else {
       // Jika tidak ada, buat baru
       company = await masterCompany.create(cleanPayload);
