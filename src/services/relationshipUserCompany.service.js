@@ -66,17 +66,63 @@ class RelationshipUserCompanyService {
       where,
       limit,
       offset,
-      include,
+      include: [
+        ...include,
+        {
+          model: CompanyVerificationRequest,
+          as: "verificationRequests",
+          required: false,
+          order: [["createdAt", "DESC"]],
+          limit: 1,
+        },
+        {
+          model: requestVerification,
+          as: "verificationStatus",
+          attributes: ["status"],
+          required: false,
+        },
+      ],
       order: [["createdAt", "DESC"]],
-      distinct: true, // Untuk memastikan count benar saat ada join
+      distinct: true,
     });
-    return { data: rows, totalCount: count };
+
+    const data = rows.map((row) => {
+      const plain = row.get({ plain: true });
+      return {
+        ...plain,
+        statusVerification: plain.verificationStatus?.status || null,
+      };
+    });
+
+    return { data, totalCount: count };
   }
 
   async detailCompany(id) {
-    const company = await masterCompany.findByPk(id);
+    const company = await masterCompany.findByPk(id, {
+      include: [
+        {
+          model: CompanyVerificationRequest,
+          as: "verificationRequests",
+          required: false,
+          order: [["createdAt", "DESC"]],
+          limit: 1,
+        },
+        {
+          model: requestVerification,
+          as: "verificationStatus",
+          attributes: ["status"],
+          required: false,
+        },
+      ],
+    });
+
     if (!company) throw new Error("Company tidak ditemukan");
-    return company;
+
+    const plain = company.get({ plain: true });
+    return {
+      ...plain,
+      statusVerification: plain.verificationStatus?.status || null,
+    };
   }
 
   async updateCompany(id, payload) {
