@@ -69,10 +69,11 @@ class RequestVerificationService {
                     refferenceId,
                     refferenceType,
                 },
+                order: [["createdAt", "DESC"]],
             });
 
             if (checkRequest) {
-                if (checkRequest.status === "rejected") {
+                if (checkRequest.status && checkRequest.status.toLowerCase() === "rejected") {
                     // Update existing rejected request to pending
                     checkRequest.status = "pending";
                     checkRequest.note = note || checkRequest.note;
