@@ -68,16 +68,28 @@ class RequestVerificationService {
                 where: {
                     refferenceId,
                     refferenceType,
-                    status: ["pending", "approved"],
                 },
             });
 
-            if (checkRequest)
+            if (checkRequest) {
+                if (checkRequest.status === "rejected") {
+                    // Update existing rejected request to pending
+                    checkRequest.status = "pending";
+                    checkRequest.note = note || checkRequest.note;
+                    await checkRequest.save();
+                    return {
+                        status: true,
+                        message: "Request updated to pending",
+                        data: checkRequest,
+                    };
+                }
+
                 return {
                     status: false,
                     message: "Request sudah ada",
                     data: null,
                 };
+            }
 
             const result = await requestVerification.create({
                 refferenceId,
@@ -150,21 +162,29 @@ class RequestVerificationService {
                 }
             }
 
-            const { count, rows: requests } = await requestVerification.findAndCountAll({
+            const { count: totalCount, rows: requests } = await requestVerification.findAndCountAll({
                 where,
                 include,
                 order: [["createdAt", "DESC"]],
-                limit,
-                offset,
                 subQuery: false,
                 distinct: true,
             });
 
+            // Filter out requests where the associated entity is null (soft-deleted)
+            const filteredRequests = requests.filter((req) => {
+                const entity = req.company || req.location || req.product || req.service || req.package;
+                return entity !== null && entity !== undefined;
+            });
+
+            // If we are using pagination, the count might be slightly off due to JS filtering
+            // but for a small number of deletions it's usually acceptable.
+            // For a perfect count, we would need a more complex SQL query with Op.or on each association existence.
+            
             return {
                 status: true,
                 message: "List request verification",
-                data: requests,
-                totalCount: count,
+                data: filteredRequests.slice(0, limit || filteredRequests.length),
+                totalCount: filteredRequests.length,
             };
         } catch (error) {
             console.error("List Request Verification Error:", error);
