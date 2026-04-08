@@ -170,7 +170,8 @@ class RelationshipUserCompanyService {
 
     if (!company) {
       company = await masterCompany.findOne({
-        where: { name: cleanPayload.name }
+        where: { name: cleanPayload.name },
+        paranoid: false,
       });
       if (company) console.log(`[UPSERT] Found existing company by Name: ${company?.id}`);
     }

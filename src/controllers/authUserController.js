@@ -59,10 +59,10 @@ module.exports = {
 
   async getAllUser(req, res) {
     try {
-      const { page, pageSize, name } = req.query;
+      const { page, pageSize, name, role } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await authService.getAllUser(req.user, pagination, name);
+      const result = await authService.getAllUser(req.user, pagination, name, role);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }

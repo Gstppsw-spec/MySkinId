@@ -7,8 +7,8 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
 router.post("/", authController.createUser);
 router.get("/company/:companyId", authController.getUserByCompanyId);
 
-router.get("/all-user", verifyToken, authController.getAllUser);
-router.get("/all-user-company", verifyToken, authController.getAllUserCompany);
+router.get("/all-user", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN"), authController.getAllUser);
+router.get("/all-user-company", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN"), authController.getAllUserCompany);
 router.get("/:id", authController.getUserById);
 router.put("/:id", authController.editUser);
 router.delete("/:id", authController.deleteUser);

@@ -315,12 +315,13 @@ module.exports = {
         indicationOfUse,
         benefit,
         duration,
-        locationIds,
         price,
         discountPercent = 0,
         isActive = true,
-        categoryIds,
       } = data;
+
+      const locationIds = data.locationIds || data["locationIds[]"];
+      const categoryIds = data.categoryIds || data["categoryIds[]"];
 
       if (!name || name.trim() === "") {
         return {

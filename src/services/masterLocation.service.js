@@ -50,6 +50,7 @@ class MasterLocationService {
       const lastLocation = await masterLocation.findOne({
         order: [["createdAt", "DESC"]],
         attributes: ["code"],
+        paranoid: false,
       });
 
       let newCode = "OUTLET_00001";

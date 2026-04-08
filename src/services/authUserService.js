@@ -291,7 +291,7 @@ module.exports = {
     }
   },
 
-  async getAllUser(userObj, pagination = {}, name = null) {
+  async getAllUser(userObj, pagination = {}, name = null, roleCode = null) {
     try {
       const { limit, offset } = pagination;
       const where = { isactive: true };
@@ -327,9 +327,9 @@ module.exports = {
             as: "role",
             attributes: ["id", "name", "roleCode"],
             where: {
-              roleCode: {
-                [Op.in]: allowedRoles,
-              },
+              roleCode: roleCode && allowedRoles.includes(roleCode) 
+                ? roleCode 
+                : { [Op.in]: allowedRoles },
             },
           },
           {

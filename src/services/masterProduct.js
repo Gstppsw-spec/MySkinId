@@ -454,6 +454,12 @@ module.exports = {
 
   async create(data, files, userId) {
     try {
+      // Normalize array inputs (handle keys with [] suffix)
+      const locationIds = data.locationIds || data["locationIds[]"];
+      const categoryIds = data.categoryIds || data["categoryIds[]"];
+      const groupProductIds = data.groupProductIds || data["groupProductIds[]"];
+      const consultationCategoryIds = data.consultationCategoryIds || data["consultationCategoryIds[]"];
+
       if (!data.name || data.name.trim() === "") {
         return { status: false, message: "Name is required", data: null };
       }
@@ -462,6 +468,7 @@ module.exports = {
       if (!sku) {
         const lastProduct = await masterProduct.findOne({
           order: [["sku", "DESC"]],
+          paranoid: false,
         });
 
         let lastNumber = 0;
@@ -473,7 +480,10 @@ module.exports = {
         const newNumber = lastNumber + 1;
         sku = `PRD-${String(newNumber).padStart(3, "0")}`;
       } else {
-        const existing = await masterProduct.findOne({ where: { sku } });
+        const existing = await masterProduct.findOne({
+          where: { sku },
+          paranoid: false,
+        });
         if (existing) {
           return { status: false, message: "SKU already exists", data: null };
         }
@@ -504,8 +514,8 @@ module.exports = {
       });
 
       // Many-to-many: assign locations
-      if (data.locationIds && Array.isArray(data.locationIds)) {
-        await newProduct.setLocations(data.locationIds);
+      if (locationIds && Array.isArray(locationIds)) {
+        await newProduct.setLocations(locationIds);
       }
 
       if (files && files.length > 0) {
@@ -517,21 +527,16 @@ module.exports = {
         }
       }
 
-      if (data.categoryIds && Array.isArray(data.categoryIds)) {
-        await newProduct.setCategories(data.categoryIds);
+      if (categoryIds && Array.isArray(categoryIds)) {
+        await newProduct.setCategories(categoryIds);
       }
 
-      if (data.groupProductIds && Array.isArray(data.groupProductIds)) {
-        await newProduct.setGroupProduct(data.groupProductIds);
+      if (groupProductIds && Array.isArray(groupProductIds)) {
+        await newProduct.setGroupProduct(groupProductIds);
       }
 
-      if (
-        data.consultationCategoryIds &&
-        Array.isArray(data.consultationCategoryIds)
-      ) {
-        await newProduct.setConsultationCategories(
-          data.consultationCategoryIds,
-        );
+      if (consultationCategoryIds && Array.isArray(consultationCategoryIds)) {
+        await newProduct.setConsultationCategories(consultationCategoryIds);
       }
 
       return {

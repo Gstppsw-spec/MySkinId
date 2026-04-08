@@ -330,6 +330,10 @@ module.exports = {
   async create(data, userId) {
     const transaction = await sequelize.transaction();
     try {
+      // Normalize array inputs (handle keys with [] suffix)
+      const locationIds = data.locationIds || data["locationIds[]"];
+      const consultationCategoryIds = data.consultationCategoryIds || data["consultationCategoryIds[]"];
+
       if (!data.name || data.name.trim() === "") {
         await transaction.rollback();
         return { status: false, message: "Name is required", data: null };
@@ -340,6 +344,7 @@ module.exports = {
         const lastPackage = await masterPackage.findOne({
           order: [["code", "DESC"]],
           transaction,
+          paranoid: false,
         });
 
         let lastNumber = 0;
@@ -352,6 +357,7 @@ module.exports = {
         const existing = await masterPackage.findOne({
           where: { code },
           transaction,
+          paranoid: false,
         });
 
         if (existing) {
@@ -390,8 +396,12 @@ module.exports = {
       await transaction.commit();
 
       // Many-to-many: assign locations (outside transaction since setLocations uses its own)
-      if (data.locationIds && Array.isArray(data.locationIds)) {
-        await newPackage.setLocations(data.locationIds);
+      if (locationIds && Array.isArray(locationIds)) {
+        await newPackage.setLocations(locationIds);
+      }
+
+      if (consultationCategoryIds && Array.isArray(consultationCategoryIds)) {
+        await newPackage.setConsultationCategories(consultationCategoryIds);
       }
 
       return {
