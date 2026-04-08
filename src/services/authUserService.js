@@ -299,7 +299,10 @@ module.exports = {
 
       const allowedRoles = ["OUTLET_ADMIN", "OUTLET_DOCTOR"];
 
-      if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
+      if (userObj && userObj.roleCode === "SUPER_ADMIN") {
+        // Super Admin can see all system roles
+        allowedRoles.push("SUPER_ADMIN", "COMPANY_ADMIN", "DOCTOR_GENERAL", "PATIENT");
+      } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
         allowedRoles.push("COMPANY_ADMIN");
         // find user IDs in admin's locations
         const locIds = userObj.locationIds || [];
@@ -434,7 +437,9 @@ module.exports = {
 
       const allowedRoles = ["OUTLET_ADMIN", "OUTLET_DOCTOR"];
 
-      if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
+      if (userObj && userObj.roleCode === "SUPER_ADMIN") {
+        allowedRoles.push("SUPER_ADMIN", "COMPANY_ADMIN", "DOCTOR_GENERAL", "PATIENT");
+      } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
         allowedRoles.push("COMPANY_ADMIN");
         const locIds = userObj.locationIds || [];
         const staff = await relationshipUserLocation.findAll({
