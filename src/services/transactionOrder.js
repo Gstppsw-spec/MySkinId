@@ -1431,11 +1431,17 @@ module.exports = {
                 { transaction: t }
             );
 
+            const someLocation = await masterLocation.findOne({
+                where: { companyId: companyLink.companyId, isactive: true }
+            });
+
+            if (!someLocation) throw new Error("This company has no active locations to associate with the transaction");
+
             const newTransaction = await transaction.create(
                 {
                     orderId: newOrder.id,
                     transactionNumber: `TRX-TOPUP-${nanoid(10).toUpperCase()}`,
-                    locationId: null, 
+                    locationId: someLocation.id, 
                     subTotal: totalPrice,
                     shippingFee: 0,
                     grandTotal: totalPrice,
