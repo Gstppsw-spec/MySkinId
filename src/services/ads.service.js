@@ -66,22 +66,37 @@ module.exports = {
   /**
    * Admin Company: Check available days for an ad type/slot
    */
-  async getAvailableDays(type, position, slideNumber, month, year) {
+  async getAvailableDays(type, position, slideNumber, month, year, adsConfigId) {
     try {
-      // Logic: For a specific month, check each day if it's already occupied
+      let activeType = type;
+      let activePosition = position;
+      let activeSlideNumber = slideNumber;
+
+      if (adsConfigId) {
+        const config = await AdsConfig.findByPk(adsConfigId);
+        if (!config) throw new Error("Ads configuration not found");
+        activeType = config.type;
+        activePosition = config.position;
+        activeSlideNumber = config.slideNumber;
+      }
+
+      if (!activeType) throw new Error("Ads type or adsConfigId is required");
+
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0); // Last day of month
 
       const existingPurchases = await AdsPurchase.findAll({
         where: {
-          adsType: type,
+          adsType: activeType,
           status: "PAID",
           isActive: true,
-          [Op.item]: sequelize.literal(`
-            (configId IN (SELECT id FROM adsConfig WHERE type = '${type}' 
-            ${position ? `AND position = ${position}` : ""} 
-            ${slideNumber ? `AND slideNumber = ${slideNumber}` : ""}))
-          `),
+          [Op.and]: [
+            sequelize.literal(`
+              configId IN (SELECT id FROM adsConfig WHERE type = '${activeType}' 
+              ${activePosition ? `AND position = ${activePosition}` : ""} 
+              ${activeSlideNumber ? `AND slideNumber = ${activeSlideNumber}` : ""})
+            `)
+          ],
           [Op.or]: [
             { startDate: { [Op.between]: [startDate, endDate] } },
             { endDate: { [Op.between]: [startDate, endDate] } },
@@ -95,7 +110,6 @@ module.exports = {
         }
       });
 
-      // Simple implementation: return the purchases and let FE handle the calendar
       return { status: true, message: "Available days fetched", data: existingPurchases };
     } catch (error) {
       return { status: false, message: error.message };

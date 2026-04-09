@@ -30,8 +30,8 @@ module.exports = {
 
   async getAvailableDays(req, res) {
     try {
-      const { type, position, slideNumber, month, year } = req.query;
-      const result = await adsService.getAvailableDays(type, position, slideNumber, month, year);
+      const { type, position, slideNumber, month, year, adsConfigId } = req.query;
+      const result = await adsService.getAvailableDays(type, position, slideNumber, month, year, adsConfigId);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
