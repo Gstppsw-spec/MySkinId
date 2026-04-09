@@ -69,6 +69,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
+      referenceType: {
+        type: DataTypes.ENUM("OUTLET", "PRODUCT", "PACKAGE", "SERVICE", "EXTERNAL"),
+        allowNull: true,
+        defaultValue: "OUTLET"
+      },
+      referenceId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
     },
     {
       sequelize,

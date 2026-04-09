@@ -141,7 +141,9 @@ module.exports = {
           locationId: p.locationId,
           locationName: p.location ? p.location.name : null,
           data: p.data,
-          isPremiumAd: true
+          isPremiumAd: true,
+          referenceType: p.referenceType,
+          referenceId: p.referenceId
         };
 
         if (p.adsType === "BANNER") responseData.banners.push(item);
@@ -266,8 +268,8 @@ module.exports = {
         isActive: true 
       });
 
-      // Special case for PREMIUM_BADGE: Update masterLocation
-      if (purchase.adsType === "PREMIUM_BADGE") {
+      // Special case for PREMIUM updates on location
+      if (purchase.adsType === "PREMIUM_SEARCH" || purchase.adsType === "PREMIUM_BADGE") {
         await masterLocation.update(
           { 
             isPremium: true, 

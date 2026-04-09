@@ -1176,7 +1176,24 @@ module.exports = {
     async buyAds(data, customerId) {
         const t = await sequelize.transaction();
         try {
-            const { adsConfigId, locationId, paymentMethod, startDate, endDate, adsData } = data;
+            const { 
+              adsConfigId, locationId, paymentMethod, startDate, endDate, adsData,
+              referenceType, referenceId 
+            } = data;
+
+            // --- POLYMORPHIC REFERENCE VALIDATION ---
+            if (referenceType && referenceId) {
+              const { masterProduct, masterPackage, masterService, masterLocation: locModel } = require("../models");
+              let exists = false;
+              
+              if (referenceType === "PRODUCT") exists = await masterProduct.findByPk(referenceId);
+              else if (referenceType === "PACKAGE") exists = await masterPackage.findByPk(referenceId);
+              else if (referenceType === "SERVICE") exists = await masterService.findByPk(referenceId);
+              else if (referenceType === "OUTLET") exists = await locModel.findByPk(referenceId);
+              else if (referenceType === "EXTERNAL") exists = true; // No DB validation for external links
+
+              if (!exists) throw new Error(`Invalid ${referenceType} reference ID`);
+            }
 
             if (!adsConfigId) throw new Error("Ads Configuration ID is required");
             if (!locationId) throw new Error("Location ID is required");
@@ -1262,7 +1279,9 @@ module.exports = {
                         endDate: end,
                         data: adsData,
                         status: "PAID",
-                        isActive: true
+                        isActive: true,
+                        referenceType: referenceType || "OUTLET",
+                        referenceId: referenceId || locationId
                     }, { transaction: t });
 
                     // Special case for PREMIUM updates on location
@@ -1332,7 +1351,9 @@ module.exports = {
                 endDate: end,
                 data: adsData,
                 status: "PENDING",
-                isActive: false
+                isActive: false,
+                referenceType: referenceType || "OUTLET",
+                referenceId: referenceId || locationId
             }, { transaction: t });
 
             // Create Native Payment
