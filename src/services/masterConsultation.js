@@ -28,6 +28,7 @@ const fs = require("fs");
 const path = require("path");
 const { nanoid } = require("nanoid");
 const socketInstance = require("../socket/socketInstance");
+const pushNotificationService = require("./pushNotification.service");
 
 module.exports = {
   async getRoomByUser(userId, filters = {}) {
@@ -468,6 +469,38 @@ module.exports = {
       }
 
       socketInstance.emitConsultationMessage(roomId, newMessage);
+
+      // === PUSH NOTIFICATION ===
+      try {
+        const room = await masterRoomConsultation.findByPk(roomId, {
+          attributes: ["id", "customerId", "doctorId"],
+        });
+        if (room) {
+          // Determine recipient: if sender is customer → notify doctor, and vice versa
+          const recipientId =
+            senderRole === "customer" ? room.doctorId : room.customerId;
+          const recipientType =
+            senderRole === "customer" ? "user" : "customer";
+
+          if (recipientId) {
+            const notifBody =
+              messageType === "image" ? "\uD83D\uDCF7 Mengirim gambar" : message;
+
+            pushNotificationService.sendPushNotification(
+              recipientId,
+              recipientType,
+              {
+                title: "Pesan Baru - Konsultasi",
+                body: notifBody || "Pesan baru",
+                data: { roomId, type: "consultation_message" },
+              }
+            );
+          }
+        }
+      } catch (pushErr) {
+        // Push notification error should never break the chat flow
+        console.error("[PushNotif] Error in addMessage:", pushErr.message);
+      }
 
       return { status: true, message: "Success", data: newMessage };
     } catch (error) {
@@ -1704,6 +1737,18 @@ module.exports = {
         }
       ];
 
+      const productIncludeList = [
+        ...productInclude,
+        {
+          model: masterLocation,
+          as: "locations",
+          attributes: ["id"],
+          through: { attributes: [] },
+          required: true,
+          where: { id: { [Op.in]: locationIds } }
+        }
+      ];
+
       const packageInclude = [
         {
           model: masterPackageItems,
@@ -1727,24 +1772,29 @@ module.exports = {
             },
           ],
         },
+      ];
+
+      const packageIncludeList = [
+        ...packageInclude,
         {
           model: masterLocation,
-          as: "location",
+          as: "locations",
           attributes: ["id"],
           include: [{ model: masterLocationImage, as: "images", attributes: ["imageUrl"] }],
+          through: { attributes: [] },
+          required: true,
+          where: { id: { [Op.in]: locationIds } }
         }
       ];
 
       const [products, packages] = await Promise.all([
         allProductCategoryIds.length > 0 ? masterProduct.findAll({
-          where: { locationId: locationIds },
-          attributes: ["id", "name", "description", "price", "discountPercent", "weightGram", "locationId"],
-          include: productInclude,
+          attributes: ["id", "name", "description", "price", "discountPercent", "weightGram"],
+          include: productIncludeList,
         }) : Promise.resolve([]),
         allPackageCategoryIds.length > 0 ? masterPackage.findAll({
-          where: { locationId: locationIds },
-          attributes: ["id", "name", "description", "price", "discountPercent", "locationId"],
-          include: packageInclude,
+          attributes: ["id", "name", "description", "price", "discountPercent"],
+          include: packageIncludeList,
         }) : Promise.resolve([]),
       ]);
 
@@ -1753,7 +1803,10 @@ module.exports = {
         const locId = locJson.id;
         const radius = Math.round(parseFloat(locJson.distance) || 0);
 
-        const outletProducts = products.filter((p) => p.locationId === locId);
+        const outletProducts = products.filter((p) => {
+          const pj = p.get({ plain: true });
+          return pj.locations && pj.locations.some(l => l.id === locId);
+        });
         const productCategories = [];
         const productCatsMap = {};
 
@@ -1784,7 +1837,10 @@ module.exports = {
           });
         });
 
-        const outletPackages = packages.filter((pkg) => pkg.locationId === locId);
+        const outletPackages = packages.filter((pkg) => {
+          const pkgJ = pkg.get({ plain: true });
+          return pkgJ.locations && pkgJ.locations.some(l => l.id === locId);
+        });
         const packageCategories = [];
         const packageCatsMap = {};
 
@@ -1793,7 +1849,8 @@ module.exports = {
           const price = parseFloat(pkgJson.price) || 0;
           const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
           const discountPrice = price - (price * discountPercent) / 100;
-          const media = pkgJson.location && pkgJson.location.images && pkgJson.location.images.length > 0 ? pkgJson.location.images[0] : null;
+          const firstLocation = pkgJson.locations && pkgJson.locations.length > 0 ? pkgJson.locations[0] : null;
+          const media = firstLocation && firstLocation.images && firstLocation.images.length > 0 ? firstLocation.images[0] : null;
 
           const services = (pkgJson.items || []).map((item) => ({
             id: item.id,

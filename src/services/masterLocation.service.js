@@ -882,14 +882,27 @@ class MasterLocationService {
     try {
       const { limit, offset } = pagination;
       const now = new Date();
+      const { AdsPurchase } = require("../models");
+
       const { count, rows: locations } = await masterLocation.findAndCountAll({
         where: {
           isactive: true,
-          isVerified: true,
-          isPremium: true,
-          premiumExpiredAt: { [Op.gt]: now }
+          isVerified: true
         },
-        include: [{ model: masterLocationImage, as: "images" }],
+        include: [
+          { model: masterLocationImage, as: "images" },
+          {
+            model: AdsPurchase,
+            as: "adsPurchases",
+            required: true,
+            where: {
+              adsType: "PREMIUM_HOME",
+              isActive: true,
+              startDate: { [Op.lte]: now },
+              endDate: { [Op.gte]: now }
+            }
+          }
+        ],
         distinct: true,
         limit,
         offset,
@@ -964,11 +977,23 @@ class MasterLocationService {
         return { status: false, message: "User tidak terdaftar di outlet manapun", data: null };
       }
 
+      const { AdsPurchase } = require("../models");
       const locations = await masterLocation.findAll({
         where: {
           id: { [Op.in]: locationIds }
         },
-        include: [{ model: masterLocationImage, as: "images" }],
+        include: [
+          { model: masterLocationImage, as: "images" },
+          { 
+            model: AdsPurchase, 
+            as: "adsPurchases", 
+            required: false,
+            where: {
+              isActive: true,
+              endDate: { [Op.gt]: new Date() }
+            }
+          }
+        ],
       });
 
       if (!locations || locations.length === 0) {
@@ -1014,6 +1039,7 @@ class MasterLocationService {
           isactive: plain.isactive,
           isPremium: isPremiumValid,
           premiumExpiredAt: plain.premiumExpiredAt,
+          activeAds: plain.adsPurchases || [],
           ratingAvg: plain.ratingAvg,
           ratingCount: plain.ratingCount,
           googleRating: plain.googleRating,

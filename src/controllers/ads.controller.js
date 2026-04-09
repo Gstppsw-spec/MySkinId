@@ -1,0 +1,129 @@
+const adsService = require("../services/ads.service");
+const transactionOrder = require("../services/transactionOrder");
+const response = require("../helpers/response");
+
+module.exports = {
+  // --- CUSTOMER ---
+  async getAds(req, res) {
+    try {
+      const result = await adsService.getActiveAds();
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  // --- ADMIN COMPANY ---
+  async buyAds(req, res) {
+    try {
+      const userId = req.user.id;
+      // This will integrate with transactionOrder.buyAds (to be created)
+      // or we can handle it here and call transactionOrder internal methods
+      const result = await transactionOrder.buyAds(req.body, userId);
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getAvailableDays(req, res) {
+    try {
+      const { type, position, slideNumber, month, year } = req.query;
+      const result = await adsService.getAvailableDays(type, position, slideNumber, month, year);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getOutletAds(req, res) {
+    try {
+      const userId = req.user.id;
+      const result = await adsService.getOutletAds(userId);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async buyTopup(req, res) {
+    try {
+      const userId = req.user.id;
+      const result = await transactionOrder.buyAdBalance(req.body, userId);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getBalance(req, res) {
+    try {
+      const { companyId } = req.query; // If superadmin
+      const userId = req.user.id;
+      const { roleCode } = req.user;
+
+      let targetCompanyId = companyId;
+
+      if (roleCode !== "SUPER_ADMIN") {
+        const { relationshipUserCompany } = require("../models");
+        const link = await relationshipUserCompany.findOne({ where: { userId, isactive: true } });
+        if (!link) return response.error(res, "Company not found for user");
+        targetCompanyId = link.companyId;
+      }
+
+      if (!targetCompanyId) return response.error(res, "companyId is required");
+
+      const balanceService = require("../services/balance.service");
+      const result = await balanceService.getBalance(targetCompanyId);
+      const history = await balanceService.getHistory(targetCompanyId, { limit: 10 });
+
+      if (!result.status) return response.error(res, result.message);
+
+      return response.success(res, "Success", {
+        balance: result.data,
+        history: history.data
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  // --- SUPER ADMIN ---
+  async adminTopup(req, res) {
+    try {
+      const { companyId, amount, description } = req.body;
+      const balanceService = require("../services/balance.service");
+      const result = await balanceService.addBalance(companyId, amount, "TOPUP", null, description);
+      
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, "Balance updated successfully", result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getAdsConfig(req, res) {
+    try {
+      const result = await adsService.getConfig();
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async upsertAdsConfig(req, res) {
+    try {
+      const result = await adsService.upsertConfig(req.body);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+};

@@ -34,6 +34,8 @@ const roleRoute = require("./routes/master/masterRole.route");
 const shippingRoute = require("./routes/master/shipping.route");
 const flashSaleRoute = require("./routes/master/flashSale.route");
 const googlePlacesRoute = require("./routes/master/googlePlaces.route");
+const adsRoute = require("./routes/ads.route");
+const pushTokenRoute = require("./routes/master/pushToken.route");
 
 // Cron jobs
 const initGoogleRatingCron = require("./cron/googleRatingCron");
@@ -102,6 +104,8 @@ app.use("/api/v2/transaction/order", transactionOrderRoute);
 app.use("/api/v2/shipping", shippingRoute);
 app.use("/api/v2/flash-sale", flashSaleRoute);
 app.use("/api/v2/google-places", googlePlacesRoute);
+app.use("/api/v2/ads", adsRoute);
+app.use("/api/v2/push-token", pushTokenRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);

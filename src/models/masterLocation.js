@@ -190,6 +190,11 @@ module.exports = (sequelize, DataTypes) => {
       },
       as: "verificationStatus",
     });
+
+    masterLocation.hasMany(models.AdsPurchase, {
+      foreignKey: "locationId",
+      as: "adsPurchases",
+    });
   };
 
   return masterLocation;

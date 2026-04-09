@@ -24,6 +24,10 @@ module.exports = {
                 model: masterProductImage,
                 as: "images",
               },
+              {
+                model: masterLocation,
+                as: "locations",
+              },
             ],
           },
         ],

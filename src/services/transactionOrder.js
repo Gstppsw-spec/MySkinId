@@ -25,6 +25,8 @@ const {
     Rating,
     relationshipProductLocation,
     relationshipPackageLocation,
+    AdsConfig,
+    AdsPurchase,
     sequelize,
 } = require("../models");
 const { nanoid } = require("nanoid");
@@ -1171,6 +1173,306 @@ module.exports = {
         }
     },
 
+    async buyAds(data, customerId) {
+        const t = await sequelize.transaction();
+        try {
+            const { adsConfigId, locationId, paymentMethod, startDate, endDate, adsData } = data;
+
+            if (!adsConfigId) throw new Error("Ads Configuration ID is required");
+            if (!locationId) throw new Error("Location ID is required");
+            if (!paymentMethod) throw new Error("Payment method is required");
+            if (!startDate || !endDate) throw new Error("Start and End dates are required");
+
+            const config = await AdsConfig.findByPk(adsConfigId);
+            if (!config) throw new Error("Ads configuration not found");
+
+            const location = await masterLocation.findByPk(locationId);
+            if (!location) throw new Error("Location not found");
+
+            const companyId = location.companyId;
+            if (!companyId) throw new Error("Location is not linked to a company");
+
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            if (end <= start) throw new Error("End date must be after start date");
+
+            // Calculate days
+            const diffTime = Math.abs(end - start);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
+            
+            const totalPrice = parseFloat(config.pricePerDay) * diffDays;
+
+            // --- ADS BALANCE CHECK ---
+            const balanceService = require("./balance.service");
+            const balanceResult = await balanceService.getBalance(companyId);
+            
+            if (balanceResult.status && parseFloat(balanceResult.data.balance) >= totalPrice) {
+                // Sufficient Balance: Spend and Activate immediately
+                const spendResult = await balanceService.spendBalance(
+                    companyId, 
+                    totalPrice, 
+                    null, 
+                    `Purchase Ads ${config.type} for ${location.name}`
+                );
+
+                if (spendResult.status) {
+                    // Create PAID Order
+                    const newOrder = await order.create(
+                        {
+                            orderNumber: `ORD-ADS-BAL-${nanoid(10).toUpperCase()}`,
+                            customerId: customerId,
+                            totalAmount: totalPrice,
+                            paymentStatus: "PAID",
+                        },
+                        { transaction: t }
+                    );
+
+                    const newTransaction = await transaction.create(
+                        {
+                            orderId: newOrder.id,
+                            transactionNumber: `TRX-ADS-BAL-${nanoid(10).toUpperCase()}`,
+                            locationId: locationId,
+                            subTotal: totalPrice,
+                            shippingFee: 0,
+                            grandTotal: totalPrice,
+                            orderStatus: "PAID",
+                        },
+                        { transaction: t }
+                    );
+
+                    await transactionItem.create({
+                        transactionId: newTransaction.id,
+                        itemType: `ADS_${config.type}`,
+                        itemId: adsConfigId,
+                        itemName: `Ads ${config.type} - ${location.name} (${diffDays} days)`,
+                        quantity: 1,
+                        unitPrice: totalPrice,
+                        totalPrice: totalPrice,
+                        isShippingRequired: false,
+                        locationId: locationId,
+                    }, { transaction: t });
+
+                    // Create ACTIVE AdsPurchase
+                    const purchase = await AdsPurchase.create({
+                        locationId,
+                        orderId: newOrder.id,
+                        adsType: config.type,
+                        configId: adsConfigId,
+                        startDate: start,
+                        endDate: end,
+                        data: adsData,
+                        status: "PAID",
+                        isActive: true
+                    }, { transaction: t });
+
+                    // Special case for PREMIUM updates on location
+                    if (config.type === "PREMIUM_SEARCH" || config.type === "PREMIUM_BADGE") {
+                        await masterLocation.update(
+                            { isPremium: true, premiumExpiredAt: end },
+                            { where: { id: locationId }, transaction: t }
+                        );
+                    }
+
+                    await t.commit();
+                    return {
+                        status: true,
+                        message: "Ads purchased using account balance",
+                        data: { order: newOrder, purchase }
+                    };
+                }
+            }
+
+            // --- FALLBACK TO PAYMENT GATEWAY ---
+            const newOrder = await order.create(
+                {
+                    orderNumber: `ORD-ADS-${nanoid(10).toUpperCase()}`,
+                    customerId: customerId,
+                    totalAmount: totalPrice,
+                    paymentStatus: "UNPAID",
+                },
+                { transaction: t }
+            );
+
+            const newTransaction = await transaction.create(
+                {
+                    orderId: newOrder.id,
+                    transactionNumber: `TRX-ADS-${nanoid(10).toUpperCase()}`,
+                    locationId: locationId,
+                    subTotal: totalPrice,
+                    shippingFee: 0,
+                    grandTotal: totalPrice,
+                    orderStatus: "CREATED",
+                },
+                { transaction: t }
+            );
+
+            await transactionItem.create(
+                {
+                    transactionId: newTransaction.id,
+                    itemType: `ADS_${config.type}`,
+                    itemId: adsConfigId,
+                    itemName: `Ads ${config.type} - ${location.name} (${diffDays} days)`,
+                    quantity: 1,
+                    unitPrice: totalPrice,
+                    discountAmount: 0,
+                    totalPrice: totalPrice,
+                    isShippingRequired: false,
+                    locationId: locationId,
+                },
+                { transaction: t }
+            );
+
+            // Create AdsPurchase record in PENDING status
+            await AdsPurchase.create({
+                locationId,
+                orderId: newOrder.id,
+                adsType: config.type,
+                configId: adsConfigId,
+                startDate: start,
+                endDate: end,
+                data: adsData,
+                status: "PENDING",
+                isActive: false
+            }, { transaction: t });
+
+            // Create Native Payment
+            const customer = await masterCustomer.findByPk(customerId);
+            const methodRecord = await masterPaymentMethod.findOne({
+                where: { code: paymentMethod, isActive: true },
+                transaction: t
+            });
+
+            if (!methodRecord) {
+                throw new Error(`Payment method ${paymentMethod} not found or inactive`);
+            }
+
+            const gatewayPayment = await this._createXenditPayment(newOrder.orderNumber, totalPrice, customer, paymentMethod);
+
+            // Create Payment Record
+            await orderPayment.create(
+                {
+                    orderId: newOrder.id,
+                    paymentMethod: paymentMethod,
+                    amount: totalPrice,
+                    paymentStatus: "PENDING",
+                    referenceNumber: gatewayPayment.id,
+                    gatewayResponse: gatewayPayment.rawPayload,
+                    checkoutUrl: gatewayPayment.checkoutUrl || gatewayPayment.invoiceUrl,
+                    instructions: Array.isArray(gatewayPayment.instructions) ? gatewayPayment.instructions.join("\n") : gatewayPayment.instructions,
+                },
+                { transaction: t }
+            );
+
+            await t.commit();
+
+            // Schedule auto-expiry
+            schedulePaymentTimeout(newOrder.id, newOrder.orderNumber, this._expireOrder.bind(this));
+
+            return {
+                status: true,
+                message: "Ads purchase initiated",
+                data: {
+                    ...newOrder.toJSON(),
+                    paymentDetails: gatewayPayment
+                }
+            };
+        } catch (error) {
+            if (t && !t.finished) await t.rollback();
+            return { status: false, message: error.message };
+        }
+    },
+
+    async buyAdBalance(data, customerId) {
+        const t = await sequelize.transaction();
+        try {
+            const { amount, paymentMethod } = data;
+
+            if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+                throw new Error("Invalid topup amount");
+            }
+            if (!paymentMethod) throw new Error("Payment method is required");
+
+            const companyLink = await relationshipUserCompany.findOne({
+                where: { userId: customerId, isactive: true }
+            });
+
+            if (!companyLink) throw new Error("User is not linked to any company");
+
+            const totalPrice = parseFloat(amount);
+
+            const newOrder = await order.create(
+                {
+                    orderNumber: `ORD-TOPUP-${nanoid(10).toUpperCase()}`,
+                    customerId: customerId,
+                    totalAmount: totalPrice,
+                    paymentStatus: "UNPAID",
+                },
+                { transaction: t }
+            );
+
+            const newTransaction = await transaction.create(
+                {
+                    orderId: newOrder.id,
+                    transactionNumber: `TRX-TOPUP-${nanoid(10).toUpperCase()}`,
+                    locationId: null, 
+                    subTotal: totalPrice,
+                    shippingFee: 0,
+                    grandTotal: totalPrice,
+                    orderStatus: "CREATED",
+                },
+                { transaction: t }
+            );
+
+            await transactionItem.create({
+                transactionId: newTransaction.id,
+                itemType: "AD_BALANCE_TOPUP",
+                itemId: companyLink.companyId,
+                itemName: `Ad Balance Topup - ${totalPrice}`,
+                quantity: 1,
+                unitPrice: totalPrice,
+                totalPrice: totalPrice,
+                isShippingRequired: false,
+            }, { transaction: t });
+
+            // Create Native Payment
+            const customer = await masterCustomer.findByPk(customerId);
+            const methodRecord = await masterPaymentMethod.findOne({
+                where: { code: paymentMethod, isActive: true },
+                transaction: t
+            });
+
+            if (!methodRecord) throw new Error(`Payment method ${paymentMethod} not found`);
+
+            const gatewayPayment = await this._createXenditPayment(newOrder.orderNumber, totalPrice, customer, paymentMethod);
+
+            await orderPayment.create({
+                orderId: newOrder.id,
+                paymentMethod: paymentMethod,
+                amount: totalPrice,
+                paymentStatus: "PENDING",
+                referenceNumber: gatewayPayment.id,
+                gatewayResponse: gatewayPayment.rawPayload,
+                checkoutUrl: gatewayPayment.checkoutUrl || gatewayPayment.invoiceUrl,
+                instructions: Array.isArray(gatewayPayment.instructions) ? gatewayPayment.instructions.join("\n") : gatewayPayment.instructions,
+            }, { transaction: t });
+
+            await t.commit();
+            schedulePaymentTimeout(newOrder.id, newOrder.orderNumber, this._expireOrder.bind(this));
+
+            return {
+                status: true,
+                message: "Topup initiated",
+                data: {
+                    ...newOrder.toJSON(),
+                    paymentDetails: gatewayPayment
+                }
+            };
+        } catch (error) {
+            if (t && !t.finished) await t.rollback();
+            return { status: false, message: error.message };
+        }
+    },
+
     // Auto-expire an order that is still UNPAID after timeout
     async _expireOrder(orderId, orderNumber) {
         const t = await sequelize.transaction();
@@ -1468,6 +1770,16 @@ module.exports = {
                                     { isPremium: true, premiumExpiredAt: expiredAt },
                                     { where: { id: item.itemId }, transaction: t }
                                 );
+                            }
+
+                            // Handle Ads activation
+                            const adsService = require("./ads.service");
+                            await adsService.activatePurchase(orderData.id);
+
+                            // Handle AD_BALANCE_TOPUP
+                            if (item.itemType === "AD_BALANCE_TOPUP") {
+                                const balanceService = require("./balance.service");
+                                await balanceService.addBalance(item.itemId, item.totalPrice, "TOPUP", orderData.id);
                             }
 
                             // 🔹 Flash Sale sold update
@@ -1860,7 +2172,7 @@ module.exports = {
                         include: [
                             {
                                 model: masterLocation,
-                                as: "location",
+                                as: "locations",
                                 attributes: ["id", "name", "address", "phone"],
                                 include: [
                                     {
@@ -1893,19 +2205,22 @@ module.exports = {
 
             const result = vouchers.map((v) => {
                 const plain = v.get({ plain: true });
-                const imageLocation = plain.package?.location?.images?.[0]?.imageUrl || null;
+                const firstLocation = plain.package?.locations?.[0] || null;
+                const imageLocation = firstLocation?.images?.[0]?.imageUrl || null;
 
                 // Cleanup internal objects if preferred, or just add the field
                 const res = {
                     ...plain,
                     customerPhone: plain.customer?.phoneNumber || null,
-                    outletPhone: plain.package?.location?.phone || null,
+                    outletPhone: firstLocation?.phone || null,
                     imageLocation,
                 };
                 delete res.customer;
-                if (res.package?.location) {
-                    delete res.package.location.phone;
+                if (res.package?.locations) {
+                    delete res.package.locations;
                 }
+                // Maintain backward compatibility for single location object if needed
+                res.package.location = firstLocation;
                 return res;
             });
 
@@ -1940,8 +2255,8 @@ module.exports = {
                         include: [
                             {
                                 model: masterLocation,
-                                as: "location",
-                                attributes: ["phone"],
+                                as: "locations",
+                                attributes: ["id", "phone"],
                             },
                         ],
                     },
@@ -1958,15 +2273,18 @@ module.exports = {
             }
 
             const plainVoucher = voucher.get({ plain: true });
+            const firstLocation = plainVoucher.package?.locations?.[0] || null;
             const resultVoucher = {
                 ...plainVoucher,
                 customerPhone: plainVoucher.customer?.phoneNumber || null,
-                outletPhone: plainVoucher.package?.location?.phone || null,
+                outletPhone: firstLocation?.phone || null,
             };
             delete resultVoucher.customer;
-            if (resultVoucher.package?.location) {
-                delete resultVoucher.package.location.phone;
+            if (resultVoucher.package?.locations) {
+                // delete resultVoucher.package.locations;
             }
+            // Maintain backward compatibility
+            resultVoucher.package.location = firstLocation;
 
             if (voucher.status !== "BOOKED") {
                 throw new Error(`Voucher is already ${voucher.status}`);
@@ -2078,7 +2396,7 @@ module.exports = {
                         include: [
                             {
                                 model: masterLocation,
-                                as: "location",
+                                as: "locations",
                                 attributes: ["id", "name", "address", "phone"],
                                 include: [
                                     {
@@ -2116,7 +2434,8 @@ module.exports = {
             }
 
             const plainVoucher = voucher.get({ plain: true });
-            const imageLocation = plainVoucher.package?.location?.images?.[0]?.imageUrl || null;
+            const firstLocation = plainVoucher.package?.locations?.[0] || null;
+            const imageLocation = firstLocation?.images?.[0]?.imageUrl || null;
 
             if (plainVoucher.status !== "BOOKED") {
                 return {
@@ -2125,8 +2444,9 @@ module.exports = {
                     data: {
                         ...plainVoucher,
                         customerPhone: plainVoucher.customer?.phoneNumber || null,
-                        outletPhone: plainVoucher.package?.location?.phone || null,
-                        imageLocation
+                        outletPhone: firstLocation?.phone || null,
+                        imageLocation,
+                        location: firstLocation // Backward compatibility
                     }
                 };
             }
@@ -2152,11 +2472,13 @@ module.exports = {
                 throw new Error("Voucher cannot be claimed at this location");
             }
 
+            // Use the already declared firstLocation
             const finalData = {
                 ...plainVoucher,
                 customerPhone: plainVoucher.customer?.phoneNumber || null,
-                outletPhone: plainVoucher.package?.location?.phone || null,
+                outletPhone: firstLocation?.phone || null,
                 imageLocation,
+                location: firstLocation // Backward compatibility
             };
 
             return {

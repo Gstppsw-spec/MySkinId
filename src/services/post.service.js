@@ -803,19 +803,27 @@ class PostService {
         let results = [];
 
         if (type === 'product') {
-            const where = {
-                ...nameFilter,
-                ...(locationId ? { locationId } : {}),
-            };
-            const products = await db.masterProduct.findAll({
-                ...baseOptions,
-                where,
-                include: [{
+            const include = [
+                {
                     model: db.masterProductImage,
                     as: 'images',
                     attributes: ['imageUrl'],
                     limit: 1
-                }]
+                }
+            ];
+            if (locationId) {
+                include.push({
+                    model: db.masterLocation,
+                    as: 'locations',
+                    where: { id: locationId },
+                    attributes: [],
+                    through: { attributes: [] }
+                });
+            }
+            const products = await db.masterProduct.findAll({
+                ...baseOptions,
+                where: nameFilter,
+                include
             });
             results = products.map(p => {
                 const img = p.images && p.images.length > 0 ? p.images[0].imageUrl : null;
@@ -826,16 +834,10 @@ class PostService {
                 };
             });
         } else if (type === 'package') {
-            const where = {
-                ...nameFilter,
-                ...(locationId ? { locationId } : {}),
-            };
-            const packages = await db.masterPackage.findAll({
-                ...baseOptions,
-                where,
-                include: [{
+            const include = [
+                {
                     model: db.masterLocation,
-                    as: 'location',
+                    as: 'locations',
                     attributes: ['id'],
                     include: [{
                         model: db.masterLocationImage,
@@ -843,10 +845,18 @@ class PostService {
                         attributes: ['imageUrl'],
                         limit: 1
                     }]
-                }]
+                }
+            ];
+            if (locationId) {
+                include[0].where = { id: locationId };
+            }
+            const packages = await db.masterPackage.findAll({
+                ...baseOptions,
+                where: nameFilter,
+                include
             });
             results = packages.map(p => {
-                const loc = p.location;
+                const loc = p.locations && p.locations.length > 0 ? p.locations[0] : null;
                 const img = loc && loc.images && loc.images.length > 0 ? loc.images[0].imageUrl : null;
                 return {
                     name: p.name,
