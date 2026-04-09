@@ -74,6 +74,12 @@ router.patch(
   allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterLocationController.deleteImage,
 );
+router.patch(
+  "/image/:id/primary",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  masterLocationController.setPrimaryImage,
+);
 
 // >>> DYNAMIC ROUTES LAST <<<
 router.post("/inject-region", masterLocationController.injectDataRegion);

@@ -660,7 +660,7 @@ module.exports = {
         {
           model: requestVerification,
           as: "verificationStatus",
-          attributes: ["status"],
+          attributes: ["status", "note"],
           required: false,
         },
       ];
@@ -718,6 +718,7 @@ module.exports = {
           return {
             ...mapServiceWithBackwardCompat(plain),
             statusVerification: plain.verificationStatus?.status || null,
+            noteVerification: plain.verificationStatus?.note || null,
           };
         }),
       };

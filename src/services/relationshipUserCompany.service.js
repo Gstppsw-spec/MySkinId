@@ -28,7 +28,7 @@ class RelationshipUserCompanyService {
             {
               model: requestVerification,
               as: "verificationStatus",
-              attributes: ["status"],
+              attributes: ["status", "note"],
               required: false,
             },
           ],
@@ -43,6 +43,7 @@ class RelationshipUserCompanyService {
     return {
       ...plain,
       statusVerification: plain.verificationStatus?.status || null,
+      noteVerification: plain.verificationStatus?.note || null,
     };
   }
 
@@ -78,7 +79,7 @@ class RelationshipUserCompanyService {
         {
           model: requestVerification,
           as: "verificationStatus",
-          attributes: ["status"],
+          attributes: ["status", "note"],
           required: false,
         },
       ],
@@ -91,6 +92,7 @@ class RelationshipUserCompanyService {
       return {
         ...plain,
         statusVerification: plain.verificationStatus?.status || null,
+        noteVerification: plain.verificationStatus?.note || null,
       };
     });
 
@@ -110,7 +112,7 @@ class RelationshipUserCompanyService {
         {
           model: requestVerification,
           as: "verificationStatus",
-          attributes: ["status"],
+          attributes: ["status", "note"],
           required: false,
         },
       ],
@@ -122,6 +124,7 @@ class RelationshipUserCompanyService {
     return {
       ...plain,
       statusVerification: plain.verificationStatus?.status || null,
+      noteVerification: plain.verificationStatus?.note || null,
     };
   }
 

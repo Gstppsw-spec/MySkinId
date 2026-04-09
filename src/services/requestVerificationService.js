@@ -22,46 +22,33 @@ class RequestVerificationService {
                 };
             }
 
+            let entity = null;
             if (refferenceType === "location") {
-                const location = await masterLocation.findByPk(refferenceId);
-                if (!location)
-                    return {
-                        status: false,
-                        message: "Location tidak ditemukan",
-                        data: null,
-                    };
+                entity = await masterLocation.findByPk(refferenceId);
             } else if (refferenceType === "company") {
-                const company = await masterCompany.findByPk(refferenceId);
-                if (!company)
-                    return {
-                        status: false,
-                        message: "Company tidak ditemukan",
-                        data: null,
-                    };
+                entity = await masterCompany.findByPk(refferenceId);
             } else if (refferenceType === "product") {
-                const product = await masterProduct.findByPk(refferenceId);
-                if (!product)
-                    return {
-                        status: false,
-                        message: "Product tidak ditemukan",
-                        data: null,
-                    };
+                entity = await masterProduct.findByPk(refferenceId);
             } else if (refferenceType === "service") {
-                const service = await masterService.findByPk(refferenceId);
-                if (!service)
-                    return {
-                        status: false,
-                        message: "Service tidak ditemukan",
-                        data: null,
-                    };
+                entity = await masterService.findByPk(refferenceId);
             } else if (refferenceType === "package") {
-                const paket = await masterPackage.findByPk(refferenceId);
-                if (!paket)
-                    return {
-                        status: false,
-                        message: "Package tidak ditemukan",
-                        data: null,
-                    };
+                entity = await masterPackage.findByPk(refferenceId);
+            }
+
+            if (!entity) {
+                return {
+                    status: false,
+                    message: `${refferenceType.charAt(0).toUpperCase() + refferenceType.slice(1)} tidak ditemukan`,
+                    data: null,
+                };
+            }
+
+            if (entity.isVerified) {
+                return {
+                    status: false,
+                    message: `${refferenceType.charAt(0).toUpperCase() + refferenceType.slice(1)} sudah terverifikasi`,
+                    data: null,
+                };
             }
 
             const checkRequest = await requestVerification.findOne({
@@ -87,7 +74,7 @@ class RequestVerificationService {
 
                 return {
                     status: false,
-                    message: "Request sudah ada",
+                    message: "Request verifikasi sudah ada dan sedang diproses",
                     data: null,
                 };
             }
@@ -98,8 +85,15 @@ class RequestVerificationService {
                 note,
                 status: "pending",
             });
-            return { status: true, data: result };
+            return { status: true, message: "Berhasil membuat request verifikasi", data: result };
         } catch (error) {
+            if (error.name === "SequelizeUniqueConstraintError") {
+                return {
+                    status: false,
+                    message: "Request verifikasi untuk entitas ini sudah ada",
+                    data: null,
+                };
+            }
             return { status: false, message: error.message };
         }
     }

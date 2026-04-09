@@ -113,10 +113,15 @@ class MasterLocationService {
         updatedBy: userId,
       });
       if (files && files.length > 0) {
-        for (const file of files) {
+        const primaryIdx =
+          data.primaryImageIndex !== undefined
+            ? parseInt(data.primaryImageIndex)
+            : 0;
+        for (let i = 0; i < files.length; i++) {
           await masterLocationImage.create({
             locationId: newLocation.id,
-            imageUrl: file.path,
+            imageUrl: files[i].path,
+            isPrimary: i === primaryIdx,
           });
         }
       }
@@ -320,12 +325,22 @@ class MasterLocationService {
       }
 
       if (files && files.length > 0) {
-        for (const file of files) {
+        // Check if primary image already exists
+        const existingPrimary = await masterLocationImage.findOne({
+          where: { locationId: id, isPrimary: true },
+        });
+
+        for (let i = 0; i < files.length; i++) {
           await masterLocationImage.create({
             locationId: id,
-            imageUrl: file.path,
+            imageUrl: files[i].path,
+            isPrimary: !existingPrimary && i === 0,
           });
         }
+      }
+
+      if (data.primaryImageId) {
+        await this.setPrimaryImage(data.primaryImageId);
       }
 
       return {
@@ -559,7 +574,7 @@ class MasterLocationService {
           {
             model: requestVerification,
             as: "verificationStatus",
-            attributes: ["status"],
+            attributes: ["status", "note"],
             required: false,
           },
         ],
@@ -615,6 +630,7 @@ class MasterLocationService {
         return {
           ...plain,
           statusVerification: plain.verificationStatus?.status || null,
+          noteVerification: plain.verificationStatus?.note || null,
         };
       });
 
@@ -1623,6 +1639,34 @@ class MasterLocationService {
       return { status: true, message: "Sub-district deleted" };
     } catch (error) {
       return { status: false, message: error.message };
+    }
+  }
+
+  async setPrimaryImage(imageId) {
+    try {
+      const targetImage = await masterLocationImage.findByPk(imageId);
+      if (!targetImage) {
+        return { status: false, message: "Image not found", data: null };
+      }
+
+      // Reset all images for this location to not primary
+      await masterLocationImage.update(
+        { isPrimary: false },
+        { where: { locationId: targetImage.locationId } }
+      );
+
+      // Set target image as primary
+      targetImage.isPrimary = true;
+      await targetImage.save();
+
+      return {
+        status: true,
+        message: "Primary image set successfully",
+        data: targetImage,
+      };
+    } catch (error) {
+      console.error("Set Primary Image Error:", error);
+      return { status: false, message: error.message, data: null };
     }
   }
 }
