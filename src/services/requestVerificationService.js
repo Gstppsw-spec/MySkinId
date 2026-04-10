@@ -184,7 +184,19 @@ class RequestVerificationService {
         }
 
         if (type === "location") {
-          include.push({ model: masterLocation, as: "location" });
+          include.push({
+            model: masterLocation,
+            as: "location",
+            ...(nameFilter && { where: nameFilter, required: true }),
+            include: [
+              {
+                model: masterCompany,
+                as: "company",
+                attributes: ["id", "name", "isVerified"],
+                required: false,
+              },
+            ],
+          });
         }
 
         if (type === "company") {
