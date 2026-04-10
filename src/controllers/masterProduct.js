@@ -196,4 +196,13 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  async setPrimaryImage(req, res) {
+    const { id } = req.params;
+    const result = await productService.setPrimaryImage(id);
+
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
 };

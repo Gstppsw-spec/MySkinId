@@ -128,7 +128,7 @@ module.exports = {
           model: masterProductImage,
           as: "images",
           separate: true,
-          attributes: ["id", "imageUrl"],
+          attributes: ["id", "imageUrl", "isPrimary"],
         },
         {
           model: masterLocation,
@@ -350,7 +350,7 @@ module.exports = {
         {
           model: masterProductImage,
           as: "images",
-          attributes: ["id", "imageUrl"],
+          attributes: ["id", "imageUrl", "isPrimary"],
         },
         {
           model: masterLocation,
@@ -550,10 +550,12 @@ module.exports = {
       }
 
       if (files && files.length > 0) {
-        for (const file of files) {
+        const primaryIndex = data.primaryImageIndex !== undefined ? Number(data.primaryImageIndex) : 0;
+        for (let i = 0; i < files.length; i++) {
           await masterProductImage.create({
             productId: newProduct.id,
-            imageUrl: file.path,
+            imageUrl: files[i].path,
+            isPrimary: i === primaryIndex,
           });
         }
       }
@@ -689,8 +691,13 @@ module.exports = {
           await masterProductImage.create({
             productId: id,
             imageUrl: file.path,
+            isPrimary: false, // Default false for new images in update
           });
         }
+      }
+
+      if (data.primaryImageId) {
+        await this.setPrimaryImage(data.primaryImageId);
       }
 
       return {
@@ -758,7 +765,7 @@ module.exports = {
         {
           model: masterProductImage,
           as: "images",
-          attributes: ["id", "imageUrl"],
+          attributes: ["id", "imageUrl", "isPrimary"],
         },
         {
           model: masterLocation,
@@ -945,7 +952,7 @@ module.exports = {
         {
           model: masterProductImage,
           as: "images",
-          attributes: ["id", "imageUrl"],
+          attributes: ["id", "imageUrl", "isPrimary"],
         },
         {
           model: masterLocation,
@@ -1047,7 +1054,7 @@ module.exports = {
         {
           model: masterProductImage,
           as: "images",
-          attributes: ["id", "imageUrl"],
+          attributes: ["id", "imageUrl", "isPrimary"],
         },
         {
           model: masterLocation,
@@ -1138,6 +1145,33 @@ module.exports = {
       };
     } catch (error) {
       return { status: false, message: error.message, data: null };
+    }
+  },
+
+  async setPrimaryImage(imageId) {
+    try {
+      const selectedImage = await masterProductImage.findByPk(imageId);
+      if (!selectedImage) {
+        return { status: false, message: "Image tidak ditemukan" };
+      }
+
+      // Reset all images for this product to false
+      await masterProductImage.update(
+        { isPrimary: false },
+        { where: { productId: selectedImage.productId } }
+      );
+
+      // Set selected image to true
+      selectedImage.isPrimary = true;
+      await selectedImage.save();
+
+      return {
+        status: true,
+        message: "Berhasil mengubah gambar utama",
+        data: selectedImage,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
     }
   },
 };

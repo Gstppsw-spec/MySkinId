@@ -58,6 +58,13 @@ router.patch(
   allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   masterProduct.deleteImage,
 );
+
+router.patch(
+  "/image/:id/primary",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  masterProduct.setPrimaryImage,
+);
 router.get("/creator", verifyToken, masterProduct.getByCreator);
 router.get("/location/:locationId", masterProduct.getByLocationId);
 router.get("/user", verifyToken, masterProduct.getProductByUser);
