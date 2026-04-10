@@ -66,25 +66,23 @@ class RequestVerificationService {
       });
 
       if (checkRequest) {
-        if (
-          checkRequest.status &&
-          checkRequest.status.toLowerCase() === "rejected"
-        ) {
-          // Update existing rejected request to pending
-          checkRequest.status = "pending";
-          checkRequest.note = note || checkRequest.note;
-          await checkRequest.save();
+        // Jika status bukan 'rejected', tolak pembuatan request baru
+        if (checkRequest.status.toLowerCase() !== "rejected") {
           return {
-            status: true,
-            message: "Request updated to pending",
-            data: checkRequest,
+            status: false,
+            message: "Request verifikasi sudah ada dan sedang diproses",
+            data: null,
           };
         }
 
+        // Jika status 'rejected', izinkan update
+        checkRequest.status = "pending";
+        checkRequest.note = note || checkRequest.note;
+        await checkRequest.save();
         return {
-          status: false,
-          message: "Request verifikasi sudah ada dan sedang diproses",
-          data: null,
+          status: true,
+          message: "Request updated to pending",
+          data: checkRequest,
         };
       }
 
@@ -200,7 +198,11 @@ class RequestVerificationService {
         }
 
         if (type === "company") {
-          include.push({ model: masterCompany, as: "company" });
+          include.push({
+            model: masterCompany,
+            as: "company",
+            ...(nameFilter && { where: nameFilter, required: true }),
+          });
         }
       } else if (type && !allowedType.includes(type)) {
         return {
