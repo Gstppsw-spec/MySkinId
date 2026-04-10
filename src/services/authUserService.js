@@ -138,10 +138,18 @@ module.exports = {
 
   async createUser(data) {
     try {
-      const { name, email, password, locationId, roleName } = data;
+      const { name, email, password, locationId, roleName, companyId } = data;
 
-      if (!name || !email || !password || !locationId || !roleName)
+      if (!name || !email || !password || !roleName)
         return { status: false, message: "Data tidak lengkap" };
+
+      if ((!locationId && !companyId) || (locationId && companyId)) {
+        return {
+          status: false,
+          message:
+            "Harus isi salah satu: locationId atau companyId (tidak boleh keduanya)",
+        };
+      }
 
       const role = await masterRole.findOne({
         where: { roleCode: roleName },
@@ -157,10 +165,6 @@ module.exports = {
 
       const isUserExist = await masterUser.findOne({ where: { email } });
 
-      const isLocationExist = await masterLocation.findOne({
-        where: { id: locationId },
-      });
-
       if (isUserExist) {
         return {
           status: false,
@@ -169,12 +173,32 @@ module.exports = {
         };
       }
 
-      if (!isLocationExist) {
-        return {
-          status: false,
-          message: "Outlet tidak ditemukan",
-          data: null,
-        };
+      if (locationId) {
+        const isLocationExist = await masterLocation.findOne({
+          where: { id: locationId },
+        });
+
+        if (!isLocationExist) {
+          return {
+            status: false,
+            message: "Outlet tidak ditemukan",
+            data: null,
+          };
+        }
+      }
+
+      if (companyId) {
+        const isComapnyExist = await masterCompany.findOne({
+          where: { id: companyId },
+        });
+
+        if (!isComapnyExist) {
+          return {
+            status: false,
+            message: "Company tidak ditemukan",
+            data: null,
+          };
+        }
       }
 
       const hashPassword = await bcrypt.hash(password, 10);
@@ -187,11 +211,20 @@ module.exports = {
         isactive: true,
       });
 
-      await relationshipUserLocation.create({
-        userId: user.id,
-        locationId: locationId,
-        isactive: true,
-      });
+      if (locationId) {
+        await relationshipUserLocation.create({
+          userId: user.id,
+          locationId: locationId,
+          isactive: true,
+        });
+      }
+      if (companyId) {
+        await relationshipUserCompany.create({
+          userId: user.id,
+          companyId: companyId,
+          isactive: true,
+        });
+      }
 
       return {
         status: true,
@@ -301,7 +334,12 @@ module.exports = {
 
       if (userObj && userObj.roleCode === "SUPER_ADMIN") {
         // Super Admin can see all system roles
-        allowedRoles.push("SUPER_ADMIN", "COMPANY_ADMIN", "DOCTOR_GENERAL", "PATIENT");
+        allowedRoles.push(
+          "SUPER_ADMIN",
+          "COMPANY_ADMIN",
+          "DOCTOR_GENERAL",
+          "PATIENT",
+        );
       } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
         allowedRoles.push("COMPANY_ADMIN");
         // find user IDs in admin's locations
@@ -311,7 +349,7 @@ module.exports = {
           attributes: ["userId"],
           raw: true,
         });
-        const allowedUserIds = staff.map(s => s.userId);
+        const allowedUserIds = staff.map((s) => s.userId);
         allowedUserIds.push(userObj.id); // allow their own account
 
         where.id = { [Op.in]: allowedUserIds };
@@ -330,9 +368,10 @@ module.exports = {
             as: "role",
             attributes: ["id", "name", "roleCode"],
             where: {
-              roleCode: roleCode && allowedRoles.includes(roleCode) 
-                ? roleCode 
-                : { [Op.in]: allowedRoles },
+              roleCode:
+                roleCode && allowedRoles.includes(roleCode)
+                  ? roleCode
+                  : { [Op.in]: allowedRoles },
             },
           },
           {
@@ -381,23 +420,35 @@ module.exports = {
 
       const data = rows.map((user) => {
         const locations = (user.userLocations || [])
-          .map(ul => ul.location?.name)
-          .filter(name => !!name);
-        
+          .map((ul) => ul.location?.name)
+          .filter((name) => !!name);
+
         let locationName = locations.length > 0 ? locations.join(", ") : null;
         let companyName = null;
-        
+
         // Prioritas Company Name: Dari lokasi dulu, fallback ke User-Company link
         if (user.userLocations && user.userLocations.length > 0) {
-          companyName = user.userLocations.find(ul => ul.location?.company?.name)?.location?.company?.name || null;
+          companyName =
+            user.userLocations.find((ul) => ul.location?.company?.name)
+              ?.location?.company?.name || null;
         }
-        
-        if (!companyName && user.userCompanies && user.userCompanies.length > 0) {
-          companyName = user.userCompanies.find(uc => uc.company?.name)?.company?.name || null;
+
+        if (
+          !companyName &&
+          user.userCompanies &&
+          user.userCompanies.length > 0
+        ) {
+          companyName =
+            user.userCompanies.find((uc) => uc.company?.name)?.company?.name ||
+            null;
         }
 
         // Kalau role adalah COMPANY_ADMIN dan lokasi kosong, coba isi location dengan companyName
-        if (!locationName && user.role?.roleCode === "COMPANY_ADMIN" && companyName) {
+        if (
+          !locationName &&
+          user.role?.roleCode === "COMPANY_ADMIN" &&
+          companyName
+        ) {
           locationName = companyName;
         }
 
@@ -438,7 +489,12 @@ module.exports = {
       const allowedRoles = ["OUTLET_ADMIN", "OUTLET_DOCTOR"];
 
       if (userObj && userObj.roleCode === "SUPER_ADMIN") {
-        allowedRoles.push("SUPER_ADMIN", "COMPANY_ADMIN", "DOCTOR_GENERAL", "PATIENT");
+        allowedRoles.push(
+          "SUPER_ADMIN",
+          "COMPANY_ADMIN",
+          "DOCTOR_GENERAL",
+          "PATIENT",
+        );
       } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
         allowedRoles.push("COMPANY_ADMIN");
         const locIds = userObj.locationIds || [];
@@ -447,7 +503,7 @@ module.exports = {
           attributes: ["userId"],
           raw: true,
         });
-        const allowedUserIds = staff.map(s => s.userId);
+        const allowedUserIds = staff.map((s) => s.userId);
         allowedUserIds.push(userObj.id);
 
         where.id = { [Op.in]: allowedUserIds };
@@ -509,21 +565,33 @@ module.exports = {
 
       const data = rows.map((user) => {
         const locations = (user.userLocations || [])
-          .map(ul => ul.location?.name)
-          .filter(name => !!name);
-        
+          .map((ul) => ul.location?.name)
+          .filter((name) => !!name);
+
         let locationName = locations.length > 0 ? locations.join(", ") : null;
         let companyName = null;
-        
+
         if (user.userLocations && user.userLocations.length > 0) {
-          companyName = user.userLocations.find(ul => ul.location?.company?.name)?.location?.company?.name || null;
-        }
-        
-        if (!companyName && user.userCompanies && user.userCompanies.length > 0) {
-          companyName = user.userCompanies.find(uc => uc.company?.name)?.company?.name || null;
+          companyName =
+            user.userLocations.find((ul) => ul.location?.company?.name)
+              ?.location?.company?.name || null;
         }
 
-        if (!locationName && user.role?.roleCode === "COMPANY_ADMIN" && companyName) {
+        if (
+          !companyName &&
+          user.userCompanies &&
+          user.userCompanies.length > 0
+        ) {
+          companyName =
+            user.userCompanies.find((uc) => uc.company?.name)?.company?.name ||
+            null;
+        }
+
+        if (
+          !locationName &&
+          user.role?.roleCode === "COMPANY_ADMIN" &&
+          companyName
+        ) {
           locationName = companyName;
         }
 
@@ -558,7 +626,16 @@ module.exports = {
   async getUserById(id) {
     try {
       const user = await masterUser.findByPk(id, {
-        attributes: ["id", "name", "email", "phone", "avatar", "isactive", "roleId", "isAvailableConsul"],
+        attributes: [
+          "id",
+          "name",
+          "email",
+          "phone",
+          "avatar",
+          "isactive",
+          "roleId",
+          "isAvailableConsul",
+        ],
         include: [
           {
             model: masterRole,
@@ -591,7 +668,8 @@ module.exports = {
 
   async updateUser(id, data) {
     try {
-      const { name, email, password, phone, roleId, locationId, isactive } = data;
+      const { name, email, password, phone, roleId, locationId, isactive } =
+        data;
       const user = await masterUser.findByPk(id);
 
       if (!user) {
@@ -637,7 +715,11 @@ module.exports = {
 
       await user.update({ isactive: false });
 
-      return { status: true, message: "User berhasil dinonaktifkan", data: null };
+      return {
+        status: true,
+        message: "User berhasil dinonaktifkan",
+        data: null,
+      };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
