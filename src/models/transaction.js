@@ -42,7 +42,7 @@ module.exports = (sequelize, DataTypes) => {
             },
             locationId: {
                 type: DataTypes.UUID,
-                allowNull: false,
+                allowNull: true,
             },
             subTotal: {
                 type: DataTypes.DECIMAL(18, 2),
