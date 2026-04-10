@@ -653,6 +653,17 @@ module.exports = {
               },
             ],
           },
+          {
+            model: relationshipUserCompany,
+            as: "userCompanies",
+            include: [
+              {
+                model: masterCompany,
+                as: "company",
+                attributes: ["id", "name"],
+              },
+            ],
+          },
         ],
       });
 
