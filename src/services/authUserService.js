@@ -625,7 +625,7 @@ module.exports = {
 
   async getUserById(id) {
     try {
-      const user = await masterUser.findByPk(id, {
+      let user = await masterUser.findByPk(id, {
         attributes: [
           "id",
           "name",
@@ -649,7 +649,7 @@ module.exports = {
               {
                 model: masterLocation,
                 as: "location",
-                attributes: ["id", "name"],
+                attributes: ["id", "name", "companyId"],
               },
             ],
           },
@@ -671,9 +671,89 @@ module.exports = {
         return { status: false, message: "User tidak ditemukan", data: null };
       }
 
-      return { status: true, message: "Success", data: user };
+      // 🔥 convert ke object biasa
+      user = user.toJSON();
+
+      const isSuperAdmin = user.role?.roleCode === "SUPER_ADMIN";
+
+      // =====================================================
+      // ✅ SUPER ADMIN → semua data
+      // =====================================================
+      if (isSuperAdmin) {
+        const allLocations = await masterLocation.findAll({
+          attributes: ["id", "name", "companyId"],
+        });
+
+        const allCompanies = await masterCompany.findAll({
+          attributes: ["id", "name"],
+        });
+
+        user.userLocations = allLocations.map((loc) => ({
+          location: loc.toJSON ? loc.toJSON() : loc,
+        }));
+
+        user.userCompanies = allCompanies.map((comp) => ({
+          company: comp.toJSON ? comp.toJSON() : comp,
+        }));
+
+        return {
+          status: true,
+          message: "Success",
+          data: user,
+        };
+      }
+
+      // =====================================================
+      // 👤 USER BIASA
+      // =====================================================
+
+      const hasUserLocations =
+        user.userLocations && user.userLocations.length > 0;
+
+      const hasUserCompanies =
+        user.userCompanies && user.userCompanies.length > 0;
+
+      // =====================================================
+      // PRIORITY: COMPANY → ambil semua location
+      // =====================================================
+      if (hasUserCompanies) {
+        const companyIds = user.userCompanies.map((uc) => uc.company.id);
+
+        const locations = await masterLocation.findAll({
+          where: {
+            companyId: companyIds
+          },
+          attributes: ["id", "name", "companyId"],
+        });
+
+        user.userLocations = locations.map((loc) => ({
+          location: loc.toJSON ? loc.toJSON() : loc,
+        }));
+
+        return {
+          status: true,
+          message: `Success`,
+          data: user,
+        };
+      }
+
+      // -----------------------------------------------------
+      // ✅ PRIORITY 1: pakai userLocations kalau ada
+      // -----------------------------------------------------
+      if (hasUserLocations) {
+        return {
+          status: true,
+          message: "Success",
+          data: user,
+        };
+      }
     } catch (error) {
-      return { status: false, message: error.message, data: null };
+      console.error("Get User By Id Error:", error);
+      return {
+        status: false,
+        message: error.message,
+        data: null,
+      };
     }
   },
 
