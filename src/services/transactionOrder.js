@@ -319,7 +319,7 @@ module.exports = {
   async getAvailablePaymentMethods() {
     try {
       const methods = await masterPaymentMethod.findAll({
-        where: { isActive: true },
+        // where: { isActive: true },
         attributes: ["code", "name", "type", "logoUrl", "id", "isActive"],
         order: [
           ["type", "ASC"],
