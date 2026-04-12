@@ -52,7 +52,7 @@ module.exports = {
   async updatePaymentMethod(req, res) {
     const { id } = req.params;
     const data = req.body;
-    const result = await transactionOrder.updatePaymentMethod(id, data);
+    const result = await transactionOrder.updatePaymentMethod(id, data, req.file);
     return res.status(result.status ? 200 : 400).json(result);
   },
 
