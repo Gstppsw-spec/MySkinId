@@ -128,13 +128,6 @@ class PushNotificationService {
       // Build messages
       const messages = [];
       for (const t of tokens) {
-        // if (!Expo.isExpoPushToken(t.token)) {
-        //   console.warn(
-        //     `[PushNotif] Invalid token skipped: ${t.token}`
-        //   );
-        //   continue;
-        // }
-
         messages.push({
           to: t.token,
           sound: "default",
