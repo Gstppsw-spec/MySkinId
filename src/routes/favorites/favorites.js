@@ -2,7 +2,9 @@ const express = require("express");
 const router = express.Router();
 
 const favorites = require("../../controllers/customerFavorites");
-router.post("/", favorites.updateCustomerFavorites);
-router.get("/:customerId", favorites.getCustomerFavorites);
+const { verifyToken } = require("../../middlewares/authMiddleware");
+
+router.post("/", verifyToken, favorites.updateCustomerFavorites);
+router.get("/", verifyToken, favorites.getCustomerFavorites);
 
 module.exports = router;

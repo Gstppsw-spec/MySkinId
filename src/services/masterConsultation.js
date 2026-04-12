@@ -341,7 +341,7 @@ module.exports = {
 
       return {
         status: true,
-        message: "Berhasil masuk ke room chat",
+        message: "Berhasil menutup room konsultasi",
         data: room,
       };
     } catch (error) {

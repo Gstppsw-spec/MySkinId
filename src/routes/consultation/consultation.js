@@ -42,7 +42,7 @@ router.get("/room/user", consultation.getRoomByUserDoctor);
 router.get("/room/user/:id", consultation.getRoomByUser);
 router.get("/room/:id", consultation.getByRoomId);
 router.put("/room/:id/join", consultation.assignDoctor);
-router.put("/room/:id/close", consultation.closeRoom);
+router.put("/room/:id/close", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN", "DOCTOR_GENERAL", "OUTLET_DOCTOR"), consultation.closeRoom);
 
 router.post("/room/:id/message", consultation.addMessage);
 router.post(

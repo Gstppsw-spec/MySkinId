@@ -51,7 +51,12 @@ class PostService {
                 for (const tag of validTags) {
                     if (tag.referenceType === 'product') {
                         const product = await db.masterProduct.findByPk(tag.referenceId, {
-                            attributes: ['id', 'locationId'],
+                            include: [{
+                                model: db.masterLocation,
+                                as: 'locations',
+                                attributes: ['id', 'name'],
+                                through: { attributes: [] }
+                            }]
                         });
                         if (!product) {
                             throw new Error(`Product dengan id ${tag.referenceId} tidak ditemukan`);
@@ -59,12 +64,18 @@ class PostService {
                         if (!locationTagId) {
                             throw new Error(`Tag product memerlukan tag location. Harap sertakan tag dengan referenceType = 'location'`);
                         }
-                        if (product.locationId !== locationTagId) {
-                            throw new Error(`Product "${tag.referenceId}" tidak berasal dari location yang di-tag. LocationId product (${product.locationId}) harus sama dengan referenceId location tag (${locationTagId})`);
+                        const productLocationIds = product.locations.map(l => l.id);
+                        if (!productLocationIds.includes(locationTagId)) {
+                            throw new Error(`Product "${product.name}" tidak tersedia di lokasi yang di-tag.`);
                         }
                     } else if (tag.referenceType === 'package') {
                         const pkg = await db.masterPackage.findByPk(tag.referenceId, {
-                            attributes: ['id', 'locationId'],
+                            include: [{
+                                model: db.masterLocation,
+                                as: 'locations',
+                                attributes: ['id', 'name'],
+                                through: { attributes: [] }
+                            }]
                         });
                         if (!pkg) {
                             throw new Error(`Package dengan id ${tag.referenceId} tidak ditemukan`);
@@ -72,8 +83,28 @@ class PostService {
                         if (!locationTagId) {
                             throw new Error(`Tag package memerlukan tag location. Harap sertakan tag dengan referenceType = 'location'`);
                         }
-                        if (pkg.locationId !== locationTagId) {
-                            throw new Error(`Package "${tag.referenceId}" tidak berasal dari location yang di-tag. LocationId package (${pkg.locationId}) harus sama dengan referenceId location tag (${locationTagId})`);
+                        const packageLocationIds = pkg.locations.map(l => l.id);
+                        if (!packageLocationIds.includes(locationTagId)) {
+                            throw new Error(`Package "${pkg.name}" tidak tersedia di lokasi yang di-tag.`);
+                        }
+                    } else if (tag.referenceType === 'service') {
+                        const service = await db.masterService.findByPk(tag.referenceId, {
+                            include: [{
+                                model: db.masterLocation,
+                                as: 'locations',
+                                attributes: ['id', 'name'],
+                                through: { attributes: [] }
+                            }]
+                        });
+                        if (!service) {
+                            throw new Error(`Service dengan id ${tag.referenceId} tidak ditemukan`);
+                        }
+                        if (!locationTagId) {
+                            throw new Error(`Tag service memerlukan tag location. Harap sertakan tag dengan referenceType = 'location'`);
+                        }
+                        const serviceLocationIds = service.locations.map(l => l.id);
+                        if (!serviceLocationIds.includes(locationTagId)) {
+                            throw new Error(`Service "${service.name}" tidak tersedia di lokasi yang di-tag.`);
                         }
                     }
                 }
@@ -675,6 +706,13 @@ class PostService {
                 if (pkg) {
                     details = { packageId: pkg.id, packageName: pkg.name };
                 }
+            } else if (tag.referenceType === 'service') {
+                const service = await db.masterService.findByPk(tag.referenceId, {
+                    attributes: ['id', 'name']
+                });
+                if (service) {
+                    details = { serviceId: service.id, serviceName: service.name };
+                }
             } else if (tag.referenceType === 'location') {
                 const loc = await db.masterLocation.findByPk(tag.referenceId, {
                     attributes: ['id', 'name', 'latitude', 'longitude']
@@ -861,6 +899,37 @@ class PostService {
                 return {
                     name: p.name,
                     packageId: p.id,
+                    image: img
+                };
+            });
+        } else if (type === 'service') {
+            const include = [
+                {
+                    model: db.masterLocation,
+                    as: 'locations',
+                    attributes: ['id'],
+                    include: [{
+                        model: db.masterLocationImage,
+                        as: 'images',
+                        attributes: ['imageUrl'],
+                        limit: 1
+                    }]
+                }
+            ];
+            if (locationId) {
+                include[0].where = { id: locationId };
+            }
+            const services = await db.masterService.findAll({
+                ...baseOptions,
+                where: nameFilter,
+                include
+            });
+            results = services.map(s => {
+                const loc = s.locations && s.locations.length > 0 ? s.locations[0] : null;
+                const img = loc && loc.images && loc.images.length > 0 ? loc.images[0].imageUrl : null;
+                return {
+                    name: s.name,
+                    serviceId: s.id,
                     image: img
                 };
             });

@@ -26,15 +26,16 @@ router.get("/company/:companyId", masterLocationController.getByCompanyId);
 router.get("/user", verifyToken, masterLocationController.getLocationByUser);
 
 // CUSTOMER LIST
-router.get("/all-customer", masterLocationController.listLocationByCustomer);
 router.get(
-  "/all-customer/:customerId",
+  "/all-customer",
+  verifyToken,
   masterLocationController.listLocationByCustomer,
 );
 
 // DETAIL CUSTOMER
 router.get(
-  "/:id/detail-customer/:customerId",
+  "/:id/detail-customer",
+  verifyToken,
   masterLocationController.detailLocationByCustomer,
 );
 router.get(

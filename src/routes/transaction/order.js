@@ -43,6 +43,11 @@ router.get(
   transactionOrder.getOutletShippedTransactions,
 );
 router.get(
+  "/outlet/transaction/:transactionId",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.getTransactionDetail,
+);
+router.get(
   "/outlet/transactions",
   allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
   transactionOrder.getOutletTransactions,

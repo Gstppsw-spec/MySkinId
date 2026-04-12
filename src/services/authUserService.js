@@ -767,6 +767,15 @@ module.exports = {
         return { status: false, message: "User tidak ditemukan", data: null };
       }
 
+      if (email && email !== user.email) {
+        const emailExist = await masterUser.findOne({
+          where: { email, id: { [Op.ne]: id } },
+        });
+        if (emailExist) {
+          return { status: false, message: "Email sudah terdaftar", data: null };
+        }
+      }
+
       const updateData = { name, email, phone, roleId, isactive };
 
       if (password) {

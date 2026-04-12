@@ -349,10 +349,10 @@ class PostController {
         try {
             const { type, name, locationId } = req.query;
 
-            if (!type || !['product', 'package', 'location'].includes(type)) {
+            if (!type || !['product', 'package', 'location', 'service'].includes(type)) {
                 return res.status(400).json({
                     success: false,
-                    message: "Invalid or missing 'type' parameter. Must be 'product', 'package', or 'location'."
+                    message: "Invalid or missing 'type' parameter. Must be 'product', 'package', 'location', or 'service'."
                 });
             }
 
