@@ -320,7 +320,7 @@ module.exports = {
     try {
       const methods = await masterPaymentMethod.findAll({
         where: { isActive: true },
-        attributes: ["code", "name", "type", "logoUrl", "id"],
+        attributes: ["code", "name", "type", "logoUrl", "id", "isActive"],
         order: [
           ["type", "ASC"],
           ["name", "ASC"],
@@ -4691,7 +4691,7 @@ module.exports = {
         }
       }
       let updateDate = { name, isActive };
-      
+
       if (file) {
         updateDate.logoUrl = file.path.replace(/\\/g, "/");
       }
