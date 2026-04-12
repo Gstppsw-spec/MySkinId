@@ -340,6 +340,8 @@ module.exports = {
           name: method.name,
           code: method.code,
           logoUrl: method.logoUrl,
+          isActive: method.isActive,
+          id: method.id,
         });
         return acc;
       }, {});
