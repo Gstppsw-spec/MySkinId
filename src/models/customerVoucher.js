@@ -9,8 +9,14 @@ module.exports = (sequelize, DataTypes) => {
                 as: "customer",
             });
             customerVoucher.belongsTo(models.masterPackage, {
-                foreignKey: "packageId",
+                foreignKey: "referenceId",
                 as: "package",
+                constraints: false,
+            });
+            customerVoucher.belongsTo(models.masterService, {
+                foreignKey: "referenceId",
+                as: "service",
+                constraints: false,
             });
             customerVoucher.belongsTo(models.transactionItem, {
                 foreignKey: "transactionItemId",
@@ -31,9 +37,14 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.UUID,
                 allowNull: false,
             },
-            packageId: {
+            referenceId: {
                 type: DataTypes.UUID,
                 allowNull: false,
+            },
+            referenceType: {
+                type: DataTypes.STRING(20),
+                allowNull: false,
+                defaultValue: "package",
             },
             transactionItemId: {
                 type: DataTypes.UUID,

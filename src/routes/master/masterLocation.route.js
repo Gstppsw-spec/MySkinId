@@ -46,14 +46,14 @@ router.post(
   "/",
   verifyToken,
   allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
-  uploadLocationImages.array("photos", 10),
+  uploadLocationImages,
   masterLocationController.create,
 );
 router.put(
   "/:id",
   verifyToken,
   allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
-  uploadLocationImages.array("photos", 10),
+  uploadLocationImages,
   masterLocationController.update,
 );
 router.delete(

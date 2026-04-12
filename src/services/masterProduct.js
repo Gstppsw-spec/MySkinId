@@ -595,20 +595,36 @@ module.exports = {
           data.discount !== undefined ? data.discount : product.discountPercent;
         product.isActive =
           data.isActive !== undefined ? data.isActive : product.isActive;
-        
+
         await product.save();
 
         if (data.locationIds && Array.isArray(data.locationIds)) {
           await product.setLocations(data.locationIds);
         }
-  
+
         if (data.categoryIds && Array.isArray(data.categoryIds)) {
           await product.setCategories(data.categoryIds);
         }
-        
+
+        // Allow adding images even if verified
+        if (files && files.length > 0) {
+          for (const file of files) {
+            await masterProductImage.create({
+              productId: id,
+              imageUrl: file.path,
+              isPrimary: false,
+            });
+          }
+        }
+
+        if (data.primaryImageId) {
+          await this.setPrimaryImage(data.primaryImageId);
+        }
+
         return {
           status: true,
-          message: "Produk sudah diverifikasi. Hanya harga, diskon, status aktif, lokasi, dan kategori yang diperbarui.",
+          message:
+            "Produk sudah diverifikasi. Harga, diskon, status aktif, lokasi, kategori, dan gambar telah diperbarui.",
           data: product,
         };
       }

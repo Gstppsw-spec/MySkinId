@@ -74,6 +74,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
+      totalSold: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
       isVerified: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

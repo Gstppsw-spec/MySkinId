@@ -18,6 +18,11 @@ module.exports = (sequelize, DataTypes) => {
                 as: "package",
                 constraints: false,
             });
+            transactionItem.belongsTo(models.masterService, {
+                foreignKey: "itemId",
+                as: "service",
+                constraints: false,
+            });
             transactionItem.belongsTo(models.flashSaleItem, {
                 foreignKey: "flashSaleItemId",
                 as: "flashSaleItem",

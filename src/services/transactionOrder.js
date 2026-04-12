@@ -25,6 +25,7 @@ const {
     Rating,
     relationshipProductLocation,
     relationshipPackageLocation,
+    relationshipServiceLocation,
     AdsConfig,
     AdsPurchase,
     sequelize,
@@ -319,6 +320,7 @@ module.exports = {
                 include: [
                     { model: masterProduct, as: "product" },
                     { model: masterPackage, as: "package" },
+                    { model: masterService, as: "service" },
                 ],
             });
 
@@ -337,6 +339,9 @@ module.exports = {
                 } else if (item.package) {
                     actualItem = item.package;
                     type = "package";
+                } else if (item.service) {
+                    actualItem = item.service;
+                    type = "service";
                 }
 
                 if (!actualItem) {
@@ -344,8 +349,8 @@ module.exports = {
                 }
 
                 // Resolve locationId: get first active location from pivot table
-                const pivotModel = type === "product" ? relationshipProductLocation : relationshipPackageLocation;
-                const fkField = type === "product" ? "productId" : "packageId";
+                const pivotModel = type === "product" ? relationshipProductLocation : (type === "service" ? relationshipServiceLocation : relationshipPackageLocation);
+                const fkField = type === "product" ? "productId" : (type === "service" ? "serviceId" : "packageId");
                 const firstPivot = await pivotModel.findOne({
                     where: { [fkField]: actualItem.id, isActive: true },
                 });
@@ -408,6 +413,7 @@ module.exports = {
                     weight: unitWeight,
                     totalWeight: totalWeight,
                     isShippingRequired: type === "product",
+                    referenceType: type,
                     locationId: locationId,
                     flashSaleItemId: flashSaleItemId,
                 });
@@ -582,7 +588,7 @@ module.exports = {
 
                 for (const i of items) {
                     let voucherCode = null;
-                    if (i.itemType === "package") {
+                    if (i.itemType === "package" || i.itemType === "service") {
                         voucherCode = nanoid(8).toUpperCase();
                     }
 
@@ -599,7 +605,8 @@ module.exports = {
                         await customerVoucher.create(
                             {
                                 customerId: customerId,
-                                packageId: i.itemId,
+                                referenceId: i.itemId,
+                                referenceType: i.itemType,
                                 transactionItemId: newTrxItem.id,
                                 voucherCode: voucherCode,
                                 status: "NOT_ACTIVE",
@@ -722,6 +729,8 @@ module.exports = {
                     actualItem = await masterProduct.findByPk(item.id);
                 } else if (item.type === "package") {
                     actualItem = await masterPackage.findByPk(item.id);
+                } else if (item.type === "service") {
+                    actualItem = await masterService.findByPk(item.id);
                 }
 
                 if (!actualItem) {
@@ -733,8 +742,8 @@ module.exports = {
                 if (!locationId) {
                     throw new Error("locationId is required for each item in direct checkout");
                 }
-                const pivotModel = item.type === "product" ? relationshipProductLocation : relationshipPackageLocation;
-                const fkField = item.type === "product" ? "productId" : "packageId";
+                const pivotModel = item.type === "product" ? relationshipProductLocation : (item.type === "service" ? relationshipServiceLocation : relationshipPackageLocation);
+                const fkField = item.type === "product" ? "productId" : (item.type === "service" ? "serviceId" : "packageId");
                 const pivotRow = await pivotModel.findOne({
                     where: { [fkField]: actualItem.id, locationId, isActive: true },
                 });
@@ -969,7 +978,7 @@ module.exports = {
 
                 for (const i of items) {
                     let voucherCode = null;
-                    if (i.itemType === "package") {
+                    if (i.itemType === "package" || i.itemType === "service") {
                         voucherCode = nanoid(8).toUpperCase();
                     }
 
@@ -986,7 +995,8 @@ module.exports = {
                         await customerVoucher.create(
                             {
                                 customerId: customerId,
-                                packageId: i.itemId,
+                                referenceId: i.itemId,
+                                referenceType: i.itemType,
                                 transactionItemId: newTrxItem.id,
                                 voucherCode: voucherCode,
                                 status: "NOT_ACTIVE",
@@ -1784,6 +1794,11 @@ module.exports = {
                                     { totalSold: item.quantity },
                                     { where: { id: item.itemId }, transaction: t }
                                 );
+                            } else if (item.itemType === "service") {
+                                await masterService.increment(
+                                    { totalSold: item.quantity },
+                                    { where: { id: item.itemId }, transaction: t }
+                                );
                             } else if (item.itemType === "premium_badge") {
                                 const now = new Date();
                                 const expiredAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
@@ -2025,16 +2040,16 @@ module.exports = {
             // 🔹 Xendit Platform Transfer (Non-blocking)
             try {
                 const xenditPlatformService = require("./xenditPlatform.service");
-                const productItems = await transactionItem.findAll({
-                    where: { transactionId: trx.id, itemType: "product" },
+                const transferableItems = await transactionItem.findAll({
+                    where: { transactionId: trx.id, itemType: { [Op.in]: ["product", "service"] } },
                 });
 
-                if (productItems.length > 0) {
-                    const totalProductAmount = productItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0);
+                if (transferableItems.length > 0) {
+                    const totalTransferAmount = transferableItems.reduce((sum, item) => sum + parseFloat(item.totalPrice), 0);
                     const transferResult = await xenditPlatformService.transferToMerchant({
                         locationId: trx.locationId,
-                        amount: totalProductAmount,
-                        transferType: "PRODUCT_DELIVERED",
+                        amount: totalTransferAmount,
+                        transferType: "ITEM_DELIVERED",
                         transactionId: trx.id,
                         orderId: trx.orderId,
                     });
@@ -2218,6 +2233,26 @@ module.exports = {
                             },
                         ],
                     },
+                    {
+                        model: masterService,
+                        as: "service",
+                        include: [
+                            {
+                                model: masterLocation,
+                                as: "locations",
+                                attributes: ["id", "name", "address", "phone"],
+                                include: [
+                                    {
+                                        model: masterLocationImage,
+                                        as: "images",
+                                        attributes: ["imageUrl"],
+                                        limit: 1,
+                                        separate: true,
+                                    },
+                                ],
+                            },
+                        ],
+                    },
                 ],
                 limit,
                 offset,
@@ -2226,7 +2261,8 @@ module.exports = {
 
             const result = vouchers.map((v) => {
                 const plain = v.get({ plain: true });
-                const firstLocation = plain.package?.locations?.[0] || null;
+                const refItem = plain.package || plain.service || null;
+                const firstLocation = refItem?.locations?.[0] || null;
                 const imageLocation = firstLocation?.images?.[0]?.imageUrl || null;
 
                 // Cleanup internal objects if preferred, or just add the field
@@ -2240,8 +2276,12 @@ module.exports = {
                 if (res.package?.locations) {
                     delete res.package.locations;
                 }
+                if (res.service?.locations) {
+                    delete res.service.locations;
+                }
                 // Maintain backward compatibility for single location object if needed
-                res.package.location = firstLocation;
+                if (res.package) res.package.location = firstLocation;
+                if (res.service) res.service.location = firstLocation;
                 return res;
             });
 
@@ -2690,6 +2730,11 @@ module.exports = {
                                 model: masterPackage,
                                 as: "package",
                                 attributes: ["id", "name"],
+                            },
+                            {
+                                model: masterService,
+                                as: "service",
+                                attributes: ["id", "name"],
                             }
                         ]
                     },
@@ -2768,6 +2813,11 @@ module.exports = {
                                     {
                                         model: masterPackage,
                                         as: "package",
+                                        attributes: ["id", "name"],
+                                    },
+                                    {
+                                        model: masterService,
+                                        as: "service",
                                         attributes: ["id", "name"],
                                     }
                                 ]
@@ -2875,6 +2925,11 @@ module.exports = {
                                 model: masterPackage,
                                 as: "package",
                                 attributes: ["id", "name", "price"],
+                            },
+                            {
+                                model: masterService,
+                                as: "service",
+                                attributes: ["id", "name", "price"],
                             }
                         ]
                     },
@@ -2978,7 +3033,7 @@ module.exports = {
                                 include: [
                                     {
                                         model: masterLocation,
-                                        as: "location",
+                                        as: "locations",
                                         attributes: ["id"],
                                         include: [
                                             {
@@ -2990,6 +3045,11 @@ module.exports = {
                                         ]
                                     }
                                 ]
+                            },
+                            {
+                                model: masterService,
+                                as: "service",
+                                attributes: ["id", "name", "price"],
                             }
                         ]
                     },
@@ -3005,7 +3065,7 @@ module.exports = {
                 const plainTrx = trx.get({ plain: true });
 
                 const items = await Promise.all(plainTrx.items.map(async (item) => {
-                    const entityType = item.itemType === "product" ? "product" : "package";
+                    const entityType = item.itemType; // "product", "package", or "service"
                     const entityId = item.itemId;
 
                     // Fetch user rating for this item
@@ -3094,6 +3154,11 @@ module.exports = {
                                     {
                                         model: masterPackage,
                                         as: "package",
+                                        attributes: ["id", "name"],
+                                    },
+                                    {
+                                        model: masterService,
+                                        as: "service",
                                         attributes: ["id", "name"],
                                     }
                                 ]
@@ -3214,6 +3279,11 @@ module.exports = {
                                 model: masterPackage,
                                 as: "package",
                                 attributes: ["id", "name"],
+                            },
+                            {
+                                model: masterService,
+                                as: "service",
+                                attributes: ["id", "name"],
                             }
                         ]
                     },
@@ -3290,6 +3360,11 @@ module.exports = {
                             {
                                 model: masterPackage,
                                 as: "package",
+                                attributes: ["id", "name", "price"],
+                            },
+                            {
+                                model: masterService,
+                                as: "service",
                                 attributes: ["id", "name", "price"],
                             }
                         ]
@@ -3436,6 +3511,11 @@ module.exports = {
                                 model: masterPackage,
                                 as: "package",
                                 attributes: ["id", "name", "price"],
+                            },
+                            {
+                                model: masterService,
+                                as: "service",
+                                attributes: ["id", "name", "price"],
                             }
                         ]
                     },
@@ -3521,6 +3601,11 @@ module.exports = {
                                     {
                                         model: masterPackage,
                                         as: "package",
+                                        attributes: ["id", "name", "price"],
+                                    },
+                                    {
+                                        model: masterService,
+                                        as: "service",
                                         attributes: ["id", "name", "price"],
                                     }
                                 ]

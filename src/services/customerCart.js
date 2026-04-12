@@ -103,6 +103,7 @@ module.exports = {
       const result = {
         product: [],
         package: [],
+        service: [],
         totalItem: customerCarts.length,
       };
 
@@ -160,6 +161,27 @@ module.exports = {
             isPromoActive: isPromoActive,
             discpercent: cart.package.discountPercent,
             location: cart.package.locations?.[0] || null,
+            isSelected: cart.isSelected,
+            isDirect: cart.isDirect,
+            isOnPayment: cart.isOnPayment,
+            cartId: cart.id,
+            quantity: cart.qty,
+            flashSaleItemId: cart.flashSaleItemId,
+          });
+        }
+        if (cart.service) {
+          finalPrice = isPromoActive ? cart.flashSaleItem.flashPrice : cart.service.price;
+          result.service.push({
+            id: cart.service.id,
+            name: cart.service.name,
+            desc: cart.service.description,
+            price: cart.service.price,
+            flashPrice: isPromoActive ? cart.flashSaleItem.flashPrice : null,
+            finalPrice: finalPrice,
+            isPromoActive: isPromoActive,
+            discountpercent: cart.service.discountPercent,
+            duration: cart.service.duration,
+            location: cart.service.locations?.[0] || null,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
             isOnPayment: cart.isOnPayment,

@@ -228,15 +228,45 @@ class MasterLocationService {
       }
 
       if (location.isVerified) {
-        const statusValue = data.isactive !== undefined ? data.isactive : data.isActive;
+        let updated = false;
+
+        const statusValue =
+          data.isactive !== undefined ? data.isactive : data.isActive;
         if (statusValue !== undefined) {
           await location.update({ isactive: statusValue, updatedBy: userId });
+          updated = true;
+        }
+
+        // Allow adding images even if verified
+        if (files && files.length > 0) {
+          const existingPrimary = await masterLocationImage.findOne({
+            where: { locationId: id, isPrimary: true },
+          });
+
+          for (let i = 0; i < files.length; i++) {
+            await masterLocationImage.create({
+              locationId: id,
+              imageUrl: files[i].path,
+              isPrimary: !existingPrimary && i === 0,
+            });
+          }
+          updated = true;
+        }
+
+        if (data.primaryImageId) {
+          await this.setPrimaryImage(data.primaryImageId);
+          updated = true;
+        }
+
+        if (updated) {
           return {
             status: true,
-            message: "Status updated successfully (other fields ignored because location is verified)",
+            message:
+              "Location updated successfully (only images/status updated because location is verified)",
             data: location,
           };
         }
+
         return {
           status: false,
           message: "Data lokasi sudah diverifikasi dan tidak dapat diubah",
