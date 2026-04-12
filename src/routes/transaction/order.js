@@ -15,25 +15,79 @@ router.post("/buy-premium-badge", transactionOrder.buyPremiumBadge);
 router.get("/status/:orderId", transactionOrder.getTransactionStatus);
 router.post("/cancel", transactionOrder.cancelOrder);
 router.get("/payment-methods", transactionOrder.getPaymentMethods);
-router.post("/add-payment-method", allowRoles("SUPER_ADMIN"), transactionOrder.addPaymentMethod);
+router.put(
+  "/payment-method/:id",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.updatePaymentMethod,
+);
+router.post(
+  "/add-payment-method",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.addPaymentMethod,
+);
 
 // Outlet Admin & Super Admin: Update order status to shipped/delivered
-router.post("/ship", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.shipTransaction);
-router.post("/deliver", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.deliverTransaction);
-router.get("/outlet/shipped", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletShippedTransactions);
-router.get("/outlet/transactions", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletTransactions);
-router.get("/outlet/stats", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getOutletStats);
-router.get("/export", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.exportTransactions);
+router.post(
+  "/ship",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.shipTransaction,
+);
+router.post(
+  "/deliver",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.deliverTransaction,
+);
+router.get(
+  "/outlet/shipped",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.getOutletShippedTransactions,
+);
+router.get(
+  "/outlet/transactions",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.getOutletTransactions,
+);
+router.get(
+  "/outlet/stats",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.getOutletStats,
+);
+router.get(
+  "/export",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.exportTransactions,
+);
 
 // Customer Transaction Views
-router.get("/customer/transactions/history", transactionOrder.getCustomerTransactionHistory);
-router.get("/customer/orders/history", transactionOrder.getCustomerOrderHistory);
-router.get("/customer/transactions/purchased", transactionOrder.getCustomerPurchasedProducts);
+router.get(
+  "/customer/transactions/history",
+  transactionOrder.getCustomerTransactionHistory,
+);
+router.get(
+  "/customer/orders/history",
+  transactionOrder.getCustomerOrderHistory,
+);
+router.get(
+  "/customer/transactions/purchased",
+  transactionOrder.getCustomerPurchasedProducts,
+);
 router.get("/customer/orders/unpaid", transactionOrder.getCustomerUnpaidOrders);
-router.get("/customer/transactions/shipping", transactionOrder.getCustomerShippingTransactions);
-router.get("/customer/transactions/completed", transactionOrder.getCustomerCompletedTransactions);
-router.get("/customer/transactions/tracking-detail/:transactionId", transactionOrder.getCustomerOrderTrackingDetail);
-router.get("/getTransactionDetail/:transactionId", transactionOrder.getTransactionDetail);
+router.get(
+  "/customer/transactions/shipping",
+  transactionOrder.getCustomerShippingTransactions,
+);
+router.get(
+  "/customer/transactions/completed",
+  transactionOrder.getCustomerCompletedTransactions,
+);
+router.get(
+  "/customer/transactions/tracking-detail/:transactionId",
+  transactionOrder.getCustomerOrderTrackingDetail,
+);
+router.get(
+  "/getTransactionDetail/:transactionId",
+  transactionOrder.getTransactionDetail,
+);
 router.get("/getPaymentDetail/:orderId", transactionOrder.getPaymentDetail);
 router.get("/getOrderDetail/:id", transactionOrder.getOrderDetail);
 
@@ -42,11 +96,27 @@ router.post("/complete", transactionOrder.completeTransaction);
 
 // Vouchers
 router.get("/vouchers", transactionOrder.getMyVouchers);
-router.get("/vouchers/check/:voucherCode", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.checkVoucher);
-router.post("/vouchers/claim", allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.claimVoucher);
+router.get(
+  "/vouchers/check/:voucherCode",
+  allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.checkVoucher,
+);
+router.post(
+  "/vouchers/claim",
+  allowRoles("OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.claimVoucher,
+);
 
 // Platform Transfers
-router.get("/transfers/:orderId", allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"), transactionOrder.getTransferStatus);
-router.post("/transfers/retry/:transferId", allowRoles("SUPER_ADMIN"), transactionOrder.retryTransfer);
+router.get(
+  "/transfers/:orderId",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.getTransferStatus,
+);
+router.post(
+  "/transfers/retry/:transferId",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.retryTransfer,
+);
 
 module.exports = router;
