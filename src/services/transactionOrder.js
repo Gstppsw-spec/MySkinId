@@ -2807,6 +2807,17 @@ module.exports = {
             ],
           },
           {
+            model: masterService,
+            as: "service",
+            include: [
+              {
+                model: masterLocation,
+                as: "locations",
+                attributes: ["id", "phone"],
+              },
+            ],
+          },
+          {
             model: masterCustomer,
             as: "customer",
             attributes: ["phoneNumber"],
@@ -2819,18 +2830,26 @@ module.exports = {
       }
 
       const plainVoucher = voucher.get({ plain: true });
-      const firstLocation = plainVoucher.package?.locations?.[0] || null;
+
+      // Handle both package and service
+      const item = plainVoucher.package || plainVoucher.service;
+      if (!item) {
+        throw new Error("Voucher item details not found");
+      }
+
+      const itemLocations = item.locations || [];
+      const firstLocation = itemLocations[0] || null;
+
       const resultVoucher = {
         ...plainVoucher,
         customerPhone: plainVoucher.customer?.phoneNumber || null,
         outletPhone: firstLocation?.phone || null,
       };
       delete resultVoucher.customer;
-      if (resultVoucher.package?.locations) {
-        // delete resultVoucher.package.locations;
-      }
+
       // Maintain backward compatibility
-      resultVoucher.package.location = firstLocation;
+      if (resultVoucher.package) resultVoucher.package.location = firstLocation;
+      if (resultVoucher.service) resultVoucher.service.location = firstLocation;
 
       if (voucher.status !== "BOOKED") {
         throw new Error(`Voucher is already ${voucher.status}`);
@@ -2842,16 +2861,20 @@ module.exports = {
         throw new Error("Voucher has expired and can no longer be claimed");
       }
 
-      // 4. Security Check: Admin location must match package location
-      if (voucher.package.locationId !== userLocation.locationId) {
+      // 4. Security Check: Admin must be assigned to one of the item's locations
+      const itemLocationIds = itemLocations.map((loc) => loc.id);
+      const isAuthorized = locationIds.some((id) =>
+        itemLocationIds.includes(id),
+      );
+
+      if (!isAuthorized) {
         throw new Error("Voucher cannot be claimed at this location");
       }
 
-      // 4. Update Status
+      // 5. Update Status
       await voucher.update({ status: "REDEEM" }, { transaction: t });
 
-      // 5. Auto-Complete Transaction logic
-      // Check if this transaction can be automatically marked as COMPLETED
+      // 6. Auto-Complete Transaction logic
       const voucherTrxItem = await transactionItem.findOne({
         where: { id: voucher.transactionItemId },
         transaction: t,
@@ -2897,20 +2920,20 @@ module.exports = {
       // 🔹 Xendit Platform: Transfer package amount to merchant after REDEEM
       try {
         const xenditPlatformService = require("./xenditPlatform.service");
-        const voucherTrxItem = await transactionItem.findOne({
+        const vTrxItem = await transactionItem.findOne({
           where: { id: voucher.transactionItemId },
           include: [{ model: transaction, as: "transaction" }],
         });
 
-        if (voucherTrxItem && voucherTrxItem.transaction) {
+        if (vTrxItem && vTrxItem.transaction) {
           const transferResult = await xenditPlatformService.transferToMerchant(
             {
-              locationId: voucherTrxItem.locationId,
-              amount: parseFloat(voucherTrxItem.totalPrice),
+              locationId: vTrxItem.locationId,
+              amount: parseFloat(vTrxItem.totalPrice),
               transferType: "VOUCHER_REDEEM",
-              transactionId: voucherTrxItem.transaction.id,
-              transactionItemId: voucherTrxItem.id,
-              orderId: voucherTrxItem.transaction.orderId,
+              transactionId: vTrxItem.transaction.id,
+              transactionItemId: vTrxItem.id,
+              orderId: vTrxItem.transaction.orderId,
             },
           );
           if (!transferResult.status) {

@@ -829,6 +829,9 @@ class MasterLocationService {
 
       const result = locations.map((loc) => {
         const plain = loc.get({ plain: true });
+        const isPremiumValid = !!(
+          plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt)
+        );
 
         let distance = 0;
         if (latt && long && plain.latitude && plain.longitude) {

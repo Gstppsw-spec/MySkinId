@@ -1627,6 +1627,8 @@ module.exports = {
         return { status: false, message: "Room tidak ditemukan", data: null };
       }
 
+      const roomData = room.toJSON();
+
       // Fetch the single recommendation for this room
       const recommendation = await consultationRecommendation.findOne({
         where: { roomId },
@@ -1651,6 +1653,7 @@ module.exports = {
           status: true,
           message: "Belum ada rekomendasi",
           data: {
+            room: roomData,
             recommendation: null,
             outlets: [],
           },
@@ -1666,6 +1669,7 @@ module.exports = {
           status: true,
           message: "Berhasil",
           data: {
+            room: roomData,
             recommendation: recJson,
             outlets: [],
           },
@@ -1714,10 +1718,11 @@ module.exports = {
       if (locationIds.length === 0) {
         return {
           status: true,
-          message: isLocationAvailable 
-            ? "Berhasil (tidak ada outlet terdekat)" 
+          message: isLocationAvailable
+            ? "Berhasil (tidak ada outlet terdekat)"
             : "Berhasil (lokasi customer & outlet room tidak tersedia)",
           data: {
+            room: roomData,
             recommendation: recJson,
             outlets: [],
           },
@@ -1725,7 +1730,7 @@ module.exports = {
       }
 
       // Query preparations
-      const productInclude = [
+      const productIncludeList = [
         { model: masterProductImage, as: "images", attributes: ["imageUrl"] },
         {
           model: masterProductCategory,
@@ -1734,11 +1739,7 @@ module.exports = {
           attributes: ["id", "name"],
           through: { attributes: [] },
           required: true,
-        }
-      ];
-
-      const productIncludeList = [
-        ...productInclude,
+        },
         {
           model: masterLocation,
           as: "locations",
@@ -1749,7 +1750,7 @@ module.exports = {
         }
       ];
 
-      const packageInclude = [
+      const packageIncludeList = [
         {
           model: masterPackageItems,
           as: "items",
@@ -1772,10 +1773,6 @@ module.exports = {
             },
           ],
         },
-      ];
-
-      const packageIncludeList = [
-        ...packageInclude,
         {
           model: masterLocation,
           as: "locations",
@@ -1787,7 +1784,26 @@ module.exports = {
         }
       ];
 
-      const [products, packages] = await Promise.all([
+      const serviceIncludeList = [
+        {
+          model: masterSubCategoryService,
+          as: "categories",
+          where: { id: { [Op.in]: allPackageCategoryIds } },
+          attributes: ["id", "name"],
+          through: { attributes: [] },
+          required: true,
+        },
+        {
+          model: masterLocation,
+          as: "locations",
+          attributes: ["id"],
+          through: { attributes: [] },
+          required: true,
+          where: { id: { [Op.in]: locationIds } },
+        },
+      ];
+
+      const [products, packages, services] = await Promise.all([
         allProductCategoryIds.length > 0 ? masterProduct.findAll({
           attributes: ["id", "name", "description", "price", "discountPercent", "weightGram"],
           include: productIncludeList,
@@ -1796,6 +1812,10 @@ module.exports = {
           attributes: ["id", "name", "description", "price", "discountPercent"],
           include: packageIncludeList,
         }) : Promise.resolve([]),
+        allPackageCategoryIds.length > 0 ? masterService.findAll({
+          attributes: ["id", "name", "description", "price", "duration", "discountPercent"],
+          include: serviceIncludeList,
+        }) : Promise.resolve([]),
       ]);
 
       const outlets = nearestLocations.map((loc) => {
@@ -1803,6 +1823,7 @@ module.exports = {
         const locId = locJson.id;
         const radius = Math.round(parseFloat(locJson.distance) || 0);
 
+        // Products grouping
         const outletProducts = products.filter((p) => {
           const pj = p.get({ plain: true });
           return pj.locations && pj.locations.some(l => l.id === locId);
@@ -1817,16 +1838,7 @@ module.exports = {
           const discountPrice = price - (price * discountPercent) / 100;
           const media = pj.images && pj.images.length > 0 ? pj.images[0] : null;
 
-          const productData = {
-            id: pj.id,
-            name: pj.name,
-            description: pj.description,
-            price,
-            discountPrice,
-            discountPercent,
-            weight: pj.weightGram,
-            media,
-          };
+          const productData = { id: pj.id, name: pj.name, description: pj.description, price, discountPrice, discountPercent, weight: pj.weightGram, media };
 
           pj.categories.forEach((cat) => {
             if (!productCatsMap[cat.id]) {
@@ -1837,6 +1849,7 @@ module.exports = {
           });
         });
 
+        // Packages grouping
         const outletPackages = packages.filter((pkg) => {
           const pkgJ = pkg.get({ plain: true });
           return pkgJ.locations && pkgJ.locations.some(l => l.id === locId);
@@ -1852,13 +1865,13 @@ module.exports = {
           const firstLocation = pkgJson.locations && pkgJson.locations.length > 0 ? pkgJson.locations[0] : null;
           const media = firstLocation && firstLocation.images && firstLocation.images.length > 0 ? firstLocation.images[0] : null;
 
-          const services = (pkgJson.items || []).map((item) => ({
+          const servicesInPkg = (pkgJson.items || []).map((item) => ({
             id: item.id,
             qty: item.qty,
             service: item.service || null,
           }));
 
-          const packageData = { id: pkgJson.id, name: pkgJson.name, description: pkgJson.description, price, discountPrice, discountPercent, services, media };
+          const packageData = { id: pkgJson.id, name: pkgJson.name, description: pkgJson.description, price, discountPrice, discountPercent, services: servicesInPkg, media };
 
           const uniqueCatsInPkg = {};
           (pkgJson.items || []).forEach(item => {
@@ -1876,21 +1889,48 @@ module.exports = {
           });
         });
 
+        // Standalone Services grouping
+        const outletServices = services.filter((s) => {
+          const sj = s.get({ plain: true });
+          return sj.locations && sj.locations.some(l => l.id === locId);
+        });
+        const standaloneServiceCategories = [];
+        const serviceCatsMap = {};
+
+        outletServices.forEach((s) => {
+          const sj = s.toJSON();
+          const price = parseFloat(sj.price) || 0;
+          const discountPercent = parseFloat(sj.discountPercent) || 0;
+          const discountPrice = price - (price * discountPercent) / 100;
+
+          const serviceData = { id: sj.id, name: sj.name, description: sj.description, price, discountPrice, discountPercent, duration: sj.duration };
+
+          sj.categories.forEach((cat) => {
+            if (!serviceCatsMap[cat.id]) {
+              serviceCatsMap[cat.id] = { id: cat.id, name: cat.name, services: [] };
+              standaloneServiceCategories.push(serviceCatsMap[cat.id]);
+            }
+            serviceCatsMap[cat.id].services.push(serviceData);
+          });
+        });
+
         return {
           locationId: locId,
           locationName: locJson.name,
           radius,
           productCategories,
           packageCategories,
+          serviceCategories: standaloneServiceCategories,
         };
       });
 
-      const filteredOutlets = outlets.filter((o) => o.productCategories.length > 0 || o.packageCategories.length > 0);
+      const filteredOutlets = outlets.filter((o) => o.productCategories.length > 0 || o.packageCategories.length > 0 || o.serviceCategories.length > 0);
 
       return {
         status: true,
         message: "Berhasil",
         data: {
+          room: roomData,
           recommendation: recJson,
           outlets: filteredOutlets,
         },
