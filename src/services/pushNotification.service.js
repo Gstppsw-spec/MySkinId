@@ -22,9 +22,9 @@ class PushNotificationService {
         return { status: false, message: "Token tidak boleh kosong" };
       }
 
-      if (!Expo.isExpoPushToken(token)) {
-        return { status: false, message: "Token push tidak valid" };
-      }
+      // if (!Expo.isExpoPushToken(token)) {
+      //   return { status: false, message: "Token push tidak valid" };
+      // }
 
       if (!customerId && !userId) {
         return {
@@ -128,12 +128,12 @@ class PushNotificationService {
       // Build messages
       const messages = [];
       for (const t of tokens) {
-        if (!Expo.isExpoPushToken(t.token)) {
-          console.warn(
-            `[PushNotif] Invalid token skipped: ${t.token}`
-          );
-          continue;
-        }
+        // if (!Expo.isExpoPushToken(t.token)) {
+        //   console.warn(
+        //     `[PushNotif] Invalid token skipped: ${t.token}`
+        //   );
+        //   continue;
+        // }
 
         messages.push({
           to: t.token,
