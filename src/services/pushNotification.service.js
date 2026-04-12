@@ -23,7 +23,7 @@ class PushNotificationService {
       }
 
       // if (!Expo.isExpoPushToken(token)) {
-      //   return { status: false, message: "Token push tidak valid" };
+      //  return { status: false, message: "Token push tidak valid" };
       // }
 
       if (!customerId && !userId) {
