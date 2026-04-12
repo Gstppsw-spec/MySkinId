@@ -320,7 +320,7 @@ module.exports = {
     try {
       const methods = await masterPaymentMethod.findAll({
         where: { isActive: true },
-        attributes: ["code", "name", "type", "logoUrl"],
+        attributes: ["code", "name", "type", "logoUrl", "id"],
         order: [
           ["type", "ASC"],
           ["name", "ASC"],
@@ -4661,9 +4661,11 @@ module.exports = {
     }
   },
 
-  async updatePaymentMethod(id, data) {
+  async updatePaymentMethod(id, data, file) {
     try {
+      const { name, isActive } = data;
       const payment_method = await masterPaymentMethod.findByPk(id);
+
       if (!payment_method) {
         return {
           status: false,
@@ -4672,21 +4674,13 @@ module.exports = {
         };
       }
 
-      if (data.name && data.name.trim() === "") {
+      if (!name) {
         return { status: false, message: "Name cannot be empty", data: null };
       }
 
-      if (data.logoUrl && data.logoUrl.trim() === "") {
-        return {
-          status: false,
-          message: "Logo URL cannot be empty",
-          data: null,
-        };
-      }
-
-      if (data.name && data.name !== payment_method.name) {
+      if (name && name !== payment_method.name) {
         const existing = await masterPaymentMethod.findOne({
-          where: { name: data.name },
+          where: { name: name },
         });
         if (existing) {
           return {
@@ -4696,20 +4690,19 @@ module.exports = {
           };
         }
       }
+      let updateDate = { name, isActive };
+      
+      if (file) {
+        updateDate.logoUrl = file.path.replace(/\\/g, "/");
+      }
+      await payment_method.update(updateDate);
 
-      payment_method.name =
-        data.name !== undefined ? data.name : payment_method.name;
-      payment_method.logoUrl =
-        data.logoUrl !== undefined ? data.logoUrl : payment_method.logoUrl;
-      payment_method.isActive =
-        data.isActive !== undefined ? data.isActive : payment_method.isActive;
-
-      await payment_method.save();
+      const updatedPaymentMethod = await masterPaymentMethod.findByPk(id);
 
       return {
         status: true,
         message: "Payment method updated successfully",
-        data: payment_method,
+        data: updatedPaymentMethod,
       };
     } catch (error) {
       return { status: false, message: error.message, data: null };

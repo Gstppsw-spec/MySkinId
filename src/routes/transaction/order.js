@@ -3,6 +3,7 @@ const router = express.Router();
 const transactionOrder = require("../../controllers/transactionOrder");
 const { verifyToken } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
+const uploadPaymentImages = require("../../middlewares/uploadPaymentMethod.middleware");
 
 router.post("/callback/xendit", transactionOrder.xenditCallback);
 router.post("/callback/biteship", transactionOrder.biteshipCallback);
@@ -18,6 +19,7 @@ router.get("/payment-methods", transactionOrder.getPaymentMethods);
 router.put(
   "/payment-method/:id",
   allowRoles("SUPER_ADMIN"),
+  uploadPaymentImages.single("logoUrl"),
   transactionOrder.updatePaymentMethod,
 );
 router.post(
