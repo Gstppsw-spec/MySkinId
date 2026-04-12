@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const uploadPath = "uploads/consultation";
 const { verifyToken } = require("../../middlewares/authMiddleware");
+const compressImage = require("../../middlewares/compressImage");
 
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
@@ -47,6 +48,7 @@ router.post("/room/:id/message", consultation.addMessage);
 router.post(
   "/room/:id/message/image",
   uploadImageConsultation.array("images", 10),
+  compressImage,
   consultation.addMessage,
 );
 router.put("/room/:id/message/read", consultation.readMessage);

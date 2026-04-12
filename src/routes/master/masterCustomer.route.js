@@ -3,6 +3,7 @@ const router = express.Router();
 const masterCustomerController = require("../../controllers/masterCustomer.controller");
 const { verifyToken } = require("../../middlewares/authMiddleware");
 const uploadProfileImage = require("../../middlewares/uploadProfileImage.middleware");
+const compressImage = require("../../middlewares/compressImage");
 
 
 router.post("/register", masterCustomerController.registerCustomer);
@@ -20,6 +21,7 @@ router.put(
     "/update-profile",
     verifyToken,
     uploadProfileImage.single("profileImage"),
+    compressImage,
     masterCustomerController.updateProfile
 );
 router.get("/profile", verifyToken, masterCustomerController.getProfile);

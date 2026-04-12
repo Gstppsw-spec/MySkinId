@@ -855,12 +855,13 @@ class MasterLocationService {
     }
   }
 
-  async getNewArrivalOutlets(latt = null, long = null) {
+  async getNewArrivalOutlets(latt = null, long = null, pagination = {}) {
     try {
+      const { limit, offset } = pagination;
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const locations = await masterLocation.findAll({
+      const { count, rows: locations } = await masterLocation.findAndCountAll({
         where: {
           isVerified: true,
           isactive: true,
@@ -875,6 +876,9 @@ class MasterLocationService {
           ]
         },
         include: [{ model: masterLocationImage, as: "images" }],
+        distinct: true,
+        limit,
+        offset,
         order: [
           [Sequelize.literal('COALESCE(masterLocation.verifiedDate, masterLocation.createdAt)'), 'DESC']
         ],
@@ -917,6 +921,7 @@ class MasterLocationService {
         status: true,
         message: "Successfully fetched newly added outlets",
         data: result,
+        totalCount: count,
       };
     } catch (error) {
       console.error("Get New Arrival Outlets Error:", error);

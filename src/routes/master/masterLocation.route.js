@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const masterLocationController = require("../../controllers/masterLocation.controller");
 const uploadLocationImages = require("../../middlewares/uploadMultipleImageLocation");
+const compressImage = require("../../middlewares/compressImage");
 const { verifyToken } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
 
@@ -47,6 +48,7 @@ router.post(
   verifyToken,
   allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadLocationImages,
+  compressImage,
   masterLocationController.create,
 );
 router.put(
@@ -54,6 +56,7 @@ router.put(
   verifyToken,
   allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadLocationImages,
+  compressImage,
   masterLocationController.update,
 );
 router.delete(

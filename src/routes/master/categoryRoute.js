@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const productCategory = require("../../controllers/masterProductCategory");
 const consultationCategory = require("../../controllers/masterConsultationCategory");
+const compressImage = require("../../middlewares/compressImage");
 const groupProduct = require("../../controllers/masterGroupProduct");
 const serviceCategory = require("../../controllers/masterCategoryService");
 const { optionalAuth } = require("../../middlewares/authMiddleware");
@@ -16,8 +17,8 @@ router.delete("/product/:id", productCategory.delete);
 // Consultation Category
 router.get("/consultations", optionalAuth, consultationCategory.getAll);
 router.get("/consultation/:id", consultationCategory.getById);
-router.post("/consultations", consultationCategory.upload, consultationCategory.create);
-router.put("/consultation/:id", consultationCategory.upload, consultationCategory.update);
+router.post("/consultations", consultationCategory.upload, compressImage, consultationCategory.create);
+router.put("/consultation/:id", consultationCategory.upload, compressImage, consultationCategory.update);
 router.delete("/consultation/:id", consultationCategory.delete);
 
 //Product group
