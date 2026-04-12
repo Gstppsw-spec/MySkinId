@@ -161,12 +161,25 @@ class masterLocationController {
   }
 
   async getNewArrivalOutlets(req, res) {
-    const { latt, long } = req.query;
-    const result = await masterLocationService.getNewArrivalOutlets(latt, long);
+    try {
+      const { latt, long, page, pageSize } = req.query;
+      const pagination = getPagination(page, pageSize);
 
-    return result.status
-      ? response.success(res, result.message, result.data)
-      : response.error(res, result.message, null);
+      const result = await masterLocationService.getNewArrivalOutlets(latt, long, pagination);
+
+      if (!result.status) {
+        return response.error(res, result.message, null);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   }
 
   async getPremiumLocations(req, res) {

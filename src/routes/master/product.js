@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const masterProduct = require("../../controllers/masterProduct");
 const uploadProductImage = require("../../middlewares/uploadProductImage.middleware");
+const compressImage = require("../../middlewares/compressImage");
 const { verifyToken } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
 
@@ -10,6 +11,7 @@ router.post(
   verifyToken,
   allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadProductImage,
+  compressImage,
   masterProduct.create,
 );
 router.put(
@@ -17,6 +19,7 @@ router.put(
   verifyToken,
   allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
   uploadProductImage,
+  compressImage,
   masterProduct.update,
 );
 

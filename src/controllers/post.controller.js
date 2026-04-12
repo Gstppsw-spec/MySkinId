@@ -374,5 +374,5 @@ class PostController {
 
 // Export controller instance and upload middleware
 const controller = new PostController();
-controller.upload = upload.array("media", 10); // Allow up to 10 files
+controller.upload = upload.array("media", 5); // Allow up to 5 files
 module.exports = controller;

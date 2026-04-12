@@ -6,6 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const uploadPath = "uploads/rating";
 const { verifyToken, optionalAuth } = require("../middlewares/authMiddleware");
+const compressImage = require("../middlewares/compressImage");
 
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
@@ -40,6 +41,7 @@ router.use(verifyToken);
 router.post(
   "/",
   uploadImageReview.array("images", 10),
+  compressImage,
   rating.createOrUpdateRating
 );
 
