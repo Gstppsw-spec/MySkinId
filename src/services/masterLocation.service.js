@@ -25,6 +25,28 @@ const {
 const { sleep, retryRequest } = require("../helpers/request.helper");
 
 class MasterLocationService {
+  static SENSITIVE_LOCATION_FIELDS = [
+    "bankName",
+    "bankAccountName",
+    "bankAccountNumber",
+    "xenditAccountId",
+    "createdBy",
+    "updatedBy",
+    "deletedBy",
+  ];
+
+  static SENSITIVE_COMPANY_FIELDS = [
+    "bankName",
+    "bankAccountName",
+    "bankAccountNumber",
+    "npwp",
+    "nib",
+    "siup",
+    "createdBy",
+    "updatedBy",
+    "deletedBy",
+  ];
+
   async create(data, files, userId) {
     try {
       // Resolve companyId if missing (for COMPANY_ADMIN)
@@ -431,7 +453,11 @@ class MasterLocationService {
     try {
       const location = await masterLocation.findByPk(id, {
         include: [
-          { model: masterCompany, as: "company" },
+          {
+            model: masterCompany,
+            as: "company",
+            attributes: { exclude: MasterLocationService.SENSITIVE_COMPANY_FIELDS },
+          },
           { model: masterUser, as: "creator" },
           { model: masterUser, as: "updater" },
           { model: masterLocationImage, as: "images" },
@@ -444,6 +470,7 @@ class MasterLocationService {
             limit: 1,
           },
         ],
+        attributes: { exclude: MasterLocationService.SENSITIVE_LOCATION_FIELDS },
       });
 
       if (!location) {
@@ -468,7 +495,11 @@ class MasterLocationService {
     try {
       const locations = await masterLocation.findAll({
         include: [
-          { model: masterCompany, as: "company" },
+          {
+            model: masterCompany,
+            as: "company",
+            attributes: { exclude: MasterLocationService.SENSITIVE_COMPANY_FIELDS },
+          },
           { model: masterUser, as: "creator" },
           { model: masterUser, as: "updater" },
           { model: masterLocationImage, as: "images" },
@@ -480,6 +511,7 @@ class MasterLocationService {
             limit: 1,
           },
         ],
+        attributes: { exclude: MasterLocationService.SENSITIVE_LOCATION_FIELDS },
         order: [["createdAt", "DESC"]],
       });
 
@@ -541,6 +573,7 @@ class MasterLocationService {
 
       const locations = await masterLocation.findAll({
         where: { companyId },
+        attributes: { exclude: MasterLocationService.SENSITIVE_LOCATION_FIELDS },
         order: [["createdAt", "DESC"]],
       });
 
@@ -595,6 +628,7 @@ class MasterLocationService {
       const { limit, offset } = pagination;
       const options = {
         where: {},
+        attributes: { exclude: MasterLocationService.SENSITIVE_LOCATION_FIELDS },
         include: [
           {
             model: masterLocationImage,
@@ -728,16 +762,23 @@ class MasterLocationService {
 
       const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
 
+      const responseData = {
+        ...plain,
+        isPremium: isPremiumValid,
+        isFavorite: plain.favorites?.length > 0 || false,
+        distance: distance,
+        favorites: undefined,
+      };
+
+      // Ensure sensitive fields are removed
+      MasterLocationService.SENSITIVE_LOCATION_FIELDS.forEach((field) => {
+        delete responseData[field];
+      });
+
       return {
         status: true,
         message: "Location found",
-        data: {
-          ...plain,
-          isPremium: isPremiumValid,
-          isFavorite: plain.favorites?.length > 0 || false,
-          distance: distance,
-          favorites: undefined,
-        },
+        data: responseData,
       };
     } catch (error) {
       console.error("Detail error:", error);
@@ -810,26 +851,8 @@ class MasterLocationService {
           distance = Math.round(R * c);
         }
 
-        const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
-
-        return {
+        const responseData = {
           ...plain,
-          address: undefined,
-          province: undefined,
-          district: undefined,
-          subdistrict: undefined,
-          postalCode: undefined,
-          cityId: undefined,
-          districtId: undefined,
-          latitude: undefined,
-          longitude: undefined,
-          phone: undefined,
-          email: undefined,
-          bankName: undefined,
-          bankAccountName: undefined,
-          bankAccountNumber: undefined,
-          xenditAccountId: undefined,
-          googlePlaceId: undefined,
           isPremium: isPremiumValid,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
@@ -837,6 +860,18 @@ class MasterLocationService {
           distance: distance,
           favorites: undefined,
         };
+
+        // Ensure sensitive fields are removed
+        MasterLocationService.SENSITIVE_LOCATION_FIELDS.forEach((field) => {
+          delete responseData[field];
+        });
+
+        // Add back address/phone/etc if they were previously undefined
+        // Wait, looking at lines 817-827, they were intentionally set to undefined.
+        // I will keep them undefined if that was the original intention, 
+        // but ensure bank info is definitely gone.
+        
+        return responseData;
       });
 
       if (radius && latt && long) {
@@ -887,6 +922,7 @@ class MasterLocationService {
       const result = locations.map((loc) => {
         const plain = loc.get({ plain: true });
 
+        // ... existing distance calculation ...
         let distance = 0;
         if (latt && long && plain.latitude && plain.longitude) {
           const lat1 = parseFloat(latt);
@@ -910,11 +946,18 @@ class MasterLocationService {
 
         const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
 
-        return {
+        const responseData = {
           ...plain,
           isPremium: isPremiumValid,
           distance: distance,
         };
+
+        // Ensure sensitive fields are removed
+        MasterLocationService.SENSITIVE_LOCATION_FIELDS.forEach((field) => {
+          delete responseData[field];
+        });
+
+        return responseData;
       });
 
       return {

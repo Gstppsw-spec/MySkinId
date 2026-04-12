@@ -2988,6 +2988,26 @@ module.exports = {
             ],
           },
           {
+            model: masterService,
+            as: "service",
+            include: [
+              {
+                model: masterLocation,
+                as: "locations",
+                attributes: ["id", "name", "address", "phone"],
+                include: [
+                  {
+                    model: masterLocationImage,
+                    as: "images",
+                    attributes: ["imageUrl"],
+                    limit: 1,
+                    separate: true,
+                  },
+                ],
+              },
+            ],
+          },
+          {
             model: masterCustomer,
             as: "customer",
             attributes: ["id", "name", "username", "email", "phoneNumber"],
@@ -3000,7 +3020,15 @@ module.exports = {
       }
 
       const plainVoucher = voucher.get({ plain: true });
-      const firstLocation = plainVoucher.package?.locations?.[0] || null;
+
+      // Handle both package and service
+      const item = plainVoucher.package || plainVoucher.service;
+      if (!item) {
+        throw new Error("Voucher item details not found");
+      }
+
+      const itemLocations = item.locations || [];
+      const firstLocation = itemLocations[0] || null;
       const imageLocation = firstLocation?.images?.[0]?.imageUrl || null;
 
       if (plainVoucher.status !== "BOOKED") {
@@ -3034,24 +3062,29 @@ module.exports = {
             ...plainVoucher,
             status: "EXPIRED",
             customerPhone: plainVoucher.customer?.phoneNumber || null,
-            outletPhone: plainVoucher.package?.location?.phone || null,
+            outletPhone: firstLocation?.phone || null,
             imageLocation,
           },
         };
       }
 
-      // 4. Security Check: Admin location must match package location
-      if (plainVoucher.package.locationId !== userLocation.locationId) {
+      // 4. Security Check: Admin must be assigned to one of the item's locations
+      const itemLocationIds = itemLocations.map((loc) => loc.id);
+      const isAuthorized = locationIds.some((id) =>
+        itemLocationIds.includes(id),
+      );
+
+      if (!isAuthorized) {
         throw new Error("Voucher cannot be claimed at this location");
       }
 
-      // Use the already declared firstLocation
       const finalData = {
         ...plainVoucher,
         customerPhone: plainVoucher.customer?.phoneNumber || null,
         outletPhone: firstLocation?.phone || null,
         imageLocation,
-        location: firstLocation, // Backward compatibility
+        location: firstLocation, // for compatibility
+        item: item,
       };
 
       return {
@@ -3175,6 +3208,10 @@ module.exports = {
             attributes: ["itemName", "quantity", "totalPrice"],
           },
           {
+            model: transactionShipping,
+            as: "shipping",
+          },
+          {
             model: masterLocation,
             as: "location",
             attributes: ["id", "name", "phone"],
@@ -3191,7 +3228,7 @@ module.exports = {
         const plain = r.get({ plain: true });
         const res = {
           ...plain,
-          customerPhone: plain.order?.customer?.phoneNumber || null,
+          customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
           outletPhone: plain.location?.phone || null,
         };
         if (res.order?.customer) {
@@ -3269,6 +3306,10 @@ module.exports = {
             ],
           },
           {
+            model: transactionShipping,
+            as: "shipping",
+          },
+          {
             model: masterLocation,
             as: "location",
             attributes: ["id", "name", "phone"],
@@ -3285,7 +3326,7 @@ module.exports = {
         const plain = r.get({ plain: true });
         const res = {
           ...plain,
-          customerPhone: plain.order?.customer?.phoneNumber || null,
+          customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
           outletPhone: plain.location?.phone || null,
         };
         if (res.order?.customer) {
@@ -3365,6 +3406,10 @@ module.exports = {
                 ],
               },
               {
+                model: transactionShipping,
+                as: "shipping",
+              },
+              {
                 model: masterLocation,
                 as: "location",
                 attributes: ["id", "name", "phone"],
@@ -3385,7 +3430,7 @@ module.exports = {
           orderNumber: plainOrder.orderNumber,
           totalAmount: plainOrder.totalAmount,
           paymentStatus: plainOrder.paymentStatus,
-          customerPhone: plainOrder.customer?.phoneNumber || null,
+          customerPhone: plainOrder.transactions?.[0]?.shipping?.receiverPhone || plainOrder.customer?.phoneNumber || null,
           createdAt: plainOrder.createdAt,
           payments: plainOrder.payments,
           transactions: (plainOrder.transactions || []).map((trx) => {
@@ -3554,6 +3599,10 @@ module.exports = {
             ],
           },
           {
+            model: transactionShipping,
+            as: "shipping",
+          },
+          {
             model: masterLocation,
             as: "location",
             attributes: ["id", "name", "phone"],
@@ -3666,7 +3715,7 @@ module.exports = {
             completedAt: plainTrx.updatedAt,
             locationId: plainTrx.locationId,
             locationName: plainTrx.location?.name,
-            customerPhone: plainTrx.order?.customer?.phoneNumber || null,
+            customerPhone: plainTrx.shipping?.receiverPhone || plainTrx.order?.customer?.phoneNumber || null,
             outletPhone: plainTrx.location?.phone || null,
             items: items,
           };
@@ -3731,6 +3780,10 @@ module.exports = {
                 ],
               },
               {
+                model: transactionShipping,
+                as: "shipping",
+              },
+              {
                 model: masterLocation,
                 as: "location",
                 attributes: ["phone"],
@@ -3784,7 +3837,7 @@ module.exports = {
           paymentStatus: plainOrder.paymentStatus,
           totalAmount: plainOrder.totalAmount,
           createdAt: plainOrder.createdAt,
-          customerPhone: plainOrder.customer?.phoneNumber || null,
+          customerPhone: plainOrder.transactions?.[0]?.shipping?.receiverPhone || plainOrder.customer?.phoneNumber || null,
           outletPhone: plainOrder.transactions?.[0]?.location?.phone || null,
           paymentMethod: latestPayment?.paymentMethod || null,
           checkoutUrl: latestPayment?.checkoutUrl || null,
@@ -3889,7 +3942,7 @@ module.exports = {
         const plain = r.get({ plain: true });
         const res = {
           ...plain,
-          customerPhone: plain.order?.customer?.phoneNumber || null,
+          customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
           outletPhone: plain.location?.phone || null,
         };
         if (res.order?.customer) {
@@ -4166,7 +4219,7 @@ module.exports = {
       const plain = trx.get({ plain: true });
       const resultData = {
         ...plain,
-        customerPhone: plain.order?.customer?.phoneNumber || null,
+        customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
         outletPhone: plain.location?.phone || null,
       };
       if (resultData.order?.customer)
@@ -4265,7 +4318,7 @@ module.exports = {
         orderNumber: plainOrder.orderNumber,
         totalAmount: plainOrder.totalAmount,
         paymentStatus: plainOrder.paymentStatus,
-        customerPhone: plainOrder.customer?.phoneNumber || null,
+        customerPhone: plainOrder.transactions?.[0]?.shipping?.receiverPhone || plainOrder.customer?.phoneNumber || null,
         createdAt: plainOrder.createdAt,
         payments: (plainOrder.payments || []).map((p) => ({
           paymentMethod: p.paymentMethod,
@@ -4321,17 +4374,21 @@ module.exports = {
             attributes: ["phoneNumber"],
           },
           { model: orderPayment, as: "payments" },
-          {
-            model: transaction,
-            as: "transactions",
-            include: [
               {
-                model: masterLocation,
-                as: "location",
-                attributes: ["phone"],
+                model: transaction,
+                as: "transactions",
+                include: [
+                  {
+                    model: transactionShipping,
+                    as: "shipping",
+                  },
+                  {
+                    model: masterLocation,
+                    as: "location",
+                    attributes: ["phone"],
+                  },
+                ],
               },
-            ],
-          },
         ],
       });
 
@@ -4360,7 +4417,7 @@ module.exports = {
         totalAmount: orderData.totalAmount,
         paymentStatus: orderData.paymentStatus,
         paymentMethod: latestPayment.paymentMethod,
-        customerPhone: orderData.customer?.phoneNumber || null,
+        customerPhone: orderData.transactions?.[0]?.shipping?.receiverPhone || orderData.customer?.phoneNumber || null,
         outletPhone: orderData.transactions?.[0]?.location?.phone || null,
         remainingSeconds,
         instructions: latestPayment.instructions

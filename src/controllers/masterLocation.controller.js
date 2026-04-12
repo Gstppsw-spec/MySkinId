@@ -127,7 +127,8 @@ class masterLocationController {
   }
 
   async detailLocationByCustomer(req, res) {
-    const { id, customerId } = req.params;
+    const { id } = req.params;
+    const customerId = req.user?.id || null;
     const { latt, long } = req.query;
 
     const location = await masterLocationService.detailLocationByCustomer(
@@ -143,7 +144,7 @@ class masterLocationController {
   }
 
   async listLocationByCustomer(req, res) {
-    const { customerId } = req.params;
+    const customerId = req.user?.id || null;
     const { latt, long, name, radius, cityId } = req.query;
 
     const location = await masterLocationService.listLocationByCustomer(

@@ -11,7 +11,7 @@ const { Sequelize } = require("sequelize");
 const validateReference = require("../helpers/validateReference");
 
 module.exports = {
-  async getCustomerFavorites(customerId, userLat, userLng) {
+  async getCustomerFavorites(customerId, userLat, userLng, type = null, page = 1, pageSize = 10) {
     try {
       if (!customerId)
         return { status: false, message: "Customer tidak boleh kosong" };
@@ -32,133 +32,143 @@ module.exports = {
       const distanceLiteralDefault = getDistanceLiteral("location");
       const distanceLiteralPlural = getDistanceLiteral("locations");
 
-      const favorites = await customerFavorites.findAll({
-        where: { customerId },
-        attributes: [],
-        include: [
-          {
-            model: masterProduct,
-            as: "product",
-            attributes: {
-              exclude: ["createdAt", "updatedAt"],
-            },
-            include: [
-              {
-                model: masterProductImage,
-                as: "images",
-                attributes: ["imageUrl"],
-              },
-            ],
-          },
-          {
-            model: masterLocation,
-            as: "location",
-            attributes: [
-              "id",
-              "name",
-              ...(distanceLiteralDefault
-                ? [[distanceLiteralDefault, "distance"]]
-                : []),
-            ],
-            required: !!(userLat && userLng),
-            include: [
-              {
-                model: masterLocationImage,
-                as: "images",
-                attributes: ["imageUrl"],
-              },
-            ],
-          },
-          {
-            model: masterService,
-            as: "service",
-            attributes: {
-              exclude: ["createdAt", "updatedAt"],
-            },
-            include: [
-              {
-                model: masterLocation,
-                as: "locations",
-                attributes: [
-                  "id",
-                  "name",
-                  ...(distanceLiteralPlural
-                    ? [[distanceLiteralPlural, "distance"]]
-                    : []),
-                ],
-                required: !!(userLat && userLng),
-                include: [
-                  {
-                    model: masterLocationImage,
-                    as: "images",
-                    attributes: ["imageUrl"],
-                    limit: 1,
-                    separate: true,
-                  },
-                ],
-              },
-            ],
-          },
-          {
-            model: masterPackage,
-            as: "package",
-            attributes: {
-              exclude: ["createdAt", "updatedAt"],
-            },
-            include: [
-              {
-                model: masterLocation,
-                as: "locations",
-                attributes: [
-                  "id",
-                  "name",
-                  ...(distanceLiteralPlural
-                    ? [[distanceLiteralPlural, "distance"]]
-                    : []),
-                ],
-                required: !!(userLat && userLng),
-                include: [
-                  {
-                    model: masterLocationImage,
-                    as: "images",
-                    attributes: ["imageUrl"],
-                    limit: 1,
-                    separate: true,
-                  },
-                ],
-              },
-            ],
-          },
+      const where = { customerId };
+      if (type) {
+        where.favoriteType = type;
+      }
+
+      const include = [];
+
+      // Helper functions to add nested models correctly
+      const addProduct = () => include.push({
+        model: masterProduct,
+        as: "product",
+        attributes: { exclude: ["createdAt", "updatedAt"] },
+        include: [{ model: masterProductImage, as: "images", attributes: ["imageUrl"] }],
+      });
+
+      const addLocation = () => include.push({
+        model: masterLocation,
+        as: "location",
+        attributes: [
+          "id",
+          "name",
+          ...(distanceLiteralDefault ? [[distanceLiteralDefault, "distance"]] : []),
         ],
+        required: !!(userLat && userLng && type === "location"),
+        include: [{ model: masterLocationImage, as: "images", attributes: ["imageUrl"] }],
       });
 
-      const result = {
-        product: [],
-        service: [],
-        location: [],
-        package: [],
-      };
-
-      favorites.forEach((fav) => {
-        if (fav.product) result.product.push(fav.product);
-        if (fav.service) {
-          const servicePlain = fav.service.get({ plain: true });
-          // Backward compatibility: map locations[0] to location
-          servicePlain.location = servicePlain.locations?.[0] || null;
-          delete servicePlain.locations;
-          result.service.push(servicePlain);
-        }
-        if (fav.location) result.location.push(fav.location);
-        if (fav.package) {
-          const packagePlain = fav.package.get({ plain: true });
-          // Backward compatibility: map locations[0] to location
-          packagePlain.location = packagePlain.locations?.[0] || null;
-          delete packagePlain.locations;
-          result.package.push(packagePlain);
-        }
+      const addService = () => include.push({
+        model: masterService,
+        as: "service",
+        attributes: { exclude: ["createdAt", "updatedAt"] },
+        include: [{
+          model: masterLocation,
+          as: "locations",
+          attributes: [
+            "id",
+            "name",
+            ...(distanceLiteralPlural ? [[distanceLiteralPlural, "distance"]] : []),
+          ],
+          required: !!(userLat && userLng && type === "service"),
+          include: [{ model: masterLocationImage, as: "images", attributes: ["imageUrl"], limit: 1, separate: true }],
+        }],
       });
 
-      return { status: true, message: "Berhasil", data: result };
+      const addPackage = () => include.push({
+        model: masterPackage,
+        as: "package",
+        attributes: { exclude: ["createdAt", "updatedAt"] },
+        include: [{
+          model: masterLocation,
+          as: "locations",
+          attributes: [
+            "id",
+            "name",
+            ...(distanceLiteralPlural ? [[distanceLiteralPlural, "distance"]] : []),
+          ],
+          required: !!(userLat && userLng && type === "package"),
+          include: [{ model: masterLocationImage, as: "images", attributes: ["imageUrl"], limit: 1, separate: true }],
+        }],
+      });
+
+      if (type) {
+        // Flattened paginated response for specific type
+        if (type === "product") addProduct();
+        else if (type === "location") addLocation();
+        else if (type === "service") addService();
+        else if (type === "package") addPackage();
+
+        const limit = parseInt(pageSize);
+        const offset = (parseInt(page) - 1) * limit;
+
+        const { count, rows: favorites } = await customerFavorites.findAndCountAll({
+          where,
+          include,
+          limit,
+          offset,
+          order: [["createdAt", "DESC"]],
+          distinct: true,
+        });
+
+        const data = favorites.map((fav) => {
+          if (fav.product) return fav.product;
+          if (fav.location) return fav.location;
+          if (fav.service) {
+            const p = fav.service.get({ plain: true });
+            p.location = p.locations?.[0] || null;
+            delete p.locations;
+            return p;
+          }
+          if (fav.package) {
+            const p = fav.package.get({ plain: true });
+            p.location = p.locations?.[0] || null;
+            delete p.locations;
+            return p;
+          }
+          return null;
+        }).filter(Boolean);
+
+        return { status: true, message: "Berhasil", data, totalCount: count };
+      } else {
+        // Legacy grouped response
+        addProduct();
+        addLocation();
+        addService();
+        addPackage();
+
+        const favorites = await customerFavorites.findAll({
+          where,
+          include,
+        });
+
+        const result = {
+          product: [],
+          service: [],
+          location: [],
+          package: [],
+        };
+
+        favorites.forEach((fav) => {
+          if (fav.product) result.product.push(fav.product);
+          if (fav.service) {
+            const servicePlain = fav.service.get({ plain: true });
+            servicePlain.location = servicePlain.locations?.[0] || null;
+            delete servicePlain.locations;
+            result.service.push(servicePlain);
+          }
+          if (fav.location) result.location.push(fav.location);
+          if (fav.package) {
+            const packagePlain = fav.package.get({ plain: true });
+            packagePlain.location = packagePlain.locations?.[0] || null;
+            delete packagePlain.locations;
+            result.package.push(packagePlain);
+          }
+        });
+
+        return { status: true, message: "Berhasil", data: result };
+      }
     } catch (error) {
       console.error(error);
       return { status: false, message: error.message };
