@@ -28,6 +28,7 @@ const {
   relationshipServiceLocation,
   AdsConfig,
   AdsPurchase,
+  masterUser,
   sequelize,
 } = require("../models");
 const { nanoid } = require("nanoid");
@@ -43,6 +44,16 @@ const PDFDocument = require("pdfkit");
 
 module.exports = {
   async _getAdminLocationIds(adminId) {
+    // 0. Check if SUPER_ADMIN
+    const user = await masterUser.findByPk(adminId);
+    if (user && user.roleId === "7a6e84ac-1e95-4bcd-a51e-94113988868c") {
+      const allLocations = await masterLocation.findAll({
+        attributes: ["id"],
+        raw: true,
+      });
+      return allLocations.map((loc) => loc.id);
+    }
+
     // 1. Check direct outlet assignment (OUTLET_ADMIN)
     const userLocations = await relationshipUserLocation.findAll({
       where: { userId: adminId, isactive: true },
@@ -3965,9 +3976,16 @@ module.exports = {
         const plain = r.get({ plain: true });
         const res = {
           ...plain,
-          customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
+          customerPhone:
+            plain.shipping?.receiverPhone ||
+            plain.order?.customer?.phoneNumber ||
+            null,
           outletPhone: plain.location?.phone || null,
         };
+
+        // Filter out non-shippable items (packages/services) for this shipping view
+        res.items = (res.items || []).filter((item) => item.itemType === "product");
+
         if (res.order?.customer) {
           delete res.order.customer.phoneNumber;
         }
@@ -4181,6 +4199,11 @@ module.exports = {
                 as: "customer",
                 attributes: ["phoneNumber"],
               },
+              {
+                model: orderPayment,
+                as: "payments",
+                attributes: ["paymentMethod", "paymentStatus", "amount"],
+              },
             ],
           },
           {
@@ -4228,12 +4251,12 @@ module.exports = {
         throw new Error("Transaction not found");
       }
 
-      // Security: Owner OR Admin of the outlet
-      const isAdmin = await relationshipUserLocation.findOne({
-        where: { userId: userId, locationId: trx.locationId, isactive: true },
-      });
+      // Security Check
+      const authorizedLocationIds = await this._getAdminLocationIds(userId);
+      const isAuthorizedAdmin = authorizedLocationIds.includes(trx.locationId);
+      const isOwner = trx.order.customerId === userId;
 
-      if (trx.order.customerId !== userId && !isAdmin) {
+      if (!isOwner && !isAuthorizedAdmin) {
         throw new Error(
           "Unauthorized: You don't have access to this transaction detail",
         );
@@ -4242,7 +4265,10 @@ module.exports = {
       const plain = trx.get({ plain: true });
       const resultData = {
         ...plain,
-        customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
+        customerPhone:
+          plain.shipping?.receiverPhone ||
+          plain.order?.customer?.phoneNumber ||
+          null,
         outletPhone: plain.location?.phone || null,
       };
       if (resultData.order?.customer)

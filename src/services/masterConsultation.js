@@ -1931,7 +1931,10 @@ module.exports = {
         message: "Berhasil",
         data: {
           room: roomData,
-          recommendation: recJson,
+          recommendation: {
+            ...recJson,
+            serviceCategories: recJson.packageCategories || [],
+          },
           outlets: filteredOutlets,
         },
       };

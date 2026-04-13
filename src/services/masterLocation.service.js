@@ -792,7 +792,8 @@ class MasterLocationService {
     long = null,
     name = null,
     radius = null,
-    cityId = null
+    cityId = null,
+    sortBy = "recommended"
   ) {
     try {
       const include = [{ model: masterLocationImage, as: "images" }];
@@ -827,7 +828,7 @@ class MasterLocationService {
         return { status: false, message: "Location not found", data: null };
       }
 
-      const result = locations.map((loc) => {
+      let result = locations.map((loc) => {
         const plain = loc.get({ plain: true });
         const isPremiumValid = !!(
           plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt)
@@ -869,21 +870,26 @@ class MasterLocationService {
           delete responseData[field];
         });
 
-        // Add back address/phone/etc if they were previously undefined
-        // Wait, looking at lines 817-827, they were intentionally set to undefined.
-        // I will keep them undefined if that was the original intention, 
-        // but ensure bank info is definitely gone.
-        
         return responseData;
       });
 
+      // Filter by radius if provided
       if (radius && latt && long) {
         const radiusInMeters = parseFloat(radius) * 1000;
-        return {
-          status: true,
-          message: "Location list",
-          data: result.filter((loc) => loc.distance <= radiusInMeters),
-        };
+        result = result.filter((loc) => loc.distance <= radiusInMeters);
+      }
+
+      // Apply sorting logic
+      if (sortBy === "nearby" && latt && long) {
+        result.sort((a, b) => a.distance - b.distance);
+      } else if (sortBy === "rating") {
+        result.sort((a, b) => (b.ratingAvg || 0) - (a.ratingAvg || 0));
+      } else if (sortBy === "recommended") {
+        // Already sorted by premium/date in DB, but re-confirming here
+        result.sort((a, b) => {
+          if (a.isPremium !== b.isPremium) return b.isPremium ? -1 : 1;
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
       }
 
       return { status: true, message: "Location list", data: result };

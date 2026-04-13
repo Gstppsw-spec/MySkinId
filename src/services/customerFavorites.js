@@ -19,7 +19,7 @@ module.exports = {
       const getDistanceLiteral = (alias) => {
         if (!userLat || !userLng) return null;
         return Sequelize.literal(`
-                  6371 * acos(
+                  6371000 * acos(
                     cos(radians(${userLat})) *
                     cos(radians(CAST(${alias}.latitude AS FLOAT))) *
                     cos(radians(CAST(${alias}.longitude AS FLOAT)) - radians(${userLng})) +
@@ -53,6 +53,14 @@ module.exports = {
         attributes: [
           "id",
           "name",
+          "address",
+          "operationHours",
+          "operationDays",
+          "latitude",
+          "longitude",
+          "ratingAvg",
+          "ratingCount",
+          "isPremium",
           ...(distanceLiteralDefault ? [[distanceLiteralDefault, "distance"]] : []),
         ],
         required: !!(userLat && userLng && type === "location"),
@@ -69,6 +77,14 @@ module.exports = {
           attributes: [
             "id",
             "name",
+            "address",
+            "operationHours",
+            "operationDays",
+            "latitude",
+            "longitude",
+            "ratingAvg",
+            "ratingCount",
+            "isPremium",
             ...(distanceLiteralPlural ? [[distanceLiteralPlural, "distance"]] : []),
           ],
           required: !!(userLat && userLng && type === "service"),
@@ -86,6 +102,14 @@ module.exports = {
           attributes: [
             "id",
             "name",
+            "address",
+            "operationHours",
+            "operationDays",
+            "latitude",
+            "longitude",
+            "ratingAvg",
+            "ratingCount",
+            "isPremium",
             ...(distanceLiteralPlural ? [[distanceLiteralPlural, "distance"]] : []),
           ],
           required: !!(userLat && userLng && type === "package"),

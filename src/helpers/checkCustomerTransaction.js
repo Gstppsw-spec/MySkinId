@@ -63,7 +63,8 @@ module.exports = async function checkCustomerTransaction({
 
     case "PACKAGE":
     case "SERVICE": {
-      const item = await transactionItem.findOne({
+      const allowedStatuses = ["PAID", "DELIVERED", "COMPLETED"];
+      let items = await transactionItem.findAll({
         where: {
           itemType: type.toLowerCase(),
           itemId: entityId,
@@ -85,20 +86,60 @@ module.exports = async function checkCustomerTransaction({
         ],
       });
 
-      if (!item) return null;
+      // Secondary search for SERVICE: Check if it's inside a purchased PACKAGE
+      if (items.length === 0 && type === "SERVICE") {
+        const { masterPackageItems } = require("../models");
+        const packagesWithService = await masterPackageItems.findAll({
+          where: { serviceId: entityId },
+          attributes: ["packageId"],
+        });
 
-      // Jika transaksi sudah COMPLETED, boleh rating
-      if (item.transaction.orderStatus === "COMPLETED") return item;
-
-      // Jika belum COMPLETED, cek apakah sudah ada voucher yang di-REDEEM
-      const redeemedVoucher = await customerVoucher.findOne({
-        where: {
-          transactionItemId: item.id,
-          status: "REDEEM"
+        if (packagesWithService.length > 0) {
+          const packageItems = await transactionItem.findAll({
+            where: {
+              itemType: "package",
+              itemId: { [Op.in]: packagesWithService.map((p) => p.packageId) },
+            },
+            include: [
+              {
+                model: transaction,
+                as: "transaction",
+                required: true,
+                include: [
+                  {
+                    model: order,
+                    as: "order",
+                    where: { customerId },
+                    required: true,
+                  },
+                ],
+              },
+            ],
+          });
+          items = items.concat(packageItems);
         }
-      });
+      }
 
-      return redeemedVoucher ? item : null;
+      if (items.length === 0) return null;
+
+      // Validate found items
+      for (const item of items) {
+        if (item.transaction.orderStatus === "COMPLETED") return item;
+
+        // Allow rating if transaction is PAID/DELIVERED and voucher is REDEEMED
+        if (allowedStatuses.includes(item.transaction.orderStatus)) {
+          const redeemedVoucher = await customerVoucher.findOne({
+            where: {
+              transactionItemId: item.id,
+              status: "REDEEM",
+            },
+          });
+
+          if (redeemedVoucher) return item;
+        }
+      }
+
+      return null;
     }
 
     case "LOCATION":
