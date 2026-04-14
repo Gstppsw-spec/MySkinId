@@ -2682,10 +2682,13 @@ module.exports = {
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
-      // 2. Fetch all vouchers for the customer
+      // 2. Fetch all active/used/expired vouchers for the customer
       const { count: totalCount, rows: vouchers } =
         await customerVoucher.findAndCountAll({
-          where: { customerId },
+          where: {
+            customerId,
+            status: { [Op.ne]: "NOT_ACTIVE" },
+          },
           include: [
             {
               model: masterCustomer,
