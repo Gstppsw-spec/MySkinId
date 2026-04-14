@@ -100,88 +100,149 @@ class PushNotificationService {
    * @param {string} notification.body - Notification body text
    * @param {Object} [notification.data] - Extra data payload
    */
-  async sendPushNotification(recipientId, recipientType, notification) {
-    try {
-      if (!recipientId) return;
+  // async sendPushNotification(recipientId, recipientType, notification) {
+  //   try {
+  //     if (!recipientId) return;
 
-      // Build where clause based on recipient type
-      const whereClause = { isActive: true };
-      if (recipientType === "customer") {
-        whereClause.customerId = recipientId;
-      } else {
-        whereClause.userId = recipientId;
-      }
+  //     // Build where clause based on recipient type
+  //     const whereClause = { isActive: true };
+  //     if (recipientType === "customer") {
+  //       whereClause.customerId = recipientId;
+  //     } else {
+  //       whereClause.userId = recipientId;
+  //     }
 
-      // Get all active tokens for this recipient
-      const tokens = await pushToken.findAll({
-        where: whereClause,
-        attributes: ["id", "token"],
-      });
+  //     // Get all active tokens for this recipient
+  //     const tokens = await pushToken.findAll({
+  //       where: whereClause,
+  //       attributes: ["id", "token"],
+  //     });
 
-      if (!tokens.length) {
-        console.log(
-          `[PushNotif] No active tokens for ${recipientType}:${recipientId}`
-        );
-        return;
-      }
+  //     if (!tokens.length) {
+  //       console.log(
+  //         `[PushNotif] No active tokens for ${recipientType}:${recipientId}`,
+  //       );
+  //       return;
+  //     }
 
-      // Build messages
-      const messages = [];
-      for (const t of tokens) {
-        messages.push({
-          to: t.token,
-          sound: "default",
-          title: notification.title,
-          body: notification.body,
-          data: notification.data || {},
-        });
-      }
+  //     // Build messages
+  //     const messages = [];
+  //     for (const t of tokens) {
+  //       messages.push({
+  //         to: t.token,
+  //         sound: "default",
+  //         title: notification.title,
+  //         body: notification.body,
+  //         data: notification.data || {},
+  //       });
+  //     }
 
-      if (!messages.length) return;
+  //     if (!messages.length) return;
 
-      // Send in chunks (Expo best practice)
-      const chunks = expo.chunkPushNotifications(messages);
-      const tickets = [];
+  //     // Send in chunks (Expo best practice)
+  //     const chunks = expo.chunkPushNotifications(messages);
+  //     const tickets = [];
 
-      for (const chunk of chunks) {
-        try {
-          const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-          tickets.push(...ticketChunk);
-        } catch (err) {
-          console.error("[PushNotif] Error sending chunk:", err);
-        }
-      }
+  //     for (const chunk of chunks) {
+  //       try {
+  //         const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+  //         tickets.push(...ticketChunk);
+  //       } catch (err) {
+  //         console.error("[PushNotif] Error sending chunk:", err);
+  //       }
+  //     }
 
-      // Process tickets: deactivate tokens that errored with DeviceNotRegistered
-      for (let i = 0; i < tickets.length; i++) {
-        const ticket = tickets[i];
-        if (
-          ticket.status === "error" &&
-          ticket.details &&
-          ticket.details.error === "DeviceNotRegistered"
-        ) {
-          // This token is no longer valid, deactivate it
-          const invalidToken = tokens[i];
-          if (invalidToken) {
-            console.log(
-              `[PushNotif] Deactivating invalid token: ${invalidToken.token}`
-            );
-            await pushToken.update(
-              { isActive: false },
-              { where: { id: invalidToken.id } }
-            );
-          }
-        }
-      }
+  //     // Process tickets: deactivate tokens that errored with DeviceNotRegistered
+  //     for (let i = 0; i < tickets.length; i++) {
+  //       const ticket = tickets[i];
+  //       if (
+  //         ticket.status === "error" &&
+  //         ticket.details &&
+  //         ticket.details.error === "DeviceNotRegistered"
+  //       ) {
+  //         // This token is no longer valid, deactivate it
+  //         const invalidToken = tokens[i];
+  //         if (invalidToken) {
+  //           console.log(
+  //             `[PushNotif] Deactivating invalid token: ${invalidToken.token}`,
+  //           );
+  //           await pushToken.update(
+  //             { isActive: false },
+  //             { where: { id: invalidToken.id } },
+  //           );
+  //         }
+  //       }
+  //     }
 
-      console.log(
-        `[PushNotif] Sent ${messages.length} notification(s) to ${recipientType}:${recipientId}`
-      );
-    } catch (error) {
-      // Push notification errors should not break the main flow
-      console.error("[PushNotif] Error:", error.message);
-    }
+  //     console.log(
+  //       `[PushNotif] Sent ${messages.length} notification(s) to ${recipientType}:${recipientId}`,
+  //     );
+  //   } catch (error) {
+  //     // Push notification errors should not break the main flow
+  //     console.error("[PushNotif] Error:", error.message);
+  //   }
+  // }
+
+  async sendNotif(token) {
+    await admin.messaging().send({
+      token,
+      notification: {
+        title: "Promo Baru!",
+        body: "Diskon treatment hari ini 🎉",
+      },
+      data: {
+        screen: "PromoDetail",
+      },
+    });
   }
+
+  async sendPushNotification(recipientId, recipientType, notification) {
+  try {
+    if (!recipientId) return;
+
+    const whereClause = { isActive: true };
+    if (recipientType === "customer") {
+      whereClause.customerId = recipientId;
+    } else {
+      whereClause.userId = recipientId;
+    }
+
+    const tokensData = await pushToken.findAll({
+      where: whereClause,
+      attributes: ["id", "token"],
+    });
+
+    if (!tokensData.length) return;
+
+    const tokens = tokensData.map(t => t.token).filter(Boolean);
+
+    const response = await admin.messaging().sendEachForMulticast({
+      tokens,
+      notification: {
+        title: notification.title,
+        body: notification.body,
+      },
+      data: notification.data || {},
+    });
+
+    // handle token invalid
+    response.responses.forEach((res, idx) => {
+      if (!res.success) {
+        console.log("Invalid token:", tokens[idx]);
+
+        // deactivate token
+        pushToken.update(
+          { isActive: false },
+          { where: { id: tokensData[idx].id } }
+        );
+      }
+    });
+
+    console.log(`[PushNotif] Sent ${tokens.length} notif`);
+  } catch (error) {
+    console.error("[PushNotif] Error:", error.message);
+  }
+}
 }
 
 module.exports = new PushNotificationService();
