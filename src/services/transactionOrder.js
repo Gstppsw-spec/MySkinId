@@ -3647,9 +3647,10 @@ module.exports = {
           }
 
           return {
+            id: item.itemId,
             title: item.itemName,
+            type: item.itemType,
             imageUrl: imageUrl,
-            productId: item.itemId,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
