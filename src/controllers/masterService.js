@@ -6,13 +6,14 @@ module.exports = {
   async getAll(req, res) {
     try {
       const {
+        name,
         minPrice,
         maxPrice,
         categoryIds,
-        lat,
-        lng,
+        latt,
+        long,
         maxDistance,
-        sort,
+        sortBy,
         customerId,
         isCustomer,
       } = req.query;
@@ -27,13 +28,14 @@ module.exports = {
         : undefined;
 
       const result = await service.getAll({
+        name: name || undefined,
         minPrice: minPrice ? parseFloat(minPrice) : undefined,
         maxPrice: maxPrice ? parseFloat(maxPrice) : undefined,
         categoryIds: categoryIdsArray,
-        userLat: lat ? parseFloat(lat) : undefined,
-        userLng: lng ? parseFloat(lng) : undefined,
+        userLat: latt ? parseFloat(latt) : undefined,
+        userLng: long ? parseFloat(long) : undefined,
         maxDistance: maxDistance ? parseFloat(maxDistance) : undefined,
-        sort: sort || undefined,
+        sortBy: sortBy || undefined,
         customerId: customerId || undefined,
         isCustomer: isCustomer,
       }, pagination);
@@ -41,7 +43,7 @@ module.exports = {
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
-      
+
       return res.status(200).json({
         success: true,
         message: result.message,

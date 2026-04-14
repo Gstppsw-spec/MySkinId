@@ -42,7 +42,7 @@ module.exports = {
         userLat,
         userLng,
         maxDistance,
-        sort,
+        sortBy,
         customerId,
         isCustomer,
         categoryIds,
@@ -179,11 +179,11 @@ module.exports = {
 
       let order = [["name", "ASC"]];
 
-      if (sort === "distance" && distanceLiteral) {
+      if (sortBy === "distance" && distanceLiteral) {
         order = [[distanceLiteral, "ASC"]];
       }
 
-      if (sort === "low-price") {
+      if (sortBy === "low-price") {
         order = [
           [
             Sequelize.literal("(`masterPackage`.price - (`masterPackage`.price * `masterPackage`.discountPercent / 100))"),
@@ -192,7 +192,7 @@ module.exports = {
         ];
       }
 
-      if (sort === "high-price") {
+      if (sortBy === "high-price") {
         order = [
           [
             Sequelize.literal("(`masterPackage`.price - (`masterPackage`.price * `masterPackage`.discountPercent / 100))"),
@@ -201,11 +201,11 @@ module.exports = {
         ];
       }
 
-      if (sort === "rating") {
+      if (sortBy === "rating") {
         order = [["ratingAvg", "DESC"]];
       }
 
-      if (!sort || sort === "recommendation") {
+      if (!sortBy || sortBy === "recommendation") {
         order = [];
         if (distanceLiteral) {
           order.push([distanceLiteral, "ASC"]);
@@ -486,9 +486,9 @@ module.exports = {
           },
           { transaction }
         );
-        
+
         await transaction.commit();
-        
+
         if (data.locationIds && Array.isArray(data.locationIds)) {
           await pkg.setLocations(data.locationIds);
         }
@@ -1065,7 +1065,7 @@ module.exports = {
           .then((res) => res.map((r) => r.locationId));
       }
     }
-    
+
     const { name } = filters;
     const { limit, offset } = pagination;
 

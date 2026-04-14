@@ -1828,41 +1828,35 @@ module.exports = {
         const locId = locJson.id;
         const radius = Math.round(parseFloat(locJson.distance) || 0);
 
-        // Products grouping
-        const outletProducts = products.filter((p) => {
+        // Products flat list with categories
+        const productsList = products.filter((p) => {
           const pj = p.get({ plain: true });
           return pj.locations && pj.locations.some(l => l.id === locId);
-        });
-        const productCategories = [];
-        const productCatsMap = {};
-
-        outletProducts.forEach((p) => {
+        }).map((p) => {
           const pj = p.toJSON();
           const price = parseFloat(pj.price) || 0;
           const discountPercent = parseFloat(pj.discountPercent) || 0;
           const discountPrice = price - (price * discountPercent) / 100;
           const media = pj.images && pj.images.length > 0 ? pj.images[0] : null;
 
-          const productData = { id: pj.id, name: pj.name, description: pj.description, price, discountPrice, discountPercent, weight: pj.weightGram, media };
-
-          pj.categories.forEach((cat) => {
-            if (!productCatsMap[cat.id]) {
-              productCatsMap[cat.id] = { id: cat.id, name: cat.name, products: [] };
-              productCategories.push(productCatsMap[cat.id]);
-            }
-            productCatsMap[cat.id].products.push(productData);
-          });
+          return {
+            id: pj.id,
+            name: pj.name,
+            description: pj.description,
+            price,
+            discountPrice,
+            discountPercent,
+            weight: pj.weightGram,
+            media,
+            categories: pj.categories.map(cat => ({ id: cat.id, name: cat.name }))
+          };
         });
 
-        // Packages grouping
-        const outletPackages = packages.filter((pkg) => {
+        // Packages flat list with categories
+        const packagesList = packages.filter((pkg) => {
           const pkgJ = pkg.get({ plain: true });
           return pkgJ.locations && pkgJ.locations.some(l => l.id === locId);
-        });
-        const packageCategories = [];
-        const packageCatsMap = {};
-
-        outletPackages.forEach((pkg) => {
+        }).map((pkg) => {
           const pkgJson = pkg.toJSON();
           const price = parseFloat(pkgJson.price) || 0;
           const discountPercent = parseFloat(pkgJson.discountPercent) || 0;
@@ -1876,60 +1870,61 @@ module.exports = {
             service: item.service || null,
           }));
 
-          const packageData = { id: pkgJson.id, name: pkgJson.name, description: pkgJson.description, price, discountPrice, discountPercent, services: servicesInPkg, media };
-
           const uniqueCatsInPkg = {};
           (pkgJson.items || []).forEach(item => {
             if (item.service && item.service.categories) {
-              item.service.categories.forEach(cat => { uniqueCatsInPkg[cat.id] = cat; });
+              item.service.categories.forEach(cat => {
+                uniqueCatsInPkg[cat.id] = { id: cat.id, name: cat.name };
+              });
             }
           });
 
-          Object.values(uniqueCatsInPkg).forEach(cat => {
-            if (!packageCatsMap[cat.id]) {
-              packageCatsMap[cat.id] = { id: cat.id, name: cat.name, packages: [] };
-              packageCategories.push(packageCatsMap[cat.id]);
-            }
-            packageCatsMap[cat.id].packages.push(packageData);
-          });
+          return {
+            id: pkgJson.id,
+            name: pkgJson.name,
+            description: pkgJson.description,
+            price,
+            discountPrice,
+            discountPercent,
+            services: servicesInPkg,
+            media,
+            categories: Object.values(uniqueCatsInPkg)
+          };
         });
 
-        // Standalone Services grouping
-        const outletServices = services.filter((s) => {
+        // Standalone Services flat list with categories
+        const servicesList = services.filter((s) => {
           const sj = s.get({ plain: true });
           return sj.locations && sj.locations.some(l => l.id === locId);
-        });
-        const standaloneServiceCategories = [];
-        const serviceCatsMap = {};
-
-        outletServices.forEach((s) => {
+        }).map((s) => {
           const sj = s.toJSON();
           const price = parseFloat(sj.price) || 0;
           const discountPercent = parseFloat(sj.discountPercent) || 0;
           const discountPrice = price - (price * discountPercent) / 100;
 
-          const serviceData = { id: sj.id, name: sj.name, description: sj.description, price, discountPrice, discountPercent, duration: sj.duration };
-
-          sj.categories.forEach((cat) => {
-            if (!serviceCatsMap[cat.id]) {
-              serviceCatsMap[cat.id] = { id: cat.id, name: cat.name, services: [] };
-              standaloneServiceCategories.push(serviceCatsMap[cat.id]);
-            }
-            serviceCatsMap[cat.id].services.push(serviceData);
-          });
+          return {
+            id: sj.id,
+            name: sj.name,
+            description: sj.description,
+            price,
+            discountPrice,
+            discountPercent,
+            duration: sj.duration,
+            categories: sj.categories.map(cat => ({ id: cat.id, name: cat.name }))
+          };
         });
 
         return {
           locationId: locId,
           locationName: locJson.name,
           radius,
-          productCategories,
-          packageCategories,
-          serviceCategories: standaloneServiceCategories,
+          products: productsList,
+          packages: packagesList,
+          services: servicesList,
         };
       });
 
-      const filteredOutlets = outlets.filter((o) => o.productCategories.length > 0 || o.packageCategories.length > 0 || o.serviceCategories.length > 0);
+      const filteredOutlets = outlets.filter((o) => o.products.length > 0 || o.packages.length > 0 || o.services.length > 0);
 
       return {
         status: true,

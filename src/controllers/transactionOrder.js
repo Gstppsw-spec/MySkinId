@@ -284,9 +284,15 @@ module.exports = {
       const page = parseInt(req.query.page) || 1;
       const pageSize = parseInt(req.query.pageSize) || 10;
 
+      const status = req.query.status
+        ? Array.isArray(req.query.status)
+          ? req.query.status
+          : req.query.status.split(",")
+        : null;
+
       const result = await transactionOrder.getCustomerTransactionHistory(
         customerId,
-        { page, pageSize },
+        { page, pageSize, status },
       );
 
       if (!result.status) return response.error(res, result.message);
@@ -307,10 +313,11 @@ module.exports = {
       const customerId = req.user.id;
       const page = parseInt(req.query.page) || 1;
       const pageSize = parseInt(req.query.pageSize) || 10;
+      const type = req.query.type || null;
 
       const result = await transactionOrder.getCustomerPurchasedProducts(
         customerId,
-        { page, pageSize },
+        { page, pageSize, type },
       );
 
       if (!result.status) return response.error(res, result.message);
@@ -376,9 +383,15 @@ module.exports = {
       const page = parseInt(req.query.page) || 1;
       const pageSize = parseInt(req.query.pageSize) || 10;
 
+      const status = req.query.status
+        ? Array.isArray(req.query.status)
+          ? req.query.status
+          : req.query.status.split(",")
+        : null;
+
       const result = await transactionOrder.getCustomerShippingTransactions(
         customerId,
-        { page, pageSize },
+        { page, pageSize, status },
       );
 
       if (!result.status) return response.error(res, result.message);

@@ -43,7 +43,7 @@ module.exports = {
         userLat,
         userLng,
         maxDistance,
-        sort,
+        sortBy,
         customerId,
         isCustomer,
         cityId,
@@ -151,11 +151,11 @@ module.exports = {
 
       let order = [["name", "ASC"]];
 
-      if (sort === "distance" && distanceLiteral) {
+      if (sortBy === "distance" && distanceLiteral) {
         order = [[distanceLiteral, "ASC"]];
       }
 
-      if (sort === "low-price") {
+      if (sortBy === "low-price") {
         order = [
           [
             Sequelize.literal("(price - (price * discountPercent / 100))"),
@@ -164,7 +164,7 @@ module.exports = {
         ];
       }
 
-      if (sort === "high-price") {
+      if (sortBy === "high-price") {
         order = [
           [
             Sequelize.literal("(price - (price * discountPercent / 100))"),
@@ -173,11 +173,11 @@ module.exports = {
         ];
       }
 
-      if (sort === "rating") {
+      if (sortBy === "rating") {
         order = [["ratingAvg", "DESC"]];
       }
 
-      if (!sort || sort === "recommendation") {
+      if (!sortBy || sortBy === "recommendation") {
         order = [];
         if (distanceLiteral) {
           order.push([distanceLiteral, "ASC"]);
@@ -489,7 +489,7 @@ module.exports = {
             // Restore and reuse
             await existing.restore();
             console.log(`[Product Create] Restored soft-deleted product with SKU: ${sku}`);
-            
+
             // Redirect to update logic (or just update here)
             // For now, we update it in place since we're in the create flow
             const updateProps = {
@@ -501,7 +501,7 @@ module.exports = {
               isVerified: false, // Reset verification on significant recreation?
             };
             await existing.update(updateProps);
-            
+
             // Re-assign associations (locations, categories, etc.)
             if (locationIds && Array.isArray(locationIds)) {
               await existing.setLocations(locationIds);
@@ -509,7 +509,7 @@ module.exports = {
             if (categoryIds && Array.isArray(categoryIds)) {
               await existing.setCategories(categoryIds);
             }
-            
+
             return {
               status: true,
               message: "Product restored and updated successfully",
@@ -1135,7 +1135,7 @@ module.exports = {
   async deleteProduct(id) {
     try {
       const product = await masterProduct.findByPk(id);
-      
+
       if (!product) {
         return {
           status: false,

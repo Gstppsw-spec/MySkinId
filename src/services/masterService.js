@@ -28,13 +28,14 @@ module.exports = {
   async getAll(filters = {}, pagination = {}) {
     try {
       const {
+        name,
         minPrice,
         maxPrice,
         categoryIds,
         userLat,
         userLng,
         maxDistance,
-        sort,
+        sortBy,
         customerId,
         isCustomer,
       } = filters;
@@ -42,6 +43,14 @@ module.exports = {
       const { limit, offset } = pagination;
 
       const where = {};
+
+      if (name) {
+        // Use BINARY for case-sensitive search as requested
+        where.name = Sequelize.where(
+          Sequelize.fn("BINARY", Sequelize.col("masterService.name")),
+          { [Op.like]: `%${name}%` },
+        );
+      }
 
       if (isCustomer == 1 || isCustomer == "1") {
         where.isActive = true;
@@ -100,10 +109,10 @@ module.exports = {
           required: !!(userLat && userLng),
           ...(distanceLiteral && maxDistance
             ? {
-                where: Sequelize.where(distanceLiteral, {
-                  [Op.lte]: maxDistance,
-                }),
-              }
+              where: Sequelize.where(distanceLiteral, {
+                [Op.lte]: maxDistance,
+              }),
+            }
             : {}),
           include: [
             {
@@ -119,24 +128,37 @@ module.exports = {
 
       let order = [["name", "ASC"]];
 
-      if (sort === "distance" && distanceLiteral) {
+      if (sortBy === "distance" && distanceLiteral) {
         order = [[distanceLiteral, "ASC"]];
       }
 
-      if (sort === "price") {
+      if (sortBy === "price" || sortBy === "low-price") {
         order = [
           [
-            Sequelize.literal("(`masterService`.price - (`masterService`.price * `masterService`.discountPercent / 100))"),
+            Sequelize.literal(
+              "(`masterService`.price - (`masterService`.price * `masterService`.discountPercent / 100))",
+            ),
             "ASC",
           ],
         ];
       }
 
-      if (sort === "rating") {
+      if (sortBy === "high-price") {
+        order = [
+          [
+            Sequelize.literal(
+              "(`masterService`.price - (`masterService`.price * `masterService`.discountPercent / 100))",
+            ),
+            "DESC",
+          ],
+        ];
+      }
+
+      if (sortBy === "rating") {
         order = [["ratingAvg", "DESC"]];
       }
 
-      if (!sort || sort === "recommendation") {
+      if (!sortBy || sortBy === "recommendation") {
         order = [];
         if (distanceLiteral) {
           order.push([distanceLiteral, "ASC"]);

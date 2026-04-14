@@ -3192,6 +3192,7 @@ module.exports = {
 
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
+
       const whereClause = {
         locationId: { [Op.in]: locationIds },
       };
@@ -3311,12 +3312,48 @@ module.exports = {
     }
   },
 
-  async getCustomerTransactionHistory(customerId, { page = 1, pageSize = 10 }) {
+  async getCustomerTransactionHistory(customerId, { page = 1, pageSize = 10, status = null }) {
     try {
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
+      const whereCondition = {};
+      if (status && status.length > 0) {
+        const orConditions = [];
+
+        status.forEach((s) => {
+          const normStatus = s.toLowerCase();
+          if (normStatus === "unpaid") {
+            orConditions.push({
+              "$order.paymentStatus$": { [Op.in]: ["UNPAID", "PENDING"] },
+            });
+          } else if (normStatus === "processed") {
+            orConditions.push({ orderStatus: "PAID" });
+          } else if (normStatus === "shipped") {
+            orConditions.push({
+              orderStatus: { [Op.in]: ["WAITING_PICKUP", "SHIPPED"] },
+            });
+          } else if (normStatus === "on_delivery") {
+            orConditions.push({ orderStatus: "DELIVERED" });
+          } else if (normStatus === "completed") {
+            orConditions.push({ orderStatus: "COMPLETED" });
+          } else if (normStatus === "expired") {
+            orConditions.push({
+              [Op.or]: [
+                { "$order.paymentStatus$": "EXPIRED" },
+                { orderStatus: "EXPIRED" },
+              ],
+            });
+          }
+        });
+
+        if (orConditions.length > 0) {
+          whereCondition[Op.or] = orConditions;
+        }
+      }
+
       const { count, rows } = await transaction.findAndCountAll({
+        where: whereCondition,
         include: [
           {
             model: order,
@@ -3526,13 +3563,19 @@ module.exports = {
     }
   },
 
-  async getCustomerPurchasedProducts(customerId, { page = 1, pageSize = 10 }) {
+  async getCustomerPurchasedProducts(customerId, { page = 1, pageSize = 10, type = null }) {
     try {
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
+      const whereCondition = { orderStatus: "PAID" };
+      const itemIncludeWhere = {};
+      if (type) {
+        itemIncludeWhere.itemType = type;
+      }
+
       const { count, rows } = await transaction.findAndCountAll({
-        where: { orderStatus: "PAID" },
+        where: whereCondition,
         include: [
           {
             model: order,
@@ -3554,6 +3597,8 @@ module.exports = {
           {
             model: transactionItem,
             as: "items",
+            where: itemIncludeWhere,
+            required: !!type,
             include: [
               {
                 model: masterProduct,
@@ -3918,27 +3963,49 @@ module.exports = {
 
   async getCustomerShippingTransactions(
     customerId,
-    { page = 1, pageSize = 10 },
+    { page = 1, pageSize = 10, status = null },
   ) {
     try {
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
+      const whereCondition = {};
+      const productCheckLiteral = sequelize.literal(
+        `EXISTS (SELECT 1 FROM transactionItems ti WHERE ti.transactionId = \`transaction\`.\`id\` AND ti.itemType = 'product')`,
+      );
+
+      if (status && status.length > 0) {
+        const orConditions = [];
+        status.forEach((s) => {
+          const normStatus = s.toLowerCase();
+          if (normStatus === "processed") {
+            orConditions.push({
+              [Op.and]: [{ orderStatus: "PAID" }, productCheckLiteral],
+            });
+          } else if (normStatus === "waiting_pickup") {
+            orConditions.push({ orderStatus: "WAITING_PICKUP" });
+          } else if (normStatus === "shipped") {
+            orConditions.push({ orderStatus: "SHIPPED" });
+          } else if (normStatus === "delivered") {
+            orConditions.push({ orderStatus: "DELIVERED" });
+          }
+        });
+        if (orConditions.length > 0) {
+          whereCondition[Op.or] = orConditions;
+        }
+      } else {
+        // Default: Show all active shipping stages including delivered
+        whereCondition[Op.or] = [
+          { orderStatus: { [Op.in]: ["WAITING_PICKUP", "SHIPPED", "DELIVERED"] } },
+          {
+            [Op.and]: [{ orderStatus: "PAID" }, productCheckLiteral],
+          },
+        ];
+      }
+
       // Image 4 "Dalam Pengiriman"
       const { count, rows } = await transaction.findAndCountAll({
-        where: {
-          [Op.or]: [
-            { orderStatus: { [Op.in]: ["WAITING_PICKUP", "SHIPPED"] } },
-            {
-              [Op.and]: [
-                { orderStatus: "PAID" },
-                sequelize.literal(
-                  `EXISTS (SELECT 1 FROM transactionItems ti WHERE ti.transactionId = \`transaction\`.\`id\` AND ti.itemType = 'product')`,
-                ),
-              ],
-            },
-          ],
-        },
+        where: whereCondition,
         include: [
           {
             model: order,

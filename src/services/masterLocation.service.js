@@ -479,9 +479,9 @@ class MasterLocationService {
 
       const plain = location.get({ plain: true });
       const googleMapsUrl = plain.googlePlaceId
-          ? `https://www.google.com/maps/search/?api=1&query=${plain.latitude || 0},${plain.longitude || 0}&query_place_id=${plain.googlePlaceId}`
-          : (plain.latitude && plain.longitude ? `https://www.google.com/maps?q=${plain.latitude},${plain.longitude}` : null);
-      
+        ? `https://www.google.com/maps/search/?api=1&query=${plain.latitude || 0},${plain.longitude || 0}&query_place_id=${plain.googlePlaceId}`
+        : (plain.latitude && plain.longitude ? `https://www.google.com/maps?q=${plain.latitude},${plain.longitude}` : null);
+
       plain.googleMapsUrl = googleMapsUrl;
       plain.city = plain.cityDetail ? plain.cityDetail.name : plain.city;
 
@@ -793,7 +793,7 @@ class MasterLocationService {
     name = null,
     radius = null,
     cityId = null,
-    sortBy = "recommended"
+    sortBy = "recommendation"
   ) {
     try {
       const include = [{ model: masterLocationImage, as: "images" }];
@@ -880,11 +880,11 @@ class MasterLocationService {
       }
 
       // Apply sorting logic
-      if (sortBy === "nearby" && latt && long) {
+      if (sortBy === "distance" && latt && long) {
         result.sort((a, b) => a.distance - b.distance);
       } else if (sortBy === "rating") {
         result.sort((a, b) => (b.ratingAvg || 0) - (a.ratingAvg || 0));
-      } else if (sortBy === "recommended") {
+      } else if (sortBy === "recommendation") {
         // Already sorted by premium/date in DB, but re-confirming here
         result.sort((a, b) => {
           if (a.isPremium !== b.isPremium) return b.isPremium ? -1 : 1;
@@ -1087,9 +1087,9 @@ class MasterLocationService {
         },
         include: [
           { model: masterLocationImage, as: "images" },
-          { 
-            model: AdsPurchase, 
-            as: "adsPurchases", 
+          {
+            model: AdsPurchase,
+            as: "adsPurchases",
             required: false,
             where: {
               isActive: true,
