@@ -50,7 +50,7 @@ module.exports = {
 
       if (minPrice !== undefined || maxPrice !== undefined) {
         where[Op.and] = Sequelize.literal(`
-          (price - (price * discountPercent / 100))
+          (\`masterService\`.price - (\`masterService\`.price * \`masterService\`.discountPercent / 100))
           BETWEEN ${minPrice || 0} AND ${maxPrice || 9999999}
         `);
       }
@@ -126,7 +126,7 @@ module.exports = {
       if (sort === "price") {
         order = [
           [
-            Sequelize.literal("(price - (price * discountPercent / 100))"),
+            Sequelize.literal("(`masterService`.price - (`masterService`.price * `masterService`.discountPercent / 100))"),
             "ASC",
           ],
         ];

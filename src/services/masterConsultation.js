@@ -1609,7 +1609,12 @@ module.exports = {
       return {
         status: true,
         message: "Berhasil",
-        data: { recommendation },
+        data: {
+          recommendation: {
+            ...recommendation.get({ plain: true }),
+            serviceCategories: recommendation.packageCategories || [],
+          },
+        },
       };
     } catch (error) {
       return { status: false, message: error.message, data: null };

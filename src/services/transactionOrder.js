@@ -2665,7 +2665,7 @@ module.exports = {
     }
   },
 
-  async getMyVouchers(customerId, { page = 1, pageSize = 10 }) {
+  async getMyVouchers(customerId, { page = 1, pageSize = 10, status = null }) {
     try {
       // 1. Auto-expire vouchers first
       await customerVoucher.update(
@@ -2682,14 +2682,37 @@ module.exports = {
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
-      // 2. Fetch all active/used/expired vouchers for the customer
+      const whereCondition = { customerId };
+      if (status && status.length > 0) {
+        whereCondition.status = { [Op.in]: status };
+      }
+
+      // 2. Fetch only vouchers from orders that have been PAID
       const { count: totalCount, rows: vouchers } =
         await customerVoucher.findAndCountAll({
-          where: {
-            customerId,
-            status: { [Op.ne]: "NOT_ACTIVE" },
-          },
+          where: whereCondition,
           include: [
+            {
+              model: transactionItem,
+              as: "transactionItem",
+              required: true,
+              include: [
+                {
+                  model: transaction,
+                  as: "transaction",
+                  required: true,
+                  include: [
+                    {
+                      model: order,
+                      as: "order",
+                      required: true,
+                      where: { paymentStatus: "PAID" },
+                      attributes: ["id", "orderNumber", "paymentStatus"],
+                    },
+                  ],
+                },
+              ],
+            },
             {
               model: masterCustomer,
               as: "customer",
@@ -4388,6 +4411,7 @@ module.exports = {
           outletPhone: trx.location?.phone || null,
           grandTotal: trx.grandTotal,
           items: (trx.items || []).map((item) => ({
+            id: item.itemId,
             itemName: item.itemName,
             itemType: item.itemType,
             quantity: item.quantity,

@@ -3,7 +3,7 @@ const router = express.Router();
 const masterLocationController = require("../../controllers/masterLocation.controller");
 const uploadLocationImages = require("../../middlewares/uploadMultipleImageLocation");
 const compressImage = require("../../middlewares/compressImage");
-const { verifyToken } = require("../../middlewares/authMiddleware");
+const { verifyToken, optionalAuth } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 // >>> STATIC ROUTES FIRST <<<
@@ -28,18 +28,14 @@ router.get("/user", verifyToken, masterLocationController.getLocationByUser);
 // CUSTOMER LIST
 router.get(
   "/all-customer",
-  verifyToken,
+  optionalAuth,
   masterLocationController.listLocationByCustomer,
 );
 
 // DETAIL CUSTOMER
 router.get(
   "/:id/detail-customer",
-  verifyToken,
-  masterLocationController.detailLocationByCustomer,
-);
-router.get(
-  "/:id/detail-customer",
+  optionalAuth,
   masterLocationController.detailLocationByCustomer,
 );
 

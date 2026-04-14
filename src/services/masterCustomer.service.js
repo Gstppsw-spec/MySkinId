@@ -468,7 +468,12 @@ class masterCustomerService {
         attributes.push([sequelize.literal("false"), "isFollowing"]);
       }
 
-      const whereCondition = { username: { [Op.like]: `%${username}%` } };
+      const whereCondition = {
+        [Op.or]: [
+          { username: { [Op.like]: `%${username}%` } },
+          { name: { [Op.like]: `%${username}%` } }
+        ]
+      };
       if (currentUserId) {
         whereCondition.id = { [Op.ne]: currentUserId };
       }
