@@ -9,6 +9,7 @@ const {
 } = require("../models");
 const { Sequelize } = require("sequelize");
 const validateReference = require("../helpers/validateReference");
+const { sortPrimaryFirst } = require("../helpers/sortPrimaryImage");
 
 module.exports = {
   async getCustomerFavorites(customerId, userLat, userLng, type = null, page = 1, pageSize = 10) {
@@ -143,16 +144,36 @@ module.exports = {
         });
 
         const data = favorites.map((fav) => {
-          if (fav.product) return fav.product;
-          if (fav.location) return fav.location;
+          if (fav.product) {
+            const p = fav.product.get ? fav.product.get({ plain: true }) : fav.product;
+            if (p.images) p.images = sortPrimaryFirst(p.images);
+            return p;
+          }
+          if (fav.location) {
+            const l = fav.location.get ? fav.location.get({ plain: true }) : fav.location;
+            if (l.images) l.images = sortPrimaryFirst(l.images);
+            return l;
+          }
           if (fav.service) {
             const p = fav.service.get({ plain: true });
+            if (p.locations) {
+              p.locations = p.locations.map(loc => {
+                if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+                return loc;
+              });
+            }
             p.location = p.locations?.[0] || null;
             delete p.locations;
             return p;
           }
           if (fav.package) {
             const p = fav.package.get({ plain: true });
+            if (p.locations) {
+              p.locations = p.locations.map(loc => {
+                if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+                return loc;
+              });
+            }
             p.location = p.locations?.[0] || null;
             delete p.locations;
             return p;
@@ -181,16 +202,36 @@ module.exports = {
         };
 
         favorites.forEach((fav) => {
-          if (fav.product) result.product.push(fav.product);
+          if (fav.product) {
+            const p = fav.product.get ? fav.product.get({ plain: true }) : fav.product;
+            if (p.images) p.images = sortPrimaryFirst(p.images);
+            result.product.push(p);
+          }
           if (fav.service) {
             const servicePlain = fav.service.get({ plain: true });
+            if (servicePlain.locations) {
+              servicePlain.locations = servicePlain.locations.map(loc => {
+                if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+                return loc;
+              });
+            }
             servicePlain.location = servicePlain.locations?.[0] || null;
             delete servicePlain.locations;
             result.service.push(servicePlain);
           }
-          if (fav.location) result.location.push(fav.location);
+          if (fav.location) {
+            const l = fav.location.get ? fav.location.get({ plain: true }) : fav.location;
+            if (l.images) l.images = sortPrimaryFirst(l.images);
+            result.location.push(l);
+          }
           if (fav.package) {
             const packagePlain = fav.package.get({ plain: true });
+            if (packagePlain.locations) {
+              packagePlain.locations = packagePlain.locations.map(loc => {
+                if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+                return loc;
+              });
+            }
             packagePlain.location = packagePlain.locations?.[0] || null;
             delete packagePlain.locations;
             result.package.push(packagePlain);

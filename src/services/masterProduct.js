@@ -18,6 +18,7 @@ const {
 const fs = require("fs");
 const flashSaleService = require("./flashSale.service");
 const { Op, Sequelize } = require("sequelize");
+const { sortPrimaryFirst, sortPrimaryImages } = require("../helpers/sortPrimaryImage");
 
 /**
  * Helper: map product rows to add backward-compat locationId + location fields
@@ -230,6 +231,7 @@ module.exports = {
 
       const result = products.flatMap((prod) => {
         const plain = prod.get({ plain: true });
+        if (plain.images) plain.images = sortPrimaryFirst(plain.images);
 
         let flashSaleInfo = null;
         let isFlashSale = false;
@@ -402,6 +404,7 @@ module.exports = {
       }
 
       const plain = product.get({ plain: true });
+      if (plain.images) plain.images = sortPrimaryFirst(plain.images);
 
       // Flash Sale Integration
       await flashSaleService.syncStatuses();
@@ -844,6 +847,7 @@ module.exports = {
 
       const result = products.map((prod) => {
         const plain = prod.get({ plain: true });
+        if (plain.images) plain.images = sortPrimaryFirst(plain.images);
 
         let flashSaleInfo = null;
         let isFlashSale = false;
@@ -1034,6 +1038,7 @@ module.exports = {
         },
         data: products.map((p) => {
           const plain = p.get({ plain: true });
+          if (plain.images) plain.images = sortPrimaryFirst(plain.images);
           return {
             ...mapProductWithBackwardCompat(plain),
             statusVerification: plain.verificationStatus?.status || null,
@@ -1094,6 +1099,7 @@ module.exports = {
         message: "Success",
         data: products.map((p) => {
           const plain = p.get({ plain: true });
+          if (plain.images) plain.images = sortPrimaryFirst(plain.images);
           return mapProductWithBackwardCompat(plain);
         }),
       };

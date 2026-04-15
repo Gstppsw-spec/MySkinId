@@ -474,6 +474,23 @@ module.exports = {
       try {
         const room = await masterRoomConsultation.findByPk(roomId, {
           attributes: ["id", "customerId", "doctorId"],
+          include: [
+            {
+              model: masterConsultationCategory,
+              as: "consultationCategory",
+              attributes: ["name"],
+            },
+            {
+              model: masterLocation,
+              as: "location",
+              attributes: ["name"],
+            },
+            {
+              model: masterProduct,
+              as: "product",
+              attributes: ["name"],
+            },
+          ],
         });
         if (room) {
           // Determine recipient: if sender is customer → notify doctor, and vice versa
@@ -492,7 +509,13 @@ module.exports = {
               {
                 title: "Pesan Baru - Konsultasi",
                 body: notifBody || "Pesan baru",
-                data: { roomId, type: "consultation_message" },
+                data: {
+                  roomId,
+                  type: "consultation_message",
+                  categoryName: room.consultationCategory?.name || "",
+                  locationName: room.location?.name || "",
+                  productName: room.product?.name || "",
+                },
               }
             );
           }

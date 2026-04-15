@@ -19,6 +19,7 @@ const sequelize = require("../models").sequelize;
 const flashSaleService = require("./flashSale.service");
 
 const { Op, Sequelize } = require("sequelize");
+const { sortPrimaryFirst } = require("../helpers/sortPrimaryImage");
 
 /**
  * Helper: backward compat — add singular location/locationId from locations array
@@ -254,6 +255,13 @@ module.exports = {
 
       const result = packages.flatMap((prod) => {
         const plain = prod.get({ plain: true });
+        // Sort primary images first in nested locations
+        if (plain.locations) {
+          plain.locations = plain.locations.map(loc => {
+            if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+            return loc;
+          });
+        }
 
         let flashSaleInfo = null;
         let isFlashSale = false;
@@ -627,6 +635,13 @@ module.exports = {
       }
 
       const plain = pkg.get({ plain: true });
+      // Sort primary images first in nested locations
+      if (plain.locations) {
+        plain.locations = plain.locations.map(loc => {
+          if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+          return loc;
+        });
+      }
 
       // Flash Sale Integration
       const flashSaleServiceLocal = require("./flashSale.service");
@@ -760,6 +775,13 @@ module.exports = {
 
       const result = packages.map((prod) => {
         const plain = prod.get({ plain: true });
+        // Sort primary images first in nested locations
+        if (plain.locations) {
+          plain.locations = plain.locations.map(loc => {
+            if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+            return loc;
+          });
+        }
 
         let flashSaleInfo = null;
         let isFlashSale = false;

@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { sortPrimaryFirst, sortPrimaryImages } = require("../helpers/sortPrimaryImage");
 const {
   masterLocation,
   masterCompany,
@@ -484,6 +485,7 @@ class MasterLocationService {
 
       plain.googleMapsUrl = googleMapsUrl;
       plain.city = plain.cityDetail ? plain.cityDetail.name : plain.city;
+      if (plain.images) plain.images = sortPrimaryFirst(plain.images);
 
       return { status: true, message: "Location found", data: plain };
     } catch (error) {
@@ -518,6 +520,7 @@ class MasterLocationService {
       const processedLocations = locations.map(loc => {
         const plain = loc.get({ plain: true });
         const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
+        if (plain.images) plain.images = sortPrimaryFirst(plain.images);
         return { ...plain, isPremium: isPremiumValid };
       });
 
@@ -691,6 +694,7 @@ class MasterLocationService {
 
       const mappedData = rows.map((loc) => {
         const plain = loc.get({ plain: true });
+        if (plain.images) plain.images = sortPrimaryFirst(plain.images);
         return {
           ...plain,
           statusVerification: plain.verificationStatus?.status || null,
@@ -761,6 +765,8 @@ class MasterLocationService {
       }
 
       const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
+
+      if (plain.images) plain.images = sortPrimaryFirst(plain.images);
 
       const responseData = {
         ...plain,
@@ -854,6 +860,8 @@ class MasterLocationService {
 
           distance = Math.round(R * c);
         }
+
+        if (plain.images) plain.images = sortPrimaryFirst(plain.images);
 
         const responseData = {
           ...plain,
@@ -955,6 +963,8 @@ class MasterLocationService {
 
         const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
 
+        if (plain.images) plain.images = sortPrimaryFirst(plain.images);
+
         const responseData = {
           ...plain,
           isPremium: isPremiumValid,
@@ -1055,7 +1065,7 @@ class MasterLocationService {
           googleRating: plain.googleRating,
           googleRatingCount: plain.googleRatingCount,
           distance: distance,
-          images: plain.images ? plain.images.map(img => ({
+          images: plain.images ? sortPrimaryFirst(plain.images).map(img => ({
             id: img.id,
             imageUrl: img.imageUrl
           })) : []

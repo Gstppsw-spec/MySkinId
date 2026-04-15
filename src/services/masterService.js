@@ -11,6 +11,7 @@ const {
 } = require("../models");
 
 const { Op, Sequelize } = require("sequelize");
+const { sortPrimaryFirst } = require("../helpers/sortPrimaryImage");
 
 /**
  * Helper: backward compat — add singular location/locationId from locations array
@@ -203,6 +204,13 @@ module.exports = {
 
       const result = services.flatMap((prod) => {
         const plain = prod.get({ plain: true });
+        // Sort primary images first in nested locations
+        if (plain.locations) {
+          plain.locations = plain.locations.map(loc => {
+            if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+            return loc;
+          });
+        }
 
         if (plain.locations && plain.locations.length > 0) {
           return plain.locations.map(loc => {
@@ -308,6 +316,13 @@ module.exports = {
       }
 
       const plain = service.get({ plain: true });
+      // Sort primary images first in nested locations
+      if (plain.locations) {
+        plain.locations = plain.locations.map(loc => {
+          if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+          return loc;
+        });
+      }
       const mapped = mapServiceWithBackwardCompat(plain);
 
       return {
@@ -737,6 +752,13 @@ module.exports = {
         },
         data: service.map((s) => {
           const plain = s.get({ plain: true });
+          // Sort primary images first in nested locations
+          if (plain.locations) {
+            plain.locations = plain.locations.map(loc => {
+              if (loc.images) loc.images = sortPrimaryFirst(loc.images);
+              return loc;
+            });
+          }
           return {
             ...mapServiceWithBackwardCompat(plain),
             statusVerification: plain.verificationStatus?.status || null,

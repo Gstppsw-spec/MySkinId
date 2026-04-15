@@ -10,6 +10,7 @@ const {
   masterLocationImage,
 } = require("../models");
 const validateReference = require("../helpers/validateReference");
+const { sortPrimaryFirst } = require("../helpers/sortPrimaryImage");
 
 module.exports = {
   async getCustomerCart(customerId) {
@@ -138,7 +139,7 @@ module.exports = {
             finalPrice: finalPrice,
             isPromoActive: isPromoActive,
             discountpercent: cart.product.discountPercent,
-            images: cart.product.images,
+            images: cart.product.images ? sortPrimaryFirst(cart.product.images) : [],
             location: cart.product.locations?.[0] || null,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
