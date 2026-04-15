@@ -1,17 +1,11 @@
-const { Expo } = require("expo-server-sdk");
+const admin = require("../../config/firebase");
 const { pushToken } = require("../models");
-
-// Create Expo SDK client
-// Optionally set accessToken via env for push security
-const expo = new Expo({
-  accessToken: process.env.EXPO_ACCESS_TOKEN || undefined,
-});
 
 class PushNotificationService {
   /**
-   * Register or update an Expo Push Token
+   * Register or update a Firebase FCM Push Token
    * @param {Object} params
-   * @param {string} params.token - Expo Push Token (ExponentPushToken[xxx])
+   * @param {string} params.token - FCM device token
    * @param {string} [params.customerId] - Customer ID (for customer app)
    * @param {string} [params.userId] - User ID (for doctor/outlet app)
    * @param {string} [params.deviceId] - Optional device identifier
@@ -21,10 +15,6 @@ class PushNotificationService {
       if (!token) {
         return { status: false, message: "Token tidak boleh kosong" };
       }
-
-      // if (!Expo.isExpoPushToken(token)) {
-      //  return { status: false, message: "Token push tidak valid" };
-      // }
 
       if (!customerId && !userId) {
         return {
@@ -70,7 +60,7 @@ class PushNotificationService {
 
   /**
    * Remove / deactivate a push token (e.g. on logout)
-   * @param {string} token - Expo Push Token string
+   * @param {string} token - FCM device token string
    */
   async removeToken(token) {
     try {
@@ -92,13 +82,13 @@ class PushNotificationService {
   }
 
   /**
-   * Send push notification to a recipient
+   * Send push notification to a recipient via Firebase FCM
    * @param {string} recipientId - customerId or userId
    * @param {'customer'|'user'} recipientType - 'customer' or 'user'
    * @param {Object} notification
    * @param {string} notification.title - Notification title
    * @param {string} notification.body - Notification body text
-   * @param {Object} [notification.data] - Extra data payload
+   * @param {Object} [notification.data] - Extra data payload (values must be strings)
    */
   async sendPushNotification(recipientId, recipientType, notification) {
     try {
@@ -125,58 +115,77 @@ class PushNotificationService {
         return;
       }
 
-      // Build messages
-      const messages = [];
-      for (const t of tokens) {
-        messages.push({
-          to: t.token,
-          sound: "default",
+      const tokenStrings = tokens.map((t) => t.token);
+
+      // Convert data values to strings (FCM requires string values in data payload)
+      const dataPayload = {};
+      if (notification.data) {
+        for (const [key, value] of Object.entries(notification.data)) {
+          dataPayload[key] = String(value);
+        }
+      }
+
+      // Send via FCM Multicast (supports up to 500 tokens at once)
+      const message = {
+        tokens: tokenStrings,
+        notification: {
           title: notification.title,
           body: notification.body,
-          data: notification.data || {},
-        });
-      }
+        },
+        data: dataPayload,
+        android: {
+          notification: {
+            sound: "default",
+            priority: "high",
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
+      };
 
-      if (!messages.length) return;
-
-      // Send in chunks (Expo best practice)
-      const chunks = expo.chunkPushNotifications(messages);
-      const tickets = [];
-
-      for (const chunk of chunks) {
-        try {
-          const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-          tickets.push(...ticketChunk);
-        } catch (err) {
-          console.error("[PushNotif] Error sending chunk:", err);
-        }
-      }
-
-      // Process tickets: deactivate tokens that errored with DeviceNotRegistered
-      for (let i = 0; i < tickets.length; i++) {
-        const ticket = tickets[i];
-        if (
-          ticket.status === "error" &&
-          ticket.details &&
-          ticket.details.error === "DeviceNotRegistered"
-        ) {
-          // This token is no longer valid, deactivate it
-          const invalidToken = tokens[i];
-          if (invalidToken) {
-            console.log(
-              `[PushNotif] Deactivating invalid token: ${invalidToken.token}`
-            );
-            await pushToken.update(
-              { isActive: false },
-              { where: { id: invalidToken.id } }
-            );
-          }
-        }
-      }
+      const response = await admin.messaging().sendEachForMulticast(message);
 
       console.log(
-        `[PushNotif] Sent ${messages.length} notification(s) to ${recipientType}:${recipientId}`
+        `[PushNotif] Sent to ${recipientType}:${recipientId} — success: ${response.successCount}, failed: ${response.failureCount}`
       );
+
+      // Process responses: deactivate tokens that are no longer registered
+      if (response.failureCount > 0) {
+        const deactivatePromises = [];
+
+        response.responses.forEach((res, index) => {
+          if (res.error) {
+            const errorCode = res.error.code;
+            console.warn(
+              `[PushNotif] Token error [${tokens[index].token}]: ${errorCode}`
+            );
+
+            // Deactivate invalid/unregistered tokens
+            if (
+              errorCode === "messaging/registration-token-not-registered" ||
+              errorCode === "messaging/invalid-registration-token"
+            ) {
+              console.log(
+                `[PushNotif] Deactivating invalid token: ${tokens[index].token}`
+              );
+              deactivatePromises.push(
+                pushToken.update(
+                  { isActive: false },
+                  { where: { id: tokens[index].id } }
+                )
+              );
+            }
+          }
+        });
+
+        await Promise.all(deactivatePromises);
+      }
     } catch (error) {
       // Push notification errors should not break the main flow
       console.error("[PushNotif] Error:", error.message);
