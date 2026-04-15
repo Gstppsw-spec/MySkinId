@@ -41,6 +41,7 @@ const {
 } = require("../utils/paymentTimeout");
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
+const pushNotificationService = require("./pushNotification.service");
 
 module.exports = {
   async _getAdminLocationIds(adminId) {
@@ -2174,6 +2175,23 @@ module.exports = {
             paymentChannel: _payment_channel,
           });
 
+          // Push notification: payment success
+          const firstTrxId = orderData.transactions.length > 0 ? orderData.transactions[0].id : null;
+          pushNotificationService.sendPushNotification(
+            orderData.customerId,
+            "customer",
+            {
+              title: "Pembayaran Berhasil ✅",
+              body: `Pesanan ${orderData.orderNumber} telah berhasil dibayar.`,
+              data: {
+                type: "payment",
+                orderId: orderData.id,
+                trxId: firstTrxId || "",
+                orderNumber: orderData.orderNumber,
+              },
+            }
+          );
+
           // Activate vouchers linked to this order's transactions
           const transactionIds = orderData.transactions.map((trx) => trx.id);
           if (transactionIds.length > 0) {
@@ -2276,6 +2294,22 @@ module.exports = {
           socketInstance.emitPaymentUpdate(orderData.orderNumber, _status, {
             orderId: orderData.id,
           });
+
+          // Push notification: payment failed/expired
+          pushNotificationService.sendPushNotification(
+            orderData.customerId,
+            "customer",
+            {
+              title: "Pembayaran Gagal ❌",
+              body: `Pembayaran untuk pesanan ${orderData.orderNumber} ${_status === "EXPIRED" ? "telah kedaluwarsa" : "gagal diproses"}.`,
+              data: {
+                type: "payment",
+                orderId: orderData.id,
+                orderNumber: orderData.orderNumber,
+                paymentStatus: _status,
+              },
+            }
+          );
         }
       }
 
