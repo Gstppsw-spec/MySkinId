@@ -103,21 +103,21 @@ class PushNotificationService {
       }
 
       // Get all active tokens for this recipient
-      const tokens = await pushToken.findAll({
+      const tokensData = await pushToken.findAll({
         where: whereClause,
         attributes: ["id", "token"],
       });
 
-      if (!tokens.length) {
+      if (!tokensData.length) {
         console.log(
           `[PushNotif] No active tokens for ${recipientType}:${recipientId}`
         );
         return;
       }
 
-      const tokenStrings = tokens.map((t) => t.token);
+      const tokenStrings = tokensData.map((t) => t.token).filter(Boolean);
 
-      // Convert data values to strings (FCM requires string values in data payload)
+      // Convert data values to strings (FCM requirement)
       const dataPayload = {};
       if (notification.data) {
         for (const [key, value] of Object.entries(notification.data)) {
@@ -126,7 +126,7 @@ class PushNotificationService {
       }
 
       // Send via FCM Multicast (supports up to 500 tokens at once)
-      const message = {
+      const response = await admin.messaging().sendEachForMulticast({
         tokens: tokenStrings,
         notification: {
           title: notification.title,
@@ -147,9 +147,7 @@ class PushNotificationService {
             },
           },
         },
-      };
-
-      const response = await admin.messaging().sendEachForMulticast(message);
+      });
 
       console.log(
         `[PushNotif] Sent to ${recipientType}:${recipientId} — success: ${response.successCount}, failed: ${response.failureCount}`
@@ -163,7 +161,7 @@ class PushNotificationService {
           if (res.error) {
             const errorCode = res.error.code;
             console.warn(
-              `[PushNotif] Token error [${tokens[index].token}]: ${errorCode}`
+              `[PushNotif] Token error [${tokensData[index].token}]: ${errorCode}`
             );
 
             // Deactivate invalid/unregistered tokens
@@ -172,12 +170,12 @@ class PushNotificationService {
               errorCode === "messaging/invalid-registration-token"
             ) {
               console.log(
-                `[PushNotif] Deactivating invalid token: ${tokens[index].token}`
+                `[PushNotif] Deactivating invalid token: ${tokensData[index].token}`
               );
               deactivatePromises.push(
                 pushToken.update(
                   { isActive: false },
-                  { where: { id: tokens[index].id } }
+                  { where: { id: tokensData[index].id } }
                 )
               );
             }
