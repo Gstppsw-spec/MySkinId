@@ -4321,7 +4321,9 @@ module.exports = {
           courierService: plainTrx.shipping?.courierService,
           trackingNumber: plainTrx.shipping?.trackingNumber,
         },
-        items: (plainTrx.items || []).map((item) => ({
+        items: (plainTrx.items || [])
+          .filter((item) => item.itemType === "product")
+          .map((item) => ({
           id: item.id,
           itemName: item.itemName,
           itemType: item.itemType,

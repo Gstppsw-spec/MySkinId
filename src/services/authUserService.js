@@ -143,14 +143,6 @@ module.exports = {
       if (!name || !email || !password || !roleName)
         return { status: false, message: "Data tidak lengkap" };
 
-      if ((!locationId && !companyId) || (locationId && companyId)) {
-        return {
-          status: false,
-          message:
-            "Harus isi salah satu: locationId atau companyId (tidak boleh keduanya)",
-        };
-      }
-
       const role = await masterRole.findOne({
         where: { roleCode: roleName },
       });
@@ -161,6 +153,25 @@ module.exports = {
           message: "Role tidak ditemukan",
           data: null,
         };
+      }
+
+      const dependentRoles = ["COMPANY_ADMIN", "OUTLET_ADMIN", "OUTLET_DOCTOR"];
+
+      if (dependentRoles.includes(roleName)) {
+        if ((!locationId && !companyId) || (locationId && companyId)) {
+          return {
+            status: false,
+            message:
+              "Harus isi salah satu: locationId atau companyId (tidak boleh keduanya)",
+          };
+        }
+      } else {
+        if (locationId && companyId) {
+          return {
+            status: false,
+            message: "Tidak boleh mengisi keduanya (locationId dan companyId)",
+          };
+        }
       }
 
       const isUserExist = await masterUser.findOne({ where: { email } });
