@@ -34,7 +34,7 @@ module.exports = {
 
   async createUser(req, res) {
     try {
-      const result = await authService.createUser(req.body);
+      const result = await authService.createUser(req.user, req.body);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
@@ -102,7 +102,7 @@ module.exports = {
   async getUserById(req, res) {
     try {
       const { id } = req.params;
-      const result = await authService.getUserById(id);
+      const result = await authService.getUserById(req.user, id);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
@@ -115,7 +115,7 @@ module.exports = {
   async editUser(req, res) {
     try {
       const { id } = req.params;
-      const result = await authService.updateUser(id, req.body);
+      const result = await authService.updateUser(req.user, id, req.body);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
@@ -128,7 +128,7 @@ module.exports = {
   async deleteUser(req, res) {
     try {
       const { id } = req.params;
-      const result = await authService.deleteUser(id);
+      const result = await authService.deleteUser(req.user, id);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }

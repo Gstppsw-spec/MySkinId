@@ -136,9 +136,21 @@ module.exports = {
     };
   },
 
-  async createUser(data) {
+  async createUser(userObj, data) {
     try {
       const { name, email, password, locationId, roleName, companyId } = data;
+
+      if (
+        userObj &&
+        userObj.roleCode === "OPERATIONAL_ADMIN" &&
+        roleName === "SUPER_ADMIN"
+      ) {
+        return {
+          status: false,
+          message:
+            "Akses dilarang: Operational Admin tidak diperbolehkan membuat Super Admin",
+        };
+      }
 
       if (!name || !email || !password || !roleName)
         return { status: false, message: "Data tidak lengkap" };
@@ -347,13 +359,22 @@ module.exports = {
         // Super Admin can see all system roles
         allowedRoles.push(
           "SUPER_ADMIN",
+          "OPERATIONAL_ADMIN",
+          "COMPANY_ADMIN",
+          "DOCTOR_GENERAL",
+          "PATIENT",
+        );
+      } else if (userObj && userObj.roleCode === "OPERATIONAL_ADMIN") {
+        // Operational Admin can see everything EXCEPT Super Admin
+        allowedRoles.push(
+          "OPERATIONAL_ADMIN",
           "COMPANY_ADMIN",
           "DOCTOR_GENERAL",
           "PATIENT",
         );
       } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
-        allowedRoles.push("COMPANY_ADMIN");
-        // find user IDs in admin's locations
+        // Company Admin only see staff: Outlet Admin & Outlet Doctor
+        // No allowedRoles.push("COMPANY_ADMIN") to hide other admins
         const locIds = userObj.locationIds || [];
         const staff = await relationshipUserLocation.findAll({
           where: { locationId: { [Op.in]: locIds }, isactive: true },
@@ -502,12 +523,19 @@ module.exports = {
       if (userObj && userObj.roleCode === "SUPER_ADMIN") {
         allowedRoles.push(
           "SUPER_ADMIN",
+          "OPERATIONAL_ADMIN",
+          "COMPANY_ADMIN",
+          "DOCTOR_GENERAL",
+          "PATIENT",
+        );
+      } else if (userObj && userObj.roleCode === "OPERATIONAL_ADMIN") {
+        allowedRoles.push(
+          "OPERATIONAL_ADMIN",
           "COMPANY_ADMIN",
           "DOCTOR_GENERAL",
           "PATIENT",
         );
       } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
-        allowedRoles.push("COMPANY_ADMIN");
         const locIds = userObj.locationIds || [];
         const staff = await relationshipUserLocation.findAll({
           where: { locationId: { [Op.in]: locIds }, isactive: true },
@@ -634,7 +662,7 @@ module.exports = {
     }
   },
 
-  async getUserById(id) {
+  async getUserById(userObj, id) {
     try {
       let user = await masterUser.findByPk(id, {
         attributes: [
@@ -686,6 +714,19 @@ module.exports = {
       user = user.toJSON();
 
       const isSuperAdmin = user.role?.roleCode === "SUPER_ADMIN";
+
+      if (
+        userObj &&
+        userObj.roleCode === "OPERATIONAL_ADMIN" &&
+        isSuperAdmin
+      ) {
+        return {
+          status: false,
+          message:
+            "Akses dilarang: Akun anda tidak memiliki izin untuk melihat Super Admin",
+          data: null,
+        };
+      }
 
       // =====================================================
       // ✅ SUPER ADMIN → semua data
@@ -768,14 +809,28 @@ module.exports = {
     }
   },
 
-  async updateUser(id, data) {
+  async updateUser(userObj, id, data) {
     try {
       const { name, email, password, phone, roleId, locationId, isactive } =
         data;
-      const user = await masterUser.findByPk(id);
+      const user = await masterUser.findByPk(id, {
+        include: [{ model: masterRole, as: "role" }],
+      });
 
       if (!user) {
         return { status: false, message: "User tidak ditemukan", data: null };
+      }
+
+      if (
+        userObj &&
+        userObj.roleCode === "OPERATIONAL_ADMIN" &&
+        user.role?.roleCode === "SUPER_ADMIN"
+      ) {
+        return {
+          status: false,
+          message:
+            "Akses dilarang: Operational Admin tidak diperbolehkan mengubah Super Admin",
+        };
       }
 
       if (email && email !== user.email) {
@@ -817,11 +872,25 @@ module.exports = {
     }
   },
 
-  async deleteUser(id) {
+  async deleteUser(userObj, id) {
     try {
-      const user = await masterUser.findByPk(id);
+      const user = await masterUser.findByPk(id, {
+        include: [{ model: masterRole, as: "role" }],
+      });
       if (!user) {
         return { status: false, message: "User tidak ditemukan", data: null };
+      }
+
+      if (
+        userObj &&
+        userObj.roleCode === "OPERATIONAL_ADMIN" &&
+        user.role?.roleCode === "SUPER_ADMIN"
+      ) {
+        return {
+          status: false,
+          message:
+            "Akses dilarang: Operational Admin tidak diperbolehkan menghapus Super Admin",
+        };
       }
 
       await user.update({ isactive: false });
