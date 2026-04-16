@@ -42,6 +42,9 @@ const {
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
 const pushNotificationService = require("./pushNotification.service");
+const NotificationService = require("./notification.service");
+
+const SERVICE_FEE = 4500;
 
 module.exports = {
   async _getAdminLocationIds(adminId) {
@@ -110,7 +113,7 @@ module.exports = {
       if (paymentType === "VIRTUAL_ACCOUNT") {
         // Fixed Virtual Account
         const expirationDate = new Date();
-        expirationDate.setHours(expirationDate.getHours() + 24); // 24 hours expiry
+        expirationDate.setHours(expirationDate.getHours() + 1); // 1 hour expiry
 
         const response = await axios.post(
           "https://api.xendit.co/callback_virtual_accounts",
@@ -135,6 +138,7 @@ module.exports = {
           accountNumber: response.data.account_number,
           expectedAmount: response.data.expected_amount,
           expirationDate: response.data.expiration_date,
+          expiresAt: response.data.expiration_date,
           instructions: this._getPaymentInstructions(
             "VIRTUAL_ACCOUNT",
             paymentMethodCode,
@@ -169,6 +173,7 @@ module.exports = {
                       },
               },
             },
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
           },
           {
             headers: {
@@ -218,6 +223,7 @@ module.exports = {
             type: "DYNAMIC",
             callback_url: `${process.env.BACKEND_URL || "https://api.myskin.blog"}/api/v2/transaction/order/callback/xendit`,
             amount: amount,
+            expires_at: new Date(Date.now() + 3600000).toISOString(),
           },
           { headers: { Authorization: `Basic ${authHeader}` } },
         );
@@ -702,6 +708,10 @@ module.exports = {
 
         totalOrderAmount += shippingFee;
       }
+
+      totalOrderAmount += SERVICE_FEE;
+
+      totalOrderAmount += SERVICE_FEE;
 
       const newOrder = await order.create(
         {
@@ -1211,6 +1221,8 @@ module.exports = {
 
         totalOrderAmount += shippingFee;
       }
+
+      totalOrderAmount += SERVICE_FEE;
 
       const newOrder = await order.create(
         {
@@ -1908,7 +1920,7 @@ module.exports = {
       // Notify frontend via WebSocket
       socketInstance.emitPaymentUpdate(orderNumber, "EXPIRED", { orderId });
       console.log(
-        `[PaymentTimeout] Order ${orderNumber} expired (unpaid after 10 minutes)`,
+        `[PaymentTimeout] Order ${orderNumber} expired (unpaid after 60 minutes)`,
       );
     } catch (err) {
       await t.rollback();
@@ -2177,7 +2189,7 @@ module.exports = {
 
           // Push notification: payment success
           const firstTrxId = orderData.transactions.length > 0 ? orderData.transactions[0].id : null;
-          pushNotificationService.sendPushNotification(
+          await pushNotificationService.sendPushNotification(
             orderData.customerId,
             "customer",
             {
@@ -2191,6 +2203,27 @@ module.exports = {
               },
             }
           );
+
+          // === SEND ADMIN NOTIFICATION ===
+          for (const trx of orderData.transactions) {
+            try {
+              const loc = await masterLocation.findByPk(trx.locationId);
+              if (loc && loc.companyId) {
+                await NotificationService.createNotification({
+                  companyId: loc.companyId,
+                  locationId: loc.id,
+                  title: "Transaksi Baru ✅",
+                  body: `Ada pesanan baru ${orderData.orderNumber} senilai ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(trx.grandTotal)} untuk outlet ${loc.name}.`,
+                  category: "Transaction",
+                  type: "TRANSACTION_SUCCESS",
+                  referenceId: trx.id,
+                  referenceType: "transaction",
+                });
+              }
+            } catch (adminNotifErr) {
+              console.error("[TransactionOrder] Admin Notification Error:", adminNotifErr.message);
+            }
+          }
 
           // Activate vouchers linked to this order's transactions
           const transactionIds = orderData.transactions.map((trx) => trx.id);

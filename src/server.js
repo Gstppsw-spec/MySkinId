@@ -36,9 +36,11 @@ const flashSaleRoute = require("./routes/master/flashSale.route");
 const googlePlacesRoute = require("./routes/master/googlePlaces.route");
 const adsRoute = require("./routes/ads.route");
 const pushTokenRoute = require("./routes/master/pushToken.route");
+const notificationRoute = require("./routes/notification.route");
 
 // Cron jobs
 const initGoogleRatingCron = require("./cron/googleRatingCron");
+const initFlashSaleCron = require("./cron/flashSaleCron");
 
 // Social media routes
 const postRoute = require("./routes/social/post.route");
@@ -106,6 +108,7 @@ app.use("/api/v2/flash-sale", flashSaleRoute);
 app.use("/api/v2/google-places", googlePlacesRoute);
 app.use("/api/v2/ads", adsRoute);
 app.use("/api/v2/push-token", pushTokenRoute);
+app.use("/api/v2/notifications", notificationRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);
@@ -117,6 +120,7 @@ const server = http.createServer(app);
 
 initSocket(server);
 initGoogleRatingCron();
+initFlashSaleCron();
 
 // const io = new Server(server, { cors: { origin: "*" } });
 

@@ -3,7 +3,7 @@ const socketInstance = require("../socket/socketInstance");
 // In-memory map to track active payment timers: orderId -> timeoutId
 const paymentTimers = new Map();
 
-const PAYMENT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const PAYMENT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 
 /**
  * Schedules auto-expiry of an order after PAYMENT_TIMEOUT_MS if still UNPAID.
@@ -25,7 +25,7 @@ function schedulePaymentTimeout(orderId, orderNumber, expireCallback) {
     }, PAYMENT_TIMEOUT_MS);
 
     paymentTimers.set(orderId, timerId);
-    console.log(`[PaymentTimeout] Scheduled expiry for order ${orderNumber} in 10 minutes`);
+    console.log(`[PaymentTimeout] Scheduled expiry for order ${orderNumber} in 60 minutes`);
 }
 
 /**

@@ -6,6 +6,7 @@ const {
   masterService,
   masterPackage,
 } = require("../models");
+const NotificationService = require("./notification.service");
 
 class RequestVerificationService {
   async create(data) {
@@ -392,6 +393,66 @@ class RequestVerificationService {
       }
 
       await request.save();
+
+      // === SEND NOTIFICATION ===
+      try {
+        const statusLabel = data.status === "approved" ? "Disetujui" : "Ditolak";
+        const typeLabel = request.refferenceType.charAt(0).toUpperCase() + request.refferenceType.slice(1);
+        
+        let entityName = "";
+        let companyId = null;
+        let locationId = null;
+
+        if (request.refferenceType === "location") {
+          const loc = await masterLocation.findByPk(request.refferenceId);
+          entityName = loc.name;
+          locationId = loc.id;
+          companyId = loc.companyId;
+        } else if (request.refferenceType === "company") {
+          const comp = await masterCompany.findByPk(request.refferenceId);
+          entityName = comp.name;
+          companyId = comp.id;
+        } else {
+          // product, service, package
+          let entity;
+          if (request.refferenceType === "product") entity = await masterProduct.findByPk(request.refferenceId);
+          else if (request.refferenceType === "service") entity = await masterService.findByPk(request.refferenceId);
+          else if (request.refferenceType === "package") entity = await masterPackage.findByPk(request.refferenceId);
+          
+          if (entity) {
+            entityName = entity.name;
+            // Find one location associated with this entity to get companyId
+            // This is a bit simplified, but covers the request images
+            const { relationshipProductLocation, relationshipServiceLocation, relationshipPackageLocation } = require("../models");
+            let pivot;
+            if (request.refferenceType === "product") pivot = await relationshipProductLocation.findOne({ where: { productId: entity.id } });
+            else if (request.refferenceType === "service") pivot = await relationshipServiceLocation.findOne({ where: { serviceId: entity.id } });
+            else if (request.refferenceType === "package") pivot = await relationshipPackageLocation.findOne({ where: { packageId: entity.id } });
+            
+            if (pivot) {
+              const loc = await masterLocation.findByPk(pivot.locationId);
+              if (loc) {
+                locationId = loc.id;
+                companyId = loc.companyId;
+              }
+            }
+          }
+        }
+
+        await NotificationService.createNotification({
+          companyId,
+          locationId,
+          title: `${typeLabel} ${statusLabel}`,
+          body: `${typeLabel} '${entityName}' telah ${data.status === "approved" ? "lolos verifikasi dan siap dipublikasikan" : "ditolak. Silakan perbarui data sesuai pedoman"}.`,
+          category: "Verification",
+          type: `VERIFICATION_${data.status.toUpperCase()}`,
+          referenceId: request.refferenceId,
+          referenceType: request.refferenceType,
+        });
+      } catch (notifErr) {
+        console.error("[RequestVerificationService] Notification Error:", notifErr.message);
+      }
+
       return { status: true, message: "Request updated", data: request };
     } catch (error) {
       return { status: false, message: error.message, data: null };
