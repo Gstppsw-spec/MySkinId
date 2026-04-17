@@ -5,7 +5,7 @@ const controller = require("../../controllers/relationshipUserCompany.controller
 const { verifyToken } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
 
-router.get("/", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN"), controller.getAllCompany);
+router.get("/", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OPERATIONAL_ADMIN"), controller.getAllCompany);
 router.post("/", verifyToken, allowRoles("SUPER_ADMIN"), controller.addCompany);
 router.post(
     "/upsert",
