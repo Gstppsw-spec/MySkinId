@@ -675,7 +675,7 @@ class MasterLocationService {
               })
               .then((res) => res.map((r) => r.id));
           }
-        } else if (roleCode !== "SUPER_ADMIN") {
+        } else if (roleCode !== "SUPER_ADMIN" && roleCode !== "OPERATIONAL_ADMIN") {
           locationIds = await relationshipUserLocation
             .findAll({
               where: { userId },
@@ -686,7 +686,7 @@ class MasterLocationService {
         }
       }
 
-      if (roleCode !== "SUPER_ADMIN") {
+      if (roleCode !== "SUPER_ADMIN" && roleCode !== "OPERATIONAL_ADMIN") {
         options.where.id = { [Op.in]: locationIds };
       }
 

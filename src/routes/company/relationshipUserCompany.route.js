@@ -13,9 +13,9 @@ router.post(
     allowRoles("COMPANY_ADMIN"),
     controller.upsertCompany
 );
-router.get("/user", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN"), controller.getCompanyByUserId);
-router.get("/:id", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN"), controller.detailCompany);
-router.put("/:id", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN"), controller.updateCompany);
-router.delete("/:id", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN"), controller.deleteCompany);
+router.get("/user", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OPERATIONAL_ADMIN"), controller.getCompanyByUserId);
+router.get("/:id", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OPERATIONAL_ADMIN"), controller.detailCompany);
+router.put("/:id", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OPERATIONAL_ADMIN"), controller.updateCompany);
+router.delete("/:id", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OPERATIONAL_ADMIN"), controller.deleteCompany);
 
 module.exports = router;

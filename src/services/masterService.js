@@ -652,7 +652,7 @@ module.exports = {
               })
               .then((res) => res.map((r) => r.id));
           }
-        } else if (roleCode !== "SUPER_ADMIN") {
+        } else if (roleCode !== "SUPER_ADMIN" && roleCode !== "OPERATIONAL_ADMIN") {
           locationIds = await relationshipUserLocation
             .findAll({
               where: { userId },
@@ -702,7 +702,7 @@ module.exports = {
       ];
 
       let finalInclude;
-      if (roleCode === "SUPER_ADMIN") {
+      if (roleCode === "SUPER_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
         finalInclude = include;
       } else {
         // Filter: services linked to user's locations

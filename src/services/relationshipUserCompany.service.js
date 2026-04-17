@@ -54,7 +54,7 @@ class RelationshipUserCompanyService {
     if (name) where.name = { [Op.like]: `%${name}%` };
 
     const include = [];
-    if (roleCode && roleCode !== "SUPER_ADMIN") {
+    if (roleCode && roleCode !== "SUPER_ADMIN" && roleCode !== "OPERATIONAL_ADMIN") {
       include.push({
         model: relationshipUserCompany,
         as: "userLinks",
