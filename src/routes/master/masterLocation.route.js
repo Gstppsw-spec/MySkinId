@@ -18,7 +18,7 @@ router.get(
 router.delete(
   "/premium/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.removePremium,
 );
 router.get("/company/:companyId", masterLocationController.getByCompanyId);
@@ -43,7 +43,7 @@ router.get(
 router.post(
   "/",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   uploadLocationImages,
   compressImage,
   masterLocationController.create,
@@ -51,7 +51,7 @@ router.post(
 router.put(
   "/:id",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   uploadLocationImages,
   compressImage,
   masterLocationController.update,
@@ -59,25 +59,25 @@ router.put(
 router.delete(
   "/:id",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.delete,
 );
 router.patch(
   "/:id/status",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.updateStatus,
 );
 router.patch(
   "/image/:id",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.deleteImage,
 );
 router.patch(
   "/image/:id/primary",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.setPrimaryImage,
 );
 
@@ -98,19 +98,19 @@ router.get("/province/:id", masterLocationController.detailProvince);
 router.post(
   "/province",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.createProvince,
 );
 router.put(
   "/province/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.updateProvince,
 );
 router.delete(
   "/province/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.deleteProvince,
 );
 
@@ -120,19 +120,19 @@ router.get("/city-detail/:id", masterLocationController.detailCity);
 router.post(
   "/city",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.createCity,
 );
 router.put(
   "/city/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.updateCity,
 );
 router.delete(
   "/city/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.deleteCity,
 );
 
@@ -142,19 +142,19 @@ router.get("/district-detail/:id", masterLocationController.detailDistrict);
 router.post(
   "/district",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.createDistrict,
 );
 router.put(
   "/district/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.updateDistrict,
 );
 router.delete(
   "/district/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.deleteDistrict,
 );
 
@@ -167,19 +167,19 @@ router.get(
 router.post(
   "/sub-district",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.createSubDistrict,
 );
 router.put(
   "/sub-district/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.updateSubDistrict,
 );
 router.delete(
   "/sub-district/:id",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.deleteSubDistrict,
 );
 
@@ -191,7 +191,7 @@ router.get("/city/:cityId", masterLocationController.getByCityId);
 router.post(
   "/:locationId/create-xendit-account",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterLocationController.createXenditAccount,
 );
 

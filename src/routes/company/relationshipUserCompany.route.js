@@ -6,11 +6,11 @@ const { verifyToken } = require("../../middlewares/authMiddleware");
 const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 router.get("/", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OPERATIONAL_ADMIN"), controller.getAllCompany);
-router.post("/", verifyToken, allowRoles("SUPER_ADMIN"), controller.addCompany);
+router.post("/", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), controller.addCompany);
 router.post(
     "/upsert",
     verifyToken,
-    allowRoles("COMPANY_ADMIN"),
+    allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OPERATIONAL_ADMIN"),
     controller.upsertCompany
 );
 router.get("/user", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OPERATIONAL_ADMIN"), controller.getCompanyByUserId);
