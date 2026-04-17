@@ -1644,7 +1644,7 @@ module.exports = {
     }
   },
 
-  async getRecommendations(roomId) {
+  async getRecommendations(roomId, sortBy) {
     try {
       const room = await masterRoomConsultation.findOne({
         where: { id: roomId },
@@ -1833,15 +1833,15 @@ module.exports = {
 
       const [products, packages, services] = await Promise.all([
         allProductCategoryIds.length > 0 ? masterProduct.findAll({
-          attributes: ["id", "name", "description", "price", "discountPercent", "weightGram"],
+          attributes: ["id", "name", "description", "price", "discountPercent", "weightGram", "ratingAvg"],
           include: productIncludeList,
         }) : Promise.resolve([]),
         allPackageCategoryIds.length > 0 ? masterPackage.findAll({
-          attributes: ["id", "name", "description", "price", "discountPercent"],
+          attributes: ["id", "name", "description", "price", "discountPercent", "ratingAvg"],
           include: packageIncludeList,
         }) : Promise.resolve([]),
         allPackageCategoryIds.length > 0 ? masterService.findAll({
-          attributes: ["id", "name", "description", "price", "duration", "discountPercent"],
+          attributes: ["id", "name", "description", "price", "duration", "discountPercent", "ratingAvg"],
           include: serviceIncludeList,
         }) : Promise.resolve([]),
       ]);
@@ -1871,6 +1871,7 @@ module.exports = {
             discountPercent,
             weight: pj.weightGram,
             media,
+            ratingAvg: pj.ratingAvg,
             categories: pj.categories.map(cat => ({ id: cat.id, name: cat.name }))
           };
         });
@@ -1911,6 +1912,7 @@ module.exports = {
             discountPercent,
             services: servicesInPkg,
             media,
+            ratingAvg: pkgJson.ratingAvg,
             categories: Object.values(uniqueCatsInPkg)
           };
         });
@@ -1933,9 +1935,20 @@ module.exports = {
             discountPrice,
             discountPercent,
             duration: sj.duration,
+            ratingAvg: sj.ratingAvg,
             categories: sj.categories.map(cat => ({ id: cat.id, name: cat.name }))
           };
         });
+
+        if (sortBy === "cheapest_price" || sortBy === "price" || sortBy === "low-price") {
+          productsList.sort((a, b) => a.discountPrice - b.discountPrice);
+          packagesList.sort((a, b) => a.discountPrice - b.discountPrice);
+          servicesList.sort((a, b) => a.discountPrice - b.discountPrice);
+        } else if (sortBy === "highest_rating" || sortBy === "rating") {
+          productsList.sort((a, b) => (parseFloat(b.ratingAvg) || 0) - (parseFloat(a.ratingAvg) || 0));
+          packagesList.sort((a, b) => (parseFloat(b.ratingAvg) || 0) - (parseFloat(a.ratingAvg) || 0));
+          servicesList.sort((a, b) => (parseFloat(b.ratingAvg) || 0) - (parseFloat(a.ratingAvg) || 0));
+        }
 
         return {
           locationId: locId,

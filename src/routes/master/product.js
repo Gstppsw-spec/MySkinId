@@ -45,7 +45,7 @@ router.patch(
 );
 router.get("/creator", verifyToken, masterProduct.getByCreator);
 router.get("/location/:locationId", masterProduct.getByLocationId);
-router.get("/user", verifyToken, masterProduct.getProductByUser);
+router.get("/user", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN", "COMPANY_ADMIN"), masterProduct.getProductByUser);
 router.get("/by-user-location", verifyToken, masterProduct.getProductByUser);
 router.get("/", masterProduct.getAll);
 router.get("/:id", masterProduct.getById);

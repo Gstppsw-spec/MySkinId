@@ -8,7 +8,8 @@ class MasterRoleController {
     }
 
     async list(req, res) {
-        const result = await MasterRoleService.list();
+        const user = req.user;
+        const result = await MasterRoleService.list(user);
         return res.status(result.status ? 200 : 400).json(result);
     }
 

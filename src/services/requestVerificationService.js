@@ -110,7 +110,7 @@ class RequestVerificationService {
     }
   }
 
-  async list(status, type, pagination = {}, name = null) {
+  async list(status, type, pagination = {}, name = null, user = null) {
     try {
       const { limit, offset } = pagination;
       const allowedType = [
@@ -121,6 +121,20 @@ class RequestVerificationService {
         "package",
       ];
       const { Op } = require("sequelize");
+      
+      let companyIds = [];
+      let locationIds = [];
+
+      if (user && (user.role === "COMPANY_ADMIN" || user.role === "OUTLET_ADMIN")) {
+        const { relationshipUserCompany, relationshipUserLocation } = require("../models");
+        if (user.role === "COMPANY_ADMIN") {
+          const u_companies = await relationshipUserCompany.findAll({ where: { userId: user.id } });
+          companyIds = u_companies.map(c => c.companyId);
+        } else if (user.role === "OUTLET_ADMIN") {
+          const u_locations = await relationshipUserLocation.findAll({ where: { userId: user.id } });
+          locationIds = u_locations.map(l => l.locationId);
+        }
+      }
 
       const where = {};
       if (status) where.status = status;
@@ -141,7 +155,7 @@ class RequestVerificationService {
                 model: masterLocation,
                 as: "locations", // ⬅️ sesuai belongsToMany
                 through: { attributes: [] }, // hide pivot
-                attributes: ["id", "name", "isVerified"],
+                attributes: ["id", "name", "isVerified", "companyId"],
                 required: false,
               },
             ],
@@ -158,7 +172,7 @@ class RequestVerificationService {
                 model: masterLocation,
                 as: "locations",
                 through: { attributes: [] },
-                attributes: ["id", "name", "isVerified"],
+                attributes: ["id", "name", "isVerified", "companyId"],
                 required: false,
               },
             ],
@@ -175,7 +189,7 @@ class RequestVerificationService {
                 model: masterLocation,
                 as: "locations",
                 through: { attributes: [] },
-                attributes: ["id", "name", "isVerified"],
+                attributes: ["id", "name", "isVerified", "companyId"],
                 required: false,
               },
             ],
@@ -212,12 +226,7 @@ class RequestVerificationService {
           data: null,
         };
       } else {
-        // If no type filter, include all.
-        // If name filter is present, it's harder to filter across different polymorphic relations in one query with Sequelize's findAndCountAll and required includes.
-        // For simplicity, we'll apply the filter to each and if name is provided, we'll use an OR logic if possible, or just filter each include.
-        // Actually, a common way is to use subqueries or a more manual approach.
-        // But let's try to add the where to each include and see if anything matches.
-
+        // Fallback for all
         include = [
           {
             model: masterLocation,
@@ -233,16 +242,19 @@ class RequestVerificationService {
             model: masterProduct,
             as: "product",
             ...(nameFilter && { where: nameFilter, required: false }),
+            include: [{ model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }]
           },
           {
             model: masterService,
             as: "service",
             ...(nameFilter && { where: nameFilter, required: false }),
+            include: [{ model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }]
           },
           {
             model: masterPackage,
             as: "package",
             ...(nameFilter && { where: nameFilter, required: false }),
+            include: [{ model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }]
           },
         ];
 
@@ -266,7 +278,7 @@ class RequestVerificationService {
           distinct: true,
         });
 
-      // Filter out requests where the associated entity is null (soft-deleted)
+      // Filter out requests where the associated entity is null (soft-deleted) or unauthorized
       const filteredRequests = requests.filter((req) => {
         const entity =
           req.company ||
@@ -274,7 +286,28 @@ class RequestVerificationService {
           req.product ||
           req.service ||
           req.package;
-        return entity !== null && entity !== undefined;
+          
+        if (!entity) return false;
+        
+        if (user && (user.role === "COMPANY_ADMIN")) {
+          if (req.refferenceType === "company") return companyIds.includes(entity.id);
+          if (req.refferenceType === "location") return companyIds.includes(entity.companyId);
+          if (["product", "service", "package"].includes(req.refferenceType)) {
+             return entity.locations && entity.locations.some(loc => companyIds.includes(loc.companyId));
+          }
+          return false;
+        }
+        
+        if (user && (user.role === "OUTLET_ADMIN")) {
+          if (req.refferenceType === "company") return false; // Outlet admin cannot see company verification req
+          if (req.refferenceType === "location") return locationIds.includes(entity.id);
+          if (["product", "service", "package"].includes(req.refferenceType)) {
+             return entity.locations && entity.locations.some(loc => locationIds.includes(loc.id));
+          }
+          return false;
+        }
+
+        return true;
       });
 
       // If we are using pagination, the count might be slightly off due to JS filtering

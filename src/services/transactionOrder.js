@@ -711,8 +711,6 @@ module.exports = {
 
       totalOrderAmount += SERVICE_FEE;
 
-      totalOrderAmount += SERVICE_FEE;
-
       const newOrder = await order.create(
         {
           orderNumber: `ORD-${nanoid(10).toUpperCase()}`,
@@ -890,6 +888,7 @@ module.exports = {
         message: "Checkout successful",
         data: {
           ...newOrder.toJSON(),
+          serviceFee: SERVICE_FEE,
           paymentDetails: gatewayPayment,
         },
       };
@@ -3358,7 +3357,8 @@ module.exports = {
           ...plain,
           customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
           outletPhone: plain.location?.phone || null,
-        };
+        serviceFee: plain.order?.orderNumber?.startsWith("ORD-") ? SERVICE_FEE : 0,
+      };
         if (res.order?.customer) {
           delete res.order.customer.phoneNumber;
         }
@@ -3596,7 +3596,8 @@ module.exports = {
           paymentStatus: plainOrder.paymentStatus,
           customerPhone: plainOrder.transactions?.[0]?.shipping?.receiverPhone || plainOrder.customer?.phoneNumber || null,
           createdAt: plainOrder.createdAt,
-          payments: plainOrder.payments,
+          serviceFee: plainOrder.orderNumber?.startsWith("ORD-") ? SERVICE_FEE : 0,
+        payments: plainOrder.payments,
           transactions: (plainOrder.transactions || []).map((trx) => {
             const t = {
               id: trx.id,
@@ -4322,7 +4323,6 @@ module.exports = {
           trackingNumber: plainTrx.shipping?.trackingNumber,
         },
         items: (plainTrx.items || [])
-          .filter((item) => item.itemType === "product")
           .map((item) => ({
           id: item.id,
           itemName: item.itemName,
@@ -4332,6 +4332,7 @@ module.exports = {
           totalPrice: parseFloat(item.totalPrice),
           image: item.product?.images?.[0]?.imageUrl || null,
         })),
+        serviceFee: SERVICE_FEE,
       };
 
       return {

@@ -755,12 +755,10 @@ module.exports = {
 
   async getByLocationId(customerId, locationId, isCustomer) {
     try {
-      const where = {};
-
-      if (isCustomer == 1 || isCustomer == "1") {
-        where.isActive = true;
-        where.isVerified = true;
-      }
+      const where = {
+        isActive: true,
+        isVerified: true
+      };
 
       const include = [
         {

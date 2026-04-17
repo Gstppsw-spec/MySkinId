@@ -23,7 +23,7 @@ router.delete(
 );
 router.get("/company/:companyId", masterLocationController.getByCompanyId);
 
-router.get("/user", verifyToken, masterLocationController.getLocationByUser);
+router.get("/user", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN", "COMPANY_ADMIN"), masterLocationController.getLocationByUser);
 
 // CUSTOMER LIST
 router.get(

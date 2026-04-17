@@ -29,9 +29,19 @@ class MasterRoleService {
         }
     }
 
-    async list() {
+    async list(user) {
         try {
+            const { Op } = require("sequelize");
+            const where = {};
+            
+            if (user && user.role === "COMPANY_ADMIN") {
+                where.roleCode = { [Op.in]: ["OUTLET_DOCTOR", "OUTLET_ADMIN"] };
+            } else if (user && user.role === "OPERATIONAL_ADMIN") {
+                where.roleCode = { [Op.ne]: "SUPER_ADMIN" };
+            }
+
             const roles = await masterRole.findAll({
+                where,
                 order: [["createdAt", "DESC"]],
             });
 

@@ -577,11 +577,10 @@ module.exports = {
 
   async getByLocationId(locationId, customerId, isCustomer) {
     try {
-      const where = {};
-      if (isCustomer == 1 || isCustomer == "1") {
-        where.isActive = true;
-        where.isVerified = true;
-      }
+      const where = {
+        isActive: true,
+        isVerified: true
+      };
 
       const service = await masterService.findAll({
         where,
