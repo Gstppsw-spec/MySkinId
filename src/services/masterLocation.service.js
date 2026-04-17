@@ -913,7 +913,24 @@ class MasterLocationService {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+      const distanceLiteral = (latt && long) ? Sequelize.literal(`
+        (6371 * acos(
+          cos(radians(${parseFloat(latt)})) *
+          cos(radians(CAST(latitude AS FLOAT))) *
+          cos(radians(CAST(longitude AS FLOAT)) - radians(${parseFloat(long)})) +
+          sin(radians(${parseFloat(latt)})) *
+          sin(radians(CAST(latitude AS FLOAT)))
+        )) * 1000.0
+      `) : null;
+
+      const order = distanceLiteral
+        ? [[distanceLiteral, "ASC"]]
+        : [[Sequelize.literal("COALESCE(masterLocation.verifiedDate, masterLocation.createdAt)"), "DESC"]];
+
       const { count, rows: locations } = await masterLocation.findAndCountAll({
+        attributes: {
+          include: distanceLiteral ? [[distanceLiteral, "distance"]] : []
+        },
         where: {
           isVerified: true,
           isactive: true,
@@ -931,35 +948,14 @@ class MasterLocationService {
         distinct: true,
         limit,
         offset,
-        order: [
-          [Sequelize.literal('COALESCE(masterLocation.verifiedDate, masterLocation.createdAt)'), 'DESC']
-        ],
+        subQuery: false,
+        order,
       });
 
       const result = locations.map((loc) => {
         const plain = loc.get({ plain: true });
 
-        // ... existing distance calculation ...
-        let distance = 0;
-        if (latt && long && plain.latitude && plain.longitude) {
-          const lat1 = parseFloat(latt);
-          const lon1 = parseFloat(long);
-          const lat2 = parseFloat(plain.latitude);
-          const lon2 = parseFloat(plain.longitude);
-
-          const R = 6371e3; // meters
-          const φ1 = (lat1 * Math.PI) / 180;
-          const φ2 = (lat2 * Math.PI) / 180;
-          const Δφ = ((lat2 - lat1) * Math.PI) / 180;
-          const Δλ = ((lon2 - lon1) * Math.PI) / 180;
-
-          const a =
-            Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-            Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-          distance = Math.round(R * c);
-        }
+        let distance = Math.round(parseFloat(plain.distance) || 0);
 
         const isPremiumValid = !!(plain.premiumExpiredAt && new Date() < new Date(plain.premiumExpiredAt));
 

@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ override: true });
 const express = require("express");
 const { Server } = require("socket.io");
 const swaggerUi = require("swagger-ui-express");
@@ -108,6 +108,7 @@ app.use("/api/v2/flash-sale", flashSaleRoute);
 app.use("/api/v2/google-places", googlePlacesRoute);
 app.use("/api/v2/ads", adsRoute);
 app.use("/api/v2/push-token", pushTokenRoute);
+app.use("/api/v2/notification", notificationRoute);
 app.use("/api/v2/notifications", notificationRoute);
 
 // Social media routes

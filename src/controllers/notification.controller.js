@@ -4,25 +4,24 @@ const { getPagination, formatPagination } = require("../utils/pagination");
 class NotificationController {
   async list(req, res) {
     try {
-      const { category, page, pageSize } = req.query;
+      const { category, type, referenceType, status, page, pageSize } = req.query;
       const pagination = getPagination(page, pageSize);
       
-      // Assume user context from middleware (req.user)
       const userId = req.user.id;
       const roleCode = req.user.roleCode;
       
       let companyId = null;
-      // If company admin, we might want to filter by companyId
-      // This depends on how req.user is populated. 
-      // Often for company admin, we store their companyId in the session/token.
       if (req.user.companyId) {
         companyId = req.user.companyId;
       }
 
       const params = {
         category,
-        userId: roleCode === "CUSTOMER" ? userId : null,
-        companyId: roleCode === "COMPANY_ADMIN" ? companyId : null,
+        type,
+        referenceType,
+        status,
+        userId: (roleCode === "CUSTOMER" || roleCode === "DOCTOR") ? userId : null,
+        companyId: (roleCode === "COMPANY_ADMIN" || roleCode === "OUTLET_ADMIN" || roleCode === "OPERATIONAL_ADMIN") ? companyId : null,
         page: pagination.page,
         pageSize: pagination.pageSize,
       };
@@ -61,11 +60,21 @@ class NotificationController {
   async markAllAsRead(req, res) {
     try {
       const companyId = req.user.companyId;
-      if (!companyId) {
-        return res.status(400).json({ status: false, message: "Company ID not found in user context" });
+      const userId = req.user.id;
+      const roleCode = req.user.roleCode;
+
+      const target = {};
+      if (roleCode === "COMPANY_ADMIN" || roleCode === "OUTLET_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
+        target.companyId = companyId;
+      } else {
+        target.userId = userId;
       }
 
-      const result = await NotificationService.markAllAsRead(companyId);
+      if (!target.companyId && !target.userId) {
+        return res.status(400).json({ status: false, message: "Target for Read All not found" });
+      }
+
+      const result = await NotificationService.markAllAsRead(target);
       return res.status(result.status ? 200 : 400).json(result);
     } catch (error) {
       return res.status(500).json({ status: false, message: error.message });

@@ -1722,7 +1722,7 @@ module.exports = {
         `);
 
         nearestLocations = await masterLocation.findAll({
-          attributes: ["id", "name", [distanceLiteral, "distance"]],
+          attributes: ["id", "name", "ratingAvg", [distanceLiteral, "distance"]],
           where: {
             latitude: { [Op.ne]: null },
             longitude: { [Op.ne]: null },
@@ -1732,7 +1732,7 @@ module.exports = {
         });
       } else if (room.locationId) {
         const fallbackOutlet = await masterLocation.findByPk(room.locationId, {
-          attributes: ["id", "name"],
+          attributes: ["id", "name", "ratingAvg"],
         });
         if (fallbackOutlet) {
           const outletJson = fallbackOutlet.toJSON();
@@ -1751,7 +1751,10 @@ module.exports = {
             : "Berhasil (lokasi customer & outlet room tidak tersedia)",
           data: {
             room: roomData,
-            recommendation: recJson,
+            recommendation: {
+              ...recJson,
+              serviceCategories: recJson.packageCategories || [],
+            },
             outlets: [],
           },
         };
@@ -1957,10 +1960,27 @@ module.exports = {
           products: productsList,
           packages: packagesList,
           services: servicesList,
+          ratingAvg: locJson.ratingAvg,
         };
       });
 
-      const filteredOutlets = outlets.filter((o) => o.products.length > 0 || o.packages.length > 0 || o.services.length > 0);
+      let filteredOutlets = outlets.filter((o) => o.products.length > 0 || o.packages.length > 0 || o.services.length > 0);
+
+      if (sortBy === "cheapest_price" || sortBy === "price" || sortBy === "low-price") {
+        filteredOutlets.sort((a, b) => {
+          const getMinPrice = (o) => {
+            const prices = [
+              ...(o.products || []).map((p) => p.discountPrice),
+              ...(o.packages || []).map((p) => p.discountPrice),
+              ...(o.services || []).map((s) => s.discountPrice),
+            ];
+            return prices.length > 0 ? Math.min(...prices) : Infinity;
+          };
+          return getMinPrice(a) - getMinPrice(b);
+        });
+      } else if (sortBy === "highest_rating" || sortBy === "rating") {
+        filteredOutlets.sort((a, b) => (parseFloat(b.ratingAvg) || 0) - (parseFloat(a.ratingAvg) || 0));
+      }
 
       return {
         status: true,

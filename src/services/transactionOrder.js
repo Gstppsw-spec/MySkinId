@@ -167,10 +167,10 @@ module.exports = {
                   paymentMethodCode === "OVO"
                     ? { mobile_number: formattedPhone || "+6281234567890" }
                     : {
-                        success_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_success`,
-                        failure_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_failure`,
-                        cancel_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_cancel`,
-                      },
+                      success_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_success`,
+                      failure_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_failure`,
+                      cancel_return_url: `${process.env.FRONTEND_URL || "myskinid://app"}/checkout/payment_cancel`,
+                    },
               },
             },
             expires_at: new Date(Date.now() + 3600000).toISOString(),
@@ -675,7 +675,7 @@ module.exports = {
                 p.courier_code === shippingOpt.courierCode &&
                 p.courier_service_code &&
                 p.courier_service_code.toUpperCase() ===
-                  shippingOpt.courierService.toUpperCase(),
+                shippingOpt.courierService.toUpperCase(),
             );
 
             if (!serviceRate) {
@@ -1187,7 +1187,7 @@ module.exports = {
                 p.courier_code === shippingOpt.courierCode &&
                 p.courier_service_code &&
                 p.courier_service_code.toUpperCase() ===
-                  shippingOpt.courierService.toUpperCase(),
+                shippingOpt.courierService.toUpperCase(),
             );
 
             if (!serviceRate) {
@@ -3227,7 +3227,7 @@ module.exports = {
     try {
       if (Array.isArray(data)) {
         await masterPaymentMethod.bulkCreate(data, {
-          updateOnDuplicate: ["name", "type", "isActive", "logoUrl"],
+          updateOnDuplicate: ["name", "code", "type", "isActive", "logoUrl"],
         });
       } else {
         await masterPaymentMethod.create(data);
@@ -3357,8 +3357,8 @@ module.exports = {
           ...plain,
           customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
           outletPhone: plain.location?.phone || null,
-        serviceFee: plain.order?.orderNumber?.startsWith("ORD-") ? SERVICE_FEE : 0,
-      };
+          serviceFee: plain.order?.orderNumber?.startsWith("ORD-") ? SERVICE_FEE : 0,
+        };
         if (res.order?.customer) {
           delete res.order.customer.phoneNumber;
         }
@@ -3597,7 +3597,7 @@ module.exports = {
           customerPhone: plainOrder.transactions?.[0]?.shipping?.receiverPhone || plainOrder.customer?.phoneNumber || null,
           createdAt: plainOrder.createdAt,
           serviceFee: plainOrder.orderNumber?.startsWith("ORD-") ? SERVICE_FEE : 0,
-        payments: plainOrder.payments,
+          payments: plainOrder.payments,
           transactions: (plainOrder.transactions || []).map((trx) => {
             const t = {
               id: trx.id,
@@ -4324,14 +4324,14 @@ module.exports = {
         },
         items: (plainTrx.items || [])
           .map((item) => ({
-          id: item.id,
-          itemName: item.itemName,
-          itemType: item.itemType,
-          quantity: item.quantity,
-          unitPrice: parseFloat(item.unitPrice),
-          totalPrice: parseFloat(item.totalPrice),
-          image: item.product?.images?.[0]?.imageUrl || null,
-        })),
+            id: item.id,
+            itemName: item.itemName,
+            itemType: item.itemType,
+            quantity: item.quantity,
+            unitPrice: parseFloat(item.unitPrice),
+            totalPrice: parseFloat(item.totalPrice),
+            image: item.product?.images?.[0]?.imageUrl || null,
+          })),
         serviceFee: SERVICE_FEE,
       };
 
@@ -4559,10 +4559,10 @@ module.exports = {
           })),
           shipping: trx.shipping
             ? {
-                courierName: trx.shipping.courierName,
-                trackingNumber: trx.shipping.trackingNumber,
-                shippingAddress: trx.shipping.shippingAddress,
-              }
+              courierName: trx.shipping.courierName,
+              trackingNumber: trx.shipping.trackingNumber,
+              shippingAddress: trx.shipping.shippingAddress,
+            }
             : null,
         })),
       };
@@ -4588,21 +4588,21 @@ module.exports = {
             attributes: ["phoneNumber"],
           },
           { model: orderPayment, as: "payments" },
+          {
+            model: transaction,
+            as: "transactions",
+            include: [
               {
-                model: transaction,
-                as: "transactions",
-                include: [
-                  {
-                    model: transactionShipping,
-                    as: "shipping",
-                  },
-                  {
-                    model: masterLocation,
-                    as: "location",
-                    attributes: ["phone"],
-                  },
-                ],
+                model: transactionShipping,
+                as: "shipping",
               },
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["phone"],
+              },
+            ],
+          },
         ],
       });
 
@@ -4719,13 +4719,13 @@ module.exports = {
                 where:
                   startDate && endDate
                     ? {
-                        createdAt: {
-                          [Op.between]: [
-                            new Date(startDate),
-                            new Date(endDate),
-                          ],
-                        },
-                      }
+                      createdAt: {
+                        [Op.between]: [
+                          new Date(startDate),
+                          new Date(endDate),
+                        ],
+                      },
+                    }
                     : {},
               },
             ],

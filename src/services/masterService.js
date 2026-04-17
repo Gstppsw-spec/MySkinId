@@ -37,6 +37,7 @@ module.exports = {
         userLng,
         maxDistance,
         sortBy,
+        cityId,
         customerId,
         isCustomer,
       } = filters;
@@ -105,16 +106,16 @@ module.exports = {
             "latitude",
             "longitude",
             "district",
+            "cityId",
             ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
           ],
-          required: !!(userLat && userLng),
-          ...(distanceLiteral && maxDistance
-            ? {
-              where: Sequelize.where(distanceLiteral, {
-                [Op.lte]: maxDistance,
-              }),
-            }
-            : {}),
+          required: !!(userLat && userLng || cityId),
+          where: {
+            ...(cityId ? { cityId } : {}),
+            ...(distanceLiteral && maxDistance ? {
+              [Op.and]: [Sequelize.where(distanceLiteral, { [Op.lte]: maxDistance })]
+            } : {}),
+          },
           include: [
             {
               model: masterLocationImage,

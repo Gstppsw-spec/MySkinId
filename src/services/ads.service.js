@@ -133,9 +133,9 @@ module.exports = {
           {
             model: masterLocation,
             as: "location",
-            attributes: ["id", "name", "address", "ratingAvg"],
-          }
-        ]
+            attributes: ["id", "name", "address", "ratingAvg", "isPremium"],
+          },
+        ],
       });
 
       const responseData = {
@@ -143,33 +143,39 @@ module.exports = {
         carousels: [],
         popup: null,
         topDeals: [],
-        premiumOutlets: [], // This will be used for both or Home specific
+        premiumOutlets: [],
         premiumSearch: [],
-        premiumHome: []
+        premiumHome: [],
       };
 
       // Process Purchases
-      activePurchases.forEach(p => {
+      activePurchases.forEach((p) => {
         const item = {
           id: p.id,
           locationId: p.locationId,
           locationName: p.location ? p.location.name : null,
           data: p.data,
-          isPremiumAd: true,
+          isAd: true,
+          isPremium: p.location ? !!p.location.isPremium : false,
           referenceType: p.referenceType,
-          referenceId: p.referenceId
+          referenceId: p.referenceId,
         };
 
         if (p.adsType === "BANNER") responseData.banners.push(item);
         else if (p.adsType === "CAROUSEL") responseData.carousels.push(item);
         else if (p.adsType === "POPUP") responseData.popup = item;
         else if (p.adsType === "TOPDEALS") responseData.topDeals.push(item);
-        else if (p.adsType === "PREMIUM_SEARCH" || p.adsType === "PREMIUM_BADGE") responseData.premiumSearch.push(item);
-        else if (p.adsType === "PREMIUM_HOME") responseData.premiumHome.push(item);
+        else if (p.adsType === "PREMIUM_SEARCH" || p.adsType === "PREMIUM_BADGE")
+          responseData.premiumSearch.push(item);
+        else if (p.adsType === "PREMIUM_HOME")
+          responseData.premiumHome.push(item);
       });
 
       // Legacy support / merged list for convenience
-      responseData.premiumOutlets = [...responseData.premiumSearch, ...responseData.premiumHome];
+      responseData.premiumOutlets = [
+        ...responseData.premiumSearch,
+        ...responseData.premiumHome,
+      ];
 
       // --- Fallback Logic ---
 
@@ -177,38 +183,43 @@ module.exports = {
       if (responseData.topDeals.length < 5) {
         const remaining = 5 - responseData.topDeals.length;
         const latestProducts = await masterProduct.findAll({
-          where: { isactive: true },
+          where: { isactive: true, isVerified: true },
           order: [["createdAt", "DESC"]],
           limit: remaining,
-          include: [{ model: masterProductImage, as: "images", limit: 1 }]
+          include: [{ model: masterProductImage, as: "images", limit: 1 }],
         });
-        
-        latestProducts.forEach(prod => {
+
+        latestProducts.forEach((prod) => {
           responseData.topDeals.push({
             id: prod.id,
             type: "product",
             name: prod.name,
             price: prod.price,
-            image: prod.images && prod.images.length > 0 ? prod.images[0].imageUrl : null,
-            isPremiumAd: false
+            image:
+              prod.images && prod.images.length > 0
+                ? prod.images[0].imageUrl
+                : null,
+            isAd: false,
+            isPremium: false,
           });
         });
-        
+
         // If still remaining, fetch packages
         if (responseData.topDeals.length < 5) {
           const remPackages = 5 - responseData.topDeals.length;
           const latestPackages = await masterPackage.findAll({
-            where: { isactive: true },
+            where: { isactive: true, isVerified: true },
             order: [["createdAt", "DESC"]],
-            limit: remPackages
+            limit: remPackages,
           });
-          latestPackages.forEach(pkg => {
+          latestPackages.forEach((pkg) => {
             responseData.topDeals.push({
               id: pkg.id,
               type: "package",
               name: pkg.name,
               price: pkg.price,
-              isPremiumAd: false
+              isAd: false,
+              isPremium: false,
             });
           });
         }
@@ -217,27 +228,40 @@ module.exports = {
       // 2. Premium Outlets Fallback (Max 5)
       if (responseData.premiumOutlets.length < 5) {
         const remaining = 5 - responseData.premiumOutlets.length;
-        // Exclude IDs already in responseData.premiumOutlets
-        const existingIds = responseData.premiumOutlets.map(p => p.locationId);
-        
+        const existingIds = responseData.premiumOutlets.map((p) => p.locationId);
+
         const latestOutlets = await masterLocation.findAll({
-          where: { 
+          where: {
             isactive: true,
-            id: { [Op.notIn]: existingIds.length > 0 ? existingIds : [sequelize.literal("'00000000-0000-0000-0000-000000000000'")] }
+            isVerified: true,
+            id: {
+              [Op.notIn]:
+                existingIds.length > 0
+                  ? existingIds
+                  : [
+                      sequelize.literal(
+                        "'00000000-0000-0000-0000-000000000000'"
+                      ),
+                    ],
+            },
           },
-          order: [["createdAt", "DESC"]],
+          order: [
+            ["isPremium", "DESC"], // Prioritize isPremium: true (Premium subscription)
+            ["createdAt", "DESC"],
+          ],
           limit: remaining,
-          attributes: ["id", "name", "address", "ratingAvg"]
+          attributes: ["id", "name", "address", "ratingAvg", "isPremium"],
         });
 
-        latestOutlets.forEach(loc => {
+        latestOutlets.forEach((loc) => {
           responseData.premiumOutlets.push({
             id: loc.id,
             locationId: loc.id,
             locationName: loc.name,
             address: loc.address,
             rating: loc.ratingAvg,
-            isPremiumAd: false
+            isAd: false,
+            isPremium: !!loc.isPremium,
           });
         });
       }

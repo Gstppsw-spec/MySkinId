@@ -342,15 +342,20 @@ class masterCustomerService {
         if (!match) return { status: false, message: "Password salah" };
       }
 
-      if (loginMethod === "email")
-        masterCustomerService.sendEmailOtp(email, otp);
+      if (loginMethod === "email") {
+        await masterCustomerService.sendEmailOtp(email, otp);
+      }
+
       if (loginMethod === "phone") {
-        const sendOtpWhatsapp = await masterCustomerService.sendWhatsappOtp(
+        await masterCustomerService.sendWhatsappOtp(
           phoneNumber,
           otp,
           countryCode
         );
       }
+
+      // Log OTP to console for debugging/testing purposes
+      console.log(`\x1b[33m%s\x1b[0m`, `[DEBUG] OTP for ${email || phoneNumber}: ${otp}`);
 
       await customer.update({
         loginMethod,
@@ -593,6 +598,8 @@ class masterCustomerService {
         },
       });
 
+      console.log(`[DEBUG] EMAIL_USER: ${process.env.EMAIL_USER}`);
+      console.log(`[DEBUG] EMAIL_APP_PASSWORD length: ${process.env.EMAIL_APP_PASSWORD?.length}`);
       console.log(transporter);
 
       const mailOptions = {

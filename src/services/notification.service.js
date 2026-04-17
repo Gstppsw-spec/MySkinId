@@ -91,13 +91,38 @@ class NotificationService {
    */
   async getNotifications(params) {
     try {
-      const { companyId, userId, category, page = 1, pageSize = 10 } = params;
+      const { 
+        companyId, 
+        userId, 
+        category, 
+        type, 
+        referenceType, 
+        status, 
+        page = 1, 
+        pageSize = 10 
+      } = params;
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
       const where = {};
       if (category && category !== "All") {
         where.category = category;
+      }
+
+      if (type) {
+        where.type = type;
+      }
+
+      if (referenceType) {
+        where.referenceType = referenceType;
+      }
+
+      if (status) {
+        if (status === "accepted") {
+          where.type = { [Op.in]: ["VERIFICATION_APPROVED", "TRANSACTION_SUCCESS"] };
+        } else if (status === "rejected") {
+          where.type = { [Op.in]: ["VERIFICATION_REJECTED", "TRANSACTION_FAILED"] };
+        }
       }
 
       if (userId) {
@@ -155,19 +180,23 @@ class NotificationService {
   /**
    * Mark all notifications as read for a company.
    */
-  async markAllAsRead(companyId) {
+  async markAllAsRead({ companyId, userId }) {
     try {
+      const where = { isRead: false };
+      if (companyId) {
+        where.companyId = companyId;
+      } else if (userId) {
+        where.userId = userId;
+      } else {
+        return { status: false, message: "No target (company or user) provided" };
+      }
+
       await masterNotification.update(
         {
           isRead: true,
           readAt: new Date(),
         },
-        {
-          where: {
-            companyId,
-            isRead: false,
-          },
-        }
+        { where }
       );
 
       return { status: true, message: "All notifications marked as read" };
