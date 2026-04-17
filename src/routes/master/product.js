@@ -9,7 +9,7 @@ const { allowRoles } = require("../../middlewares/roleMiddleware");
 router.post(
   "/",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   uploadProductImage,
   compressImage,
   masterProduct.create,
@@ -17,7 +17,7 @@ router.post(
 router.put(
   "/:id",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   uploadProductImage,
   compressImage,
   masterProduct.update,
@@ -26,21 +26,21 @@ router.put(
 router.delete(
   "/:id",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterProduct.delete,
 );
 
 router.patch(
   "/image/:id",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterProduct.deleteImage,
 );
 
 router.patch(
   "/image/:id/primary",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterProduct.setPrimaryImage,
 );
 router.get("/creator", verifyToken, masterProduct.getByCreator);
@@ -53,7 +53,7 @@ router.get("/:id", masterProduct.getById);
 router.put(
   "/:productId/location/:locationId/toggle-active",
   verifyToken,
-  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN"),
+  allowRoles("OUTLET_ADMIN", "COMPANY_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   masterProduct.toggleLocationActive,
 );
 
