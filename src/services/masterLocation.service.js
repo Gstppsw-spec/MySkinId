@@ -48,8 +48,68 @@ class MasterLocationService {
     "deletedBy",
   ];
 
+  validateOperationHoursDetail(detail) {
+    if (!detail) return true;
+
+    // Handle stringified JSON if it comes from multipart/form-data
+    let data = detail;
+    if (typeof detail === "string") {
+      try {
+        data = JSON.parse(detail);
+      } catch (e) {
+        throw new Error("operationHoursDetail must be a valid JSON array");
+      }
+    }
+
+    if (!Array.isArray(data)) {
+      throw new Error("operationHoursDetail must be an array");
+    }
+
+    const days = [
+      "Senin",
+      "Selasa",
+      "Rabu",
+      "Kamis",
+      "Jumat",
+      "Sabtu",
+      "Minggu",
+    ];
+    for (const item of data) {
+      if (typeof item !== "object" || item === null) {
+        throw new Error("Each item in operationHoursDetail must be an object");
+      }
+      if (!days.includes(item.day)) {
+        throw new Error(
+          `Invalid day: ${item.day}. Must be one of ${days.join(", ")}`
+        );
+      }
+      if (typeof item.isOpen !== "boolean") {
+        throw new Error(`isOpen for ${item.day} must be a boolean`);
+      }
+      if (item.isOpen) {
+        if (!item.openTime || !item.closeTime) {
+          throw new Error(
+            `openTime and closeTime are required for ${item.day} when isOpen is true`
+          );
+        }
+        // Basic time format check (HH:mm)
+        const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+        if (!timeRegex.test(item.openTime) || !timeRegex.test(item.closeTime)) {
+          throw new Error(`Invalid time format for ${item.day}. Must be HH:mm`);
+        }
+      }
+    }
+    return data; // Return parsed data
+  }
+
   async create(data, files, userId) {
     try {
+      if (data.operationHoursDetail) {
+        data.operationHoursDetail = this.validateOperationHoursDetail(
+          data.operationHoursDetail
+        );
+      }
+
       // Resolve companyId if missing (for COMPANY_ADMIN)
       if (!data.companyId && userId) {
         const userComp = await relationshipUserCompany.findOne({
@@ -244,6 +304,10 @@ class MasterLocationService {
 
   async update(id, data, files, userId) {
     try {
+      if (data.operationHoursDetail) {
+        data.operationHoursDetail = this.validateOperationHoursDetail(data.operationHoursDetail);
+      }
+
       const location = await masterLocation.findByPk(id);
 
       if (!location) {

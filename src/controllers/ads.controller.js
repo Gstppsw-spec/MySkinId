@@ -18,9 +18,30 @@ module.exports = {
   async buyAds(req, res) {
     try {
       const userId = req.user.id;
-      // This will integrate with transactionOrder.buyAds (to be created)
-      // or we can handle it here and call transactionOrder internal methods
-      const result = await transactionOrder.buyAds(req.body, userId);
+      const data = { ...req.body };
+
+      // Handle adsData if sent as string (common in form-data)
+      if (typeof data.adsData === "string") {
+        try {
+          data.adsData = JSON.parse(data.adsData);
+        } catch (e) {
+          data.adsData = {};
+        }
+      }
+
+      // Handle uploaded images
+      if (req.files && req.files.length > 0) {
+        const imageUrls = req.files.map((file) => {
+          return `${process.env.BACKEND_URL || "https://api.myskin.blog"}/uploads/ads/${file.filename}`;
+        });
+        
+        if (!data.adsData) data.adsData = {};
+        data.adsData.images = imageUrls;
+        // Also set first image as primary if needed by some ads
+        data.adsData.imageUrl = imageUrls[0];
+      }
+
+      const result = await transactionOrder.buyAds(data, userId);
       if (!result.status) return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
     } catch (error) {
@@ -54,6 +75,17 @@ module.exports = {
     try {
       const userId = req.user.id;
       const result = await transactionOrder.buyAdBalance(req.body, userId);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getWaitingPaymentAds(req, res) {
+    try {
+      const userId = req.user.id;
+      const result = await adsService.getWaitingPaymentAds(userId);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
@@ -120,6 +152,28 @@ module.exports = {
   async upsertAdsConfig(req, res) {
     try {
       const result = await adsService.upsertConfig(req.body);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async updateAdsConfig(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await adsService.updateConfig(id, req.body);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async deleteAdsConfig(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await adsService.deleteConfig(id);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {

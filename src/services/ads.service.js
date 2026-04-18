@@ -6,6 +6,8 @@ const {
   masterProduct,
   masterProductImage,
   masterPackage,
+  order,
+  orderPayment,
   sequelize,
 } = require("../models");
 
@@ -58,6 +60,37 @@ module.exports = {
       }
 
       return { status: true, message: "Config updated", data: config };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Super Admin: Update ads configuration by ID
+   */
+  async updateConfig(id, data) {
+    try {
+      const { pricePerDay, maxSlots, isActive } = data;
+      const config = await AdsConfig.findByPk(id);
+      if (!config) return { status: false, message: "Ads configuration not found" };
+
+      await config.update({ pricePerDay, maxSlots, isActive });
+      return { status: true, message: "Config updated", data: config };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Super Admin: Delete ads configuration by ID
+   */
+  async deleteConfig(id) {
+    try {
+      const config = await AdsConfig.findByPk(id);
+      if (!config) return { status: false, message: "Ads configuration not found" };
+
+      await config.destroy();
+      return { status: true, message: "Config deleted" };
     } catch (error) {
       return { status: false, message: error.message };
     }
@@ -288,6 +321,44 @@ module.exports = {
       });
 
       return { status: true, message: "Outlet ads fetched", data };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Admin Company: List ads waiting for payment
+   */
+  async getWaitingPaymentAds(adminId) {
+    try {
+      const transactionOrder = require("./transactionOrder");
+      const locationIds = await transactionOrder._getAdminLocationIds(adminId);
+
+      const data = await AdsPurchase.findAll({
+        where: {
+          locationId: { [Op.in]: locationIds },
+          status: "PENDING"
+        },
+        include: [
+          {
+            model: AdsConfig,
+            as: "config"
+          },
+          {
+            model: order,
+            as: "order",
+            include: [
+              {
+                model: orderPayment,
+                as: "payments"
+              }
+            ]
+          }
+        ],
+        order: [["createdAt", "DESC"]]
+      });
+
+      return { status: true, message: "Waiting payment ads fetched", data };
     } catch (error) {
       return { status: false, message: error.message };
     }

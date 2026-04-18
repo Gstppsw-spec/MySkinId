@@ -39,6 +39,11 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: "Asia/Jakarta",
       },
 
+      operationHoursDetail: {
+        type: DataTypes.JSON,
+        allowNull: true,
+      },
+
       bankName: { type: DataTypes.STRING(100) },
       bankAccountName: { type: DataTypes.STRING(100) },
       bankAccountNumber: { type: DataTypes.STRING(50) },
