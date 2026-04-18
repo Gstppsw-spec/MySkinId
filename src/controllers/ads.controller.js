@@ -21,12 +21,16 @@ module.exports = {
       const data = { ...req.body };
 
       // Handle adsData if sent as string (common in form-data)
-      if (typeof data.adsData === "string") {
+      while (typeof data.adsData === "string") {
         try {
           data.adsData = JSON.parse(data.adsData);
         } catch (e) {
           data.adsData = {};
+          break;
         }
+      }
+      if (!data.adsData || typeof data.adsData !== "object") {
+        data.adsData = {};
       }
 
       // Handle uploaded images
@@ -172,8 +176,11 @@ module.exports = {
 
   async deleteAdsConfig(req, res) {
     try {
-      const { id } = req.params;
-      const result = await adsService.deleteConfig(id);
+      const { ids } = req.body;
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return response.error(res, "ids (array) is required");
+      }
+      const result = await adsService.deleteConfig(ids);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {

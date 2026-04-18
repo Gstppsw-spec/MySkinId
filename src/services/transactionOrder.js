@@ -1522,7 +1522,6 @@ module.exports = {
           exists = await masterService.findByPk(referenceId);
         else if (referenceType === "OUTLET")
           exists = await locModel.findByPk(referenceId);
-        else if (referenceType === "EXTERNAL") exists = true; // No DB validation for external links
 
         if (!exists) throw new Error(`Invalid ${referenceType} reference ID`);
       }

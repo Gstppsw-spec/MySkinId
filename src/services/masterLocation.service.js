@@ -345,11 +345,16 @@ class MasterLocationService {
           updated = true;
         }
 
+        if (data.operationHoursDetail) {
+          await location.update({ operationHoursDetail: data.operationHoursDetail, updatedBy: userId });
+          updated = true;
+        }
+
         if (updated) {
           return {
             status: true,
             message:
-              "Location updated successfully (only images/status updated because location is verified)",
+              "Location updated successfully (only images/status/operational hours updated because location is verified)",
             data: location,
           };
         }

@@ -57,7 +57,11 @@ module.exports = (sequelize, DataTypes) => {
           return rawValue ? JSON.parse(rawValue) : null;
         },
         set(value) {
-          this.setDataValue("data", value ? JSON.stringify(value) : null);
+          if (value && typeof value === "object") {
+            this.setDataValue("data", JSON.stringify(value));
+          } else {
+            this.setDataValue("data", value);
+          }
         },
       },
       status: {
@@ -70,7 +74,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: false,
       },
       referenceType: {
-        type: DataTypes.ENUM("OUTLET", "PRODUCT", "PACKAGE", "SERVICE", "EXTERNAL"),
+        type: DataTypes.ENUM("OUTLET", "PRODUCT", "PACKAGE", "SERVICE"),
         allowNull: true,
         defaultValue: "OUTLET"
       },

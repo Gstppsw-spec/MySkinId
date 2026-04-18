@@ -84,13 +84,18 @@ module.exports = {
   /**
    * Super Admin: Delete ads configuration by ID
    */
-  async deleteConfig(id) {
+  async deleteConfig(ids) {
     try {
-      const config = await AdsConfig.findByPk(id);
-      if (!config) return { status: false, message: "Ads configuration not found" };
+      const { Op } = require("sequelize");
+      const deletedCount = await AdsConfig.destroy({
+        where: { id: { [Op.in]: ids } }
+      });
 
-      await config.destroy();
-      return { status: true, message: "Config deleted" };
+      return { 
+        status: true, 
+        message: `${deletedCount} configuration(s) deleted successfully`,
+        data: { deletedCount }
+      };
     } catch (error) {
       return { status: false, message: error.message };
     }
