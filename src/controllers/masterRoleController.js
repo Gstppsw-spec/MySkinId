@@ -15,7 +15,8 @@ class MasterRoleController {
 
     async detail(req, res) {
         const { id } = req.params;
-        const result = await MasterRoleService.detail(id);
+        const user = req.user;
+        const result = await MasterRoleService.detail(id, user);
         return res.status(result.status ? 200 : 404).json(result);
     }
 

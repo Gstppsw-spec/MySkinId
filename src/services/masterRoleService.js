@@ -34,11 +34,10 @@ class MasterRoleService {
             const { Op } = require("sequelize");
             const where = {};
             
-            if (user && user.role === "COMPANY_ADMIN") {
+            if (user && user.roleCode === "COMPANY_ADMIN") {
                 where.roleCode = { [Op.in]: ["OUTLET_DOCTOR", "OUTLET_ADMIN"] };
-            } else if (user && user.role === "OPERATIONAL_ADMIN") {
-                where.roleCode = { [Op.ne]: "SUPER_ADMIN" };
             }
+            // OPERATIONAL_ADMIN can see all roles, including SUPER_ADMIN
 
             const roles = await masterRole.findAll({
                 where,
@@ -55,7 +54,7 @@ class MasterRoleService {
         }
     }
 
-    async detail(id) {
+    async detail(id, user) {
         try {
             const role = await masterRole.findByPk(id);
 
@@ -65,6 +64,18 @@ class MasterRoleService {
                     message: "Role tidak ditemukan",
                     data: null,
                 };
+            }
+
+            // Filtering for COMPANY_ADMIN
+            if (user && user.roleCode === "COMPANY_ADMIN") {
+                const allowedRoles = ["OUTLET_DOCTOR", "OUTLET_ADMIN"];
+                if (!allowedRoles.includes(role.roleCode)) {
+                    return {
+                        status: false,
+                        message: "Role tidak ditemukan", // Consistent with list filtering
+                        data: null,
+                    };
+                }
             }
 
             return { status: true, message: "Role ditemukan", data: role };

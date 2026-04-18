@@ -6,8 +6,8 @@ const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 // CRUD Master Role
 router.post("/", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), controller.create);
-router.get("/", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), controller.list);
-router.get("/:id", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), controller.detail);
+router.get("/", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN", "COMPANY_ADMIN"), controller.list);
+router.get("/:id", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN", "COMPANY_ADMIN"), controller.detail);
 router.put("/:id", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), controller.update);
 router.delete("/:id", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), controller.delete);
 
