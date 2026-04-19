@@ -664,8 +664,15 @@ module.exports = {
         }
       }
 
-      const { name } = filters;
+      const { name, locationId } = filters;
       const { limit, offset } = pagination;
+
+      // Authorization check for locationId filter
+      if (locationId && roleCode !== "SUPER_ADMIN" && roleCode !== "OPERATIONAL_ADMIN") {
+        if (!locationIds.includes(locationId)) {
+          return { status: false, message: "Location not allowed or not found for this user" };
+        }
+      }
 
       const whereClause = {};
       if (name) {
@@ -704,14 +711,28 @@ module.exports = {
 
       let finalInclude;
       if (roleCode === "SUPER_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
-        finalInclude = include;
+        if (locationId) {
+          finalInclude = include.map((inc) => {
+            if (inc.as === "locations") {
+              return {
+                ...inc,
+                where: { id: locationId },
+                required: true,
+              };
+            }
+            return inc;
+          });
+        } else {
+          finalInclude = include;
+        }
       } else {
-        // Filter: services linked to user's locations
+        // Filter: services linked to user's locations (further restricted if locationId filter provided)
+        const targetIds = locationId ? [locationId] : locationIds;
         finalInclude = include.map((inc) => {
           if (inc.as === "locations") {
             return {
               ...inc,
-              where: { id: { [Op.in]: locationIds } },
+              where: { id: { [Op.in]: targetIds } },
               required: true,
             };
           }

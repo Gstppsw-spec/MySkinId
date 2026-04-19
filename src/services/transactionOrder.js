@@ -43,6 +43,7 @@ const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
 const pushNotificationService = require("./pushNotification.service");
 const NotificationService = require("./notification.service");
+const xenditPlatformService = require("./xenditPlatform.service");
 
 const SERVICE_FEE = 4500;
 
@@ -2169,12 +2170,25 @@ module.exports = {
             await trx.update({ orderStatus: "PAID" }, { transaction: t });
           }
 
-          // Update payment record with detailed info
+          // Fetch actual MDR fee from Xendit
+          let mdrFee = 0;
+          try {
+            const xenditTrx = await xenditPlatformService.getTransactionDetail(_external_id);
+            if (xenditTrx.status && xenditTrx.data) {
+              mdrFee = parseFloat(xenditTrx.data.fee_amount || 0);
+              console.log(`[XenditCallback] Captured MDR Fee for ${_external_id}: ${mdrFee}`);
+            }
+          } catch (feeErr) {
+            console.error(`[XenditCallback] Error fetching MDR fee for ${_external_id}:`, feeErr.message);
+          }
+
+          // Update payment record with detailed info and MDR
           await orderPayment.update(
             {
               paymentStatus: "SUCCESS",
               gatewayResponse: payload,
               paymentMethod: _payment_channel || orderData.paymentMethod,
+              mdrFee: mdrFee,
             },
             { where: { orderId: orderData.id }, transaction: t },
           );

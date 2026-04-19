@@ -51,6 +51,10 @@ module.exports = (sequelize, DataTypes) => {
             instructions: {
                 type: DataTypes.TEXT,
             },
+            mdrFee: {
+                type: DataTypes.DECIMAL(18, 2),
+                defaultValue: 0,
+            },
             createdAt: { type: DataTypes.DATE },
             updatedAt: { type: DataTypes.DATE },
         },

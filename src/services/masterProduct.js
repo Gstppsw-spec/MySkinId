@@ -988,14 +988,28 @@ module.exports = {
 
       let finalInclude;
       if (roleCode === "SUPER_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
-        finalInclude = include;
+        if (locationId) {
+          finalInclude = include.map((inc) => {
+            if (inc.as === "locations") {
+              return {
+                ...inc,
+                where: { id: locationId },
+                required: true,
+              };
+            }
+            return inc;
+          });
+        } else {
+          finalInclude = include;
+        }
       } else {
-        // Filter: products linked to any of the user's locationIds
+        // Filter: products linked to allowed locationIds (further restricted if locationId filter provided)
+        const targetIds = locationId ? [locationId] : locationIds;
         finalInclude = include.map((inc) => {
           if (inc.as === "locations") {
             return {
               ...inc,
-              where: { id: { [Op.in]: locationIds } },
+              where: { id: { [Op.in]: targetIds } },
               required: true,
             };
           }

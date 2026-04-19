@@ -3,6 +3,8 @@ const { nanoid } = require("nanoid");
 const {
     platformTransfer,
     masterLocation,
+    order,
+    orderPayment,
     sequelize,
 } = require("../models");
 
@@ -95,9 +97,30 @@ module.exports = {
         }
 
         const reference = `TRF-${nanoid(12).toUpperCase()}`;
+        // Calculate Fees
         const platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "0");
         const platformFee = Math.round((amount * platformFeePercent) / 100);
-        const transferAmount = amount - platformFee;
+
+        // Fetch actual MDR fee from orderPayment to deduct proportionally
+        let mdrShare = 0;
+        try {
+            const [orderData, paymentData] = await Promise.all([
+                order.findByPk(orderId),
+                orderPayment.findOne({ where: { orderId, paymentStatus: "SUCCESS" } })
+            ]);
+
+            if (orderData && paymentData && paymentData.mdrFee > 0) {
+                // Formula: (This Amount / Total Order Amount) * Total MDR Fee
+                const totalAmount = parseFloat(orderData.totalAmount);
+                const totalMdr = parseFloat(paymentData.mdrFee);
+                mdrShare = Math.round((amount / totalAmount) * totalMdr);
+                console.log(`[XenditPlatform] Calculated proportional MDR for ${reference}: ${mdrShare} (from total ${totalMdr})`);
+            }
+        } catch (feeErr) {
+            console.error(`[XenditPlatform] Error calculating proportional MDR:`, feeErr.message);
+        }
+
+        const transferAmount = amount - platformFee - mdrShare;
 
         if (transferAmount <= 0) {
             console.warn(`[XenditPlatform] Transfer amount is zero or negative for reference ${reference}`);
@@ -113,6 +136,7 @@ module.exports = {
             xenditAccountId: location.xenditAccountId,
             amount: transferAmount,
             platformFee,
+            mdrFee: mdrShare,
             reference,
             transferType,
             status: "PENDING",
@@ -247,6 +271,36 @@ module.exports = {
             return { status: true, message: "Transfers fetched", data: transfers };
         } catch (error) {
             return { status: false, message: error.message };
+        }
+    },
+
+    /**
+     * Fetch actual transaction details from Xendit to get current fee (MDR).
+     * @param {string} reference - The externalId/orderNumber
+     */
+    async getTransactionDetail(reference) {
+        try {
+            const response = await axios.get(
+                `${XENDIT_BASE_URL}/transactions?reference_id=${reference}`,
+                {
+                    headers: {
+                        Authorization: `Basic ${_getAuthHeader()}`,
+                    },
+                }
+            );
+
+            // Xendit returns an array of transactions for this reference
+            const transactions = response.data.data;
+            if (transactions && transactions.length > 0) {
+                // Find the latest successful payment transaction
+                const latest = transactions.find(t => t.status === "SUCCESS" && t.type === "PAYMENT") || transactions[0];
+                return { status: true, data: latest };
+            }
+
+            return { status: false, message: "No transaction found on Xendit for this reference" };
+        } catch (error) {
+            const detail = error.response ? JSON.stringify(error.response.data) : error.message;
+            return { status: false, message: `Failed to fetch Xendit transaction: ${detail}` };
         }
     },
 };

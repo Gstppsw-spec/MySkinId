@@ -91,6 +91,11 @@ module.exports = (sequelize, DataTypes) => {
                 allowNull: false,
                 defaultValue: 0,
             },
+            mdrFee: {
+                type: DataTypes.DECIMAL(18, 2),
+                allowNull: false,
+                defaultValue: 0,
+            },
             createdAt: { type: DataTypes.DATE },
             updatedAt: { type: DataTypes.DATE },
         },

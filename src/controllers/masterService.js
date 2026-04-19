@@ -130,10 +130,10 @@ module.exports = {
   async getServiceByUser(req, res) {
     try {
       const user = req.user;
-      const { name, page, pageSize, customerId, isCustomer } = req.query;
+      const { name, page, pageSize, customerId, isCustomer, locationId } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await service.getServiceByUser(user, { name, customerId, isCustomer }, pagination);
+      const result = await service.getServiceByUser(user, { name, customerId, isCustomer, locationId }, pagination);
       if (!result.status)
         return response.error(res, result.message, result.data);
 

@@ -138,10 +138,10 @@ module.exports = {
   async getPackageByUser(req, res) {
     try {
       const user = req.user;
-      const { name, page, pageSize } = req.query;
+      const { name, page, pageSize, locationId } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await packageService.getPackageByUser(user, { name }, pagination);
+      const result = await packageService.getPackageByUser(user, { name, locationId }, pagination);
       if (!result.status)
         return response.error(res, result.message, result.data);
 
