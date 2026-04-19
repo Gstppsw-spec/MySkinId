@@ -622,7 +622,7 @@ module.exports = {
         required: false,
       };
 
-      if (role === "OUTLET_DOCTORR") {
+      if (role === "OUTLET_DOCTOR") {
         const userLocations = await relationshipUserLocation.findAll({
           where: {
             userId: userId,

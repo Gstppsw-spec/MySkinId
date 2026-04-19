@@ -15,9 +15,13 @@ module.exports = {
   /**
    * Super Admin: Get all ads configurations
    */
-  async getConfig() {
+  async getConfig(type) {
     try {
+      const where = {};
+      if (type) where.type = type;
+
       const data = await AdsConfig.findAll({
+        where,
         order: [
           ["type", "ASC"],
           ["position", "ASC"],

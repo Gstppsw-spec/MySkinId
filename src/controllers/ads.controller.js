@@ -145,7 +145,8 @@ module.exports = {
 
   async getAdsConfig(req, res) {
     try {
-      const result = await adsService.getConfig();
+      const { type } = req.query;
+      const result = await adsService.getConfig(type);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
