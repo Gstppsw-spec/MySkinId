@@ -136,37 +136,7 @@ module.exports = {
           }
           roomJson.isQuestionareCompleted = isQuestionareCompleted;
 
-          if (
-            !roomJson.locationId &&
-            roomJson.latitude != null &&
-            roomJson.longitude != null
-          ) {
-            const latitude = roomJson.latitude;
-            const longitude = roomJson.longitude;
 
-            const distanceLiteral = Sequelize.literal(`
-            6371 * acos(
-              cos(radians(${latitude})) *
-              cos(radians(CAST(latitude AS FLOAT))) *
-              cos(radians(CAST(longitude AS FLOAT)) - radians(${longitude})) +
-              sin(radians(${latitude})) *
-              sin(radians(CAST(latitude AS FLOAT)))
-            )
-          `);
-
-            const nearestLocation = await masterLocation.findOne({
-              attributes: ["id", "name", [distanceLiteral, "distance"]],
-              where: {
-                latitude: { [Op.ne]: null },
-                longitude: { [Op.ne]: null },
-              },
-              order: [[distanceLiteral, "ASC"]],
-            });
-
-            roomJson.location = nearestLocation
-              ? { id: nearestLocation.id, name: nearestLocation.name }
-              : null;
-          }
 
           return roomJson;
         }),
