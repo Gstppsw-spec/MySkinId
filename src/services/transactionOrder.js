@@ -4773,46 +4773,143 @@ module.exports = {
     }
   },
 
-  async exportTransactions(adminId, { startDate, endDate, format = "excel" }) {
+  async getFinancialReport(adminId, { startDate, endDate, locationId, page = 1, pageSize = 100 }) {
     try {
       const locationIds = await this._getAdminLocationIds(adminId);
-
       if (!locationIds || locationIds.length === 0) {
         throw new Error("Admin not assigned to any location");
       }
 
+      const targetLocationIds = locationId 
+        ? [locationId].filter(id => locationIds.includes(id)) 
+        : locationIds;
+
+      if (targetLocationIds.length === 0) {
+        throw new Error("Unauthorized access to requested location");
+      }
+
       const whereClause = {
-        locationId: { [Op.in]: locationIds },
+        locationId: { [Op.in]: targetLocationIds },
+        orderStatus: { [Op.in]: ["PAID", "SHIPPED", "DELIVERED", "COMPLETED"] },
       };
 
       if (startDate && endDate) {
         whereClause.createdAt = {
           [Op.between]: [new Date(startDate), new Date(endDate)],
         };
+      } else if (startDate) {
+        whereClause.createdAt = { [Op.gte]: new Date(startDate) };
+      } else if (endDate) {
+        whereClause.createdAt = { [Op.lte]: new Date(endDate) };
       }
 
-      const transactions = await transaction.findAll({
+      const limit = parseInt(pageSize);
+      const offset = (page - 1) * limit;
+
+      const { count: totalCount, rows: transactions } = await transaction.findAndCountAll({
         where: whereClause,
         include: [
           {
             model: order,
             as: "order",
             include: [
-              {
-                model: masterCustomer,
-                as: "customer",
-                attributes: ["name"],
+              { model: masterCustomer, as: "customer", attributes: ["name"] },
+              { 
+                model: orderPayment, 
+                as: "payments", 
+                where: { paymentStatus: "SUCCESS" },
+                required: false 
               },
             ],
           },
-          {
-            model: transactionItem,
-            as: "items",
-            attributes: ["itemName", "quantity", "totalPrice"],
-          },
+          { model: transactionShipping, as: "shipping" },
+          { model: platformTransfer, as: "transfers" },
+          { model: masterLocation, as: "location", attributes: ["name"] },
         ],
         order: [["createdAt", "DESC"]],
+        limit,
+        offset,
       });
+
+      const reportData = transactions.map((trx) => {
+        const orderData = trx.order;
+        const paymentData = orderData.payments && orderData.payments.length > 0 ? orderData.payments[0] : null;
+        
+        const subtotal = parseFloat(trx.grandTotal || 0);
+        const shippingFee = parseFloat(trx.shipping?.shippingCost || 0);
+        const totalItemsInOrder = orderData.totalAmount - (orderData.shippingCost || 0) - SERVICE_FEE;
+        
+        // MDR Calculation (Proportional to the item's share of total order amount)
+        let mdrFee = 0;
+        if (paymentData && paymentData.mdrFee > 0) {
+          const totalOrderAmount = parseFloat(orderData.totalAmount);
+          mdrFee = Math.round((subtotal / totalOrderAmount) * parseFloat(paymentData.mdrFee));
+        }
+
+        // Platform Fee Calculation (1% of subtotal)
+        // If transfer already exists, use that. Otherwise calculate.
+        let platformFee = 0;
+        if (trx.transfers && trx.transfers.length > 0) {
+          platformFee = parseFloat(trx.transfers[0].platformFee || 0);
+        } else {
+          const platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "0");
+          platformFee = Math.round((subtotal * platformFeePercent) / 100);
+        }
+
+        // Service Fee (Only for the platform, but shown here for context as part of the total customer paid)
+        // Actually, Service Fee is paid ONCE per order. For reporting per transaction, 
+        // we can assign it proportionally or just show it in a separate total.
+        // User asked to "Show It", usually it's best to show it as the platform's revenue portion for this order.
+        const serviceFeeShare = Math.round((subtotal / totalItemsInOrder) * SERVICE_FEE);
+
+        const totalCustomerPaid = subtotal + shippingFee; // This trx's portion
+        const netForOutlet = subtotal - platformFee - mdrFee;
+
+        return {
+          transactionId: trx.id,
+          orderNumber: orderData.orderNumber,
+          transactionNumber: trx.transactionNumber,
+          date: trx.createdAt,
+          locationName: trx.location?.name,
+          customerName: orderData.customer?.name || "N/A",
+          status: trx.orderStatus,
+          financials: {
+            subtotal: subtotal,
+            shippingFee: shippingFee,
+            serviceFeeShare: serviceFeeShare, // Portion of 4500
+            totalPaidPortion: totalCustomerPaid + serviceFeeShare,
+            xenditMdrFee: mdrFee,
+            platformFee: platformFee,
+            netForOutlet: netForOutlet,
+          }
+        };
+      });
+
+      return {
+        status: true,
+        message: "Financial report fetched successfully",
+        data: reportData,
+        totalCount,
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async exportTransactions(adminId, { startDate, endDate, format = "excel" }) {
+    try {
+      // Reuse the financial report logic to get all details
+      const reportResult = await this.getFinancialReport(adminId, { 
+        startDate, 
+        endDate, 
+        pageSize: 1000 // Get many for export
+      });
+
+      if (!reportResult.status) {
+        throw new Error(reportResult.message);
+      }
+
+      const transactions = reportResult.data;
 
       if (format === "excel") {
         return await this._generateExcel(transactions);
@@ -4833,28 +4930,35 @@ module.exports = {
 
       worksheet.columns = [
         { header: "No", key: "no", width: 5 },
-        { header: "Transaction Number", key: "transactionNumber", width: 25 },
-        { header: "Customer Name", key: "customerName", width: 25 },
-        { header: "Date", key: "date", width: 20 },
-        { header: "Items", key: "items", width: 40 },
-        { header: "Grand Total", key: "grandTotal", width: 15 },
-        { header: "Status", key: "orderStatus", width: 15 },
+        { header: "Date", key: "date", width: 15 },
+        { header: "Order #", key: "orderNumber", width: 20 },
+        { header: "Customer", key: "customerName", width: 20 },
+        { header: "Location", key: "locationName", width: 20 },
+        { header: "Subtotal", key: "subtotal", width: 15 },
+        { header: "Shipping", key: "shippingFee", width: 15 },
+        { header: "Service Fee share", key: "serviceFeeShare", width: 15 },
+        { header: "Paid by Customer", key: "totalPaid", width: 15 },
+        { header: "Xendit MDR", key: "xenditMdrFee", width: 15 },
+        { header: "MySkin 1% Fee", key: "platformFee", width: 15 },
+        { header: "Net for Outlet", key: "netForOutlet", width: 15 },
+        { header: "Status", key: "status", width: 12 },
       ];
 
-      transactions.forEach((trx, index) => {
-        const items = (trx.items || [])
-          .map((i) => `${i.itemName} (x${i.quantity})`)
-          .join(", ");
+      transactions.forEach((item, index) => {
         worksheet.addRow({
           no: index + 1,
-          transactionNumber: trx.transactionNumber,
-          customerName: trx.order?.customer?.name || "N/A",
-          date: trx.createdAt
-            ? trx.createdAt.toISOString().split("T")[0]
-            : "N/A",
-          items: items,
-          grandTotal: trx.grandTotal,
-          orderStatus: trx.orderStatus,
+          date: item.date ? new Date(item.date).toISOString().split("T")[0] : "N/A",
+          orderNumber: item.orderNumber,
+          customerName: item.customerName,
+          locationName: item.locationName,
+          subtotal: item.financials.subtotal,
+          shippingFee: item.financials.shippingFee,
+          serviceFeeShare: item.financials.serviceFeeShare,
+          totalPaid: item.financials.totalPaidPortion,
+          xenditMdrFee: item.financials.xenditMdrFee,
+          platformFee: item.financials.platformFee,
+          netForOutlet: item.financials.netForOutlet,
+          status: item.status,
         });
       });
 
@@ -4876,7 +4980,7 @@ module.exports = {
   async _generatePDF(transactions) {
     try {
       return new Promise((resolve, reject) => {
-        const doc = new PDFDocument({ margin: 30, size: "A4" });
+        const doc = new PDFDocument({ margin: 20, size: "A4", layout: "landscape" });
         let buffers = [];
         doc.on("data", buffers.push.bind(buffers));
         doc.on("end", () => {
@@ -4889,53 +4993,54 @@ module.exports = {
           });
         });
 
-        doc.fontSize(20).text("Transaction Report", { align: "center" });
+        doc.fontSize(20).text("Financial Transaction Report", { align: "center" });
         doc.moveDown();
 
-        const tableTop = 100;
-        const colX = [30, 50, 180, 320, 420, 500];
+        const tableTop = 80;
+        // Adjusted for Landscape A4 (width ~842 points)
+        const colX = [30, 50, 160, 280, 400, 480, 560, 640, 720];
         const headers = [
           "No",
-          "Trx Number",
+          "Order #",
           "Customer",
           "Date",
-          "Total",
-          "Status",
+          "Subtotal",
+          "Shipping",
+          "MDR",
+          "Fee 1%",
+          "Net",
         ];
 
-        doc.fontSize(10).font("Helvetica-Bold");
+        doc.fontSize(9).font("Helvetica-Bold");
         headers.forEach((h, i) => doc.text(h, colX[i], tableTop));
 
         doc
           .moveTo(30, tableTop + 15)
-          .lineTo(560, tableTop + 15)
+          .lineTo(810, tableTop + 15)
           .stroke();
 
         let currentY = tableTop + 25;
         doc.font("Helvetica");
 
-        transactions.forEach((trx, index) => {
-          if (currentY > 750) {
+        transactions.forEach((item, index) => {
+          if (currentY > 500) {
             doc.addPage();
-            currentY = 50;
+            currentY = 40;
           }
 
           doc.text(index + 1, colX[0], currentY);
-          doc.text(trx.transactionNumber, colX[1], currentY);
-          doc.text(trx.order?.customer?.name || "N/A", colX[2], currentY, {
-            width: 130,
-          });
+          doc.text(item.orderNumber, colX[1], currentY);
+          doc.text(item.customerName || "N/A", colX[2], currentY, { width: 110 });
           doc.text(
-            trx.createdAt ? trx.createdAt.toISOString().split("T")[0] : "N/A",
+            item.date ? new Date(item.date).toISOString().split("T")[0] : "N/A",
             colX[3],
             currentY,
           );
-          doc.text(
-            trx.grandTotal ? trx.grandTotal.toLocaleString() : "0",
-            colX[4],
-            currentY,
-          );
-          doc.text(trx.orderStatus || "N/A", colX[5], currentY);
+          doc.text(item.financials.subtotal.toLocaleString(), colX[4], currentY);
+          doc.text(item.financials.shippingFee.toLocaleString(), colX[5], currentY);
+          doc.text(item.financials.xenditMdrFee.toLocaleString(), colX[6], currentY);
+          doc.text(item.financials.platformFee.toLocaleString(), colX[7], currentY);
+          doc.text(item.financials.netForOutlet.toLocaleString(), colX[8], currentY);
 
           currentY += 20;
         });

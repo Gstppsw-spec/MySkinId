@@ -114,6 +114,12 @@ router.post(
   transactionOrder.claimVoucher,
 );
 
+router.get(
+  "/financial-report",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "OPERATIONAL_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.getFinancialReport,
+);
+
 // Platform Transfers
 router.get(
   "/transfers/:orderId",

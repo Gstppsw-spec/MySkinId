@@ -940,8 +940,15 @@ module.exports = {
         }
       }
 
-      const { name } = filters;
+      const { name, locationId } = filters;
       const { limit, offset } = pagination;
+
+      // Authorization check for locationId filter
+      if (locationId && roleCode !== "SUPER_ADMIN" && roleCode !== "OPERATIONAL_ADMIN") {
+        if (!locationIds.includes(locationId)) {
+          return { status: false, message: "Location not allowed or not found for this user" };
+        }
+      }
 
       const whereClause = {};
       if (name) {

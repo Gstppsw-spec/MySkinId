@@ -517,6 +517,36 @@ module.exports = {
     }
   },
 
+  async getFinancialReport(req, res) {
+    try {
+      const adminId = req.user.id;
+      const { 
+        startDate, 
+        endDate, 
+        locationId, 
+        page = 1, 
+        pageSize = 100 
+      } = req.query;
+
+      const result = await transactionOrder.getFinancialReport(adminId, {
+        startDate,
+        endDate,
+        locationId,
+        page,
+        pageSize,
+      });
+
+      if (!result.status) return response.error(res, result.message);
+
+      return response.success(res, result.message, {
+        list: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async getTransferStatus(req, res) {
     try {
       const { orderId } = req.params;
