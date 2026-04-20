@@ -70,6 +70,48 @@ module.exports = {
   },
 
   /**
+   * Super Admin: Bulk Update or Create ads configurations
+   */
+  async bulkUpsertConfig(configsArray) {
+    const t = await sequelize.transaction();
+    try {
+      const results = [];
+      for (const item of configsArray) {
+        const { type, position, slideNumber, pricePerDay, maxSlots, isActive } = item;
+        
+        let config = await AdsConfig.findOne({
+          where: { 
+            type, 
+            position: position || null, 
+            slideNumber: slideNumber || null 
+          },
+          transaction: t
+        });
+
+        if (config) {
+          await config.update({ pricePerDay, maxSlots, isActive }, { transaction: t });
+        } else {
+          config = await AdsConfig.create({
+            type,
+            position,
+            slideNumber,
+            pricePerDay,
+            maxSlots: maxSlots || 1,
+            isActive: isActive !== undefined ? isActive : true
+          }, { transaction: t });
+        }
+        results.push(config);
+      }
+      
+      await t.commit();
+      return { status: true, message: `${results.length} config(s) processed`, data: results };
+    } catch (error) {
+      await t.rollback();
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
    * Super Admin: Update ads configuration by ID
    */
   async updateConfig(id, data) {
@@ -130,8 +172,7 @@ module.exports = {
       const existingPurchases = await AdsPurchase.findAll({
         where: {
           adsType: activeType,
-          status: "PAID",
-          isActive: true,
+          status: { [Op.in]: ["PAID", "PENDING"] },
           [Op.and]: [
             sequelize.literal(`
               configId IN (SELECT id FROM adsConfig WHERE type = '${activeType}' 

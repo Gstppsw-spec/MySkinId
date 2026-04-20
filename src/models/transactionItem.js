@@ -57,7 +57,7 @@ module.exports = (sequelize, DataTypes) => {
             },
             locationId: {
                 type: DataTypes.UUID,
-                allowNull: false,
+                allowNull: true,
             },
             quantity: {
                 type: DataTypes.INTEGER,

@@ -717,6 +717,7 @@ class MasterLocationService {
         distinct: true, // Important for findAndCountAll with includes
         limit,
         offset,
+        order: [["id", "ASC"]],
       };
 
       if (name) {
@@ -993,8 +994,8 @@ class MasterLocationService {
       `) : null;
 
       const order = distanceLiteral
-        ? [[distanceLiteral, "ASC"]]
-        : [[Sequelize.literal("COALESCE(masterLocation.verifiedDate, masterLocation.createdAt)"), "DESC"]];
+        ? [[distanceLiteral, "ASC"], ["id", "ASC"]]
+        : [[Sequelize.literal("COALESCE(masterLocation.verifiedDate, masterLocation.createdAt)"), "DESC"], ["id", "ASC"]];
 
       const { count, rows: locations } = await masterLocation.findAndCountAll({
         attributes: {
@@ -1085,7 +1086,7 @@ class MasterLocationService {
         limit,
         offset,
         subQuery: false,
-        order: [["createdAt", "DESC"]],
+        order: [["createdAt", "DESC"], ["id", "ASC"]],
       });
 
       const result = locations.map((loc) => {

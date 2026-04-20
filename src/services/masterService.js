@@ -128,10 +128,10 @@ module.exports = {
         },
       ];
 
-      let order = [["name", "ASC"]];
+      let order = [["name", "ASC"], ["id", "ASC"]];
 
       if (sortBy === "distance" && distanceLiteral) {
-        order = [[distanceLiteral, "ASC"]];
+        order = [[distanceLiteral, "ASC"], ["id", "ASC"]];
       }
 
       if (sortBy === "price" || sortBy === "low-price") {
@@ -142,6 +142,7 @@ module.exports = {
             ),
             "ASC",
           ],
+          ["id", "ASC"],
         ];
       }
 
@@ -153,11 +154,12 @@ module.exports = {
             ),
             "DESC",
           ],
+          ["id", "ASC"],
         ];
       }
 
       if (sortBy === "rating") {
-        order = [["ratingAvg", "DESC"]];
+        order = [["ratingAvg", "DESC"], ["id", "ASC"]];
       }
 
       if (!sortBy || sortBy === "recommendation") {
@@ -167,6 +169,7 @@ module.exports = {
         }
         order.push(["ratingAvg", "DESC"]);
         order.push(["name", "ASC"]);
+        order.push(["id", "ASC"]);
       }
 
       if (customerId) {
@@ -749,6 +752,7 @@ module.exports = {
         distinct: true,
         limit,
         offset,
+        order: [["id", "ASC"]],
       });
 
       const totalActiveItem = await masterService.count({

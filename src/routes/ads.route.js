@@ -22,6 +22,7 @@ router.get("/config", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "O
 
 // --- SUPER ADMIN ---
 router.post("/admin/topup", verifyToken, allowRoles("SUPER_ADMIN"), adsController.adminTopup);
+router.post("/config/bulk", verifyToken, allowRoles("SUPER_ADMIN"), adsController.bulkUpsertAdsConfig);
 router.post("/config", verifyToken, allowRoles("SUPER_ADMIN"), adsController.upsertAdsConfig);
 router.put("/config/:id", verifyToken, allowRoles("SUPER_ADMIN"), adsController.updateAdsConfig);
 router.delete("/config", verifyToken, allowRoles("SUPER_ADMIN"), adsController.deleteAdsConfig);

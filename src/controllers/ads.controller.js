@@ -164,6 +164,20 @@ module.exports = {
     }
   },
 
+  async bulkUpsertAdsConfig(req, res) {
+    try {
+      const configs = req.body;
+      if (!configs || !Array.isArray(configs)) {
+        return response.error(res, "Request body must be an array of configurations");
+      }
+      const result = await adsService.bulkUpsertConfig(configs);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async updateAdsConfig(req, res) {
     try {
       const { id } = req.params;

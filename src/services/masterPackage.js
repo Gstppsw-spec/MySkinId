@@ -178,10 +178,10 @@ module.exports = {
         },
       ];
 
-      let order = [["name", "ASC"]];
+      let order = [["name", "ASC"], ["id", "ASC"]];
 
       if (sortBy === "distance" && distanceLiteral) {
-        order = [[distanceLiteral, "ASC"]];
+        order = [[distanceLiteral, "ASC"], ["id", "ASC"]];
       }
 
       if (sortBy === "low-price") {
@@ -190,6 +190,7 @@ module.exports = {
             Sequelize.literal("(`masterPackage`.price - (`masterPackage`.price * `masterPackage`.discountPercent / 100))"),
             "ASC",
           ],
+          ["id", "ASC"],
         ];
       }
 
@@ -199,11 +200,12 @@ module.exports = {
             Sequelize.literal("(`masterPackage`.price - (`masterPackage`.price * `masterPackage`.discountPercent / 100))"),
             "DESC",
           ],
+          ["id", "ASC"],
         ];
       }
 
       if (sortBy === "rating") {
-        order = [["ratingAvg", "DESC"]];
+        order = [["ratingAvg", "DESC"], ["id", "ASC"]];
       }
 
       if (!sortBy || sortBy === "recommendation") {
@@ -213,6 +215,7 @@ module.exports = {
         }
         order.push(["ratingAvg", "DESC"]);
         order.push(["name", "ASC"]);
+        order.push(["id", "ASC"]);
       }
 
       if (customerId) {
@@ -1174,6 +1177,7 @@ module.exports = {
         distinct: true,
         limit,
         offset,
+        order: [["id", "ASC"]],
       });
 
       const totalActiveItem = await masterPackage.count({
