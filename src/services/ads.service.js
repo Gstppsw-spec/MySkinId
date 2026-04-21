@@ -257,6 +257,7 @@ module.exports = {
           startDate: { [Op.lte]: now },
           endDate: { [Op.gte]: now },
         },
+        include: [{ model: AdsConfig, as: "config" }],
       });
 
       // 2. Identify referenced entities to bulk fetch
@@ -388,6 +389,8 @@ module.exports = {
           location: loc || null,
           isAd: true,
           adsPurchaseId: p.id, // Keep reference to ads record
+          referenceType: p.referenceType,
+          referenceId: p.referenceId,
           data: p.data // Banner/Carousel custom data
         };
       };
@@ -396,12 +399,39 @@ module.exports = {
       activePurchases.forEach((p) => {
         if (p.adsType === "BANNER") {
           if (!responseData.banners) responseData.banners = [];
-          responseData.banners.push({ id: p.id, data: p.data, locationId: p.locationId, isAd: true });
+          responseData.banners.push({ 
+            id: p.id, 
+            data: p.data, 
+            locationId: p.locationId, 
+            isAd: true,
+            referenceType: p.referenceType,
+            referenceId: p.referenceId,
+            position: p.config?.position,
+            slideNumber: p.config?.slideNumber
+          });
         } else if (p.adsType === "CAROUSEL") {
           if (!responseData.carousels) responseData.carousels = [];
-          responseData.carousels.push({ id: p.id, data: p.data, locationId: p.locationId, isAd: true });
+          responseData.carousels.push({ 
+            id: p.id, 
+            data: p.data, 
+            locationId: p.locationId, 
+            isAd: true,
+            referenceType: p.referenceType,
+            referenceId: p.referenceId,
+            position: p.config?.position,
+            slideNumber: p.config?.slideNumber
+          });
         } else if (p.adsType === "POPUP") {
-          responseData.popup = { id: p.id, data: p.data, locationId: p.locationId, isAd: true };
+          responseData.popup = { 
+            id: p.id, 
+            data: p.data, 
+            locationId: p.locationId, 
+            isAd: true,
+            referenceType: p.referenceType,
+            referenceId: p.referenceId,
+            position: p.config?.position,
+            slideNumber: p.config?.slideNumber
+          };
         } else if (p.adsType === "TOPDEALS") {
           if (!responseData.topDeals) responseData.topDeals = { Product: [], Service: [], Package: [] };
           
