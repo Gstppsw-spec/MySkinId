@@ -1,8 +1,23 @@
 const adsService = require("../services/ads.service");
 const transactionOrder = require("../services/transactionOrder");
+const balanceService = require("../services/balance.service");
 const response = require("../helpers/response");
 
 module.exports = {
+  /**
+   * Superadmin: Get all company balances
+   */
+  async getCompanyBalances(req, res) {
+    try {
+      const { page = 1, pageSize = 10, search = "" } = req.query;
+      const result = await balanceService.getAllCompanyBalances({ page, pageSize, search });
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   // --- CUSTOMER ---
   async getAds(req, res) {
     try {
@@ -90,7 +105,11 @@ module.exports = {
   async getWaitingPaymentAds(req, res) {
     try {
       const userId = req.user.id;
-      const result = await adsService.getWaitingPaymentAds(userId);
+      const { page = 1, pageSize = 10 } = req.query;
+      const result = await adsService.getWaitingPaymentAds(userId, { 
+        page: parseInt(page), 
+        pageSize: parseInt(pageSize) 
+      });
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {

@@ -75,7 +75,7 @@ router.get("/room/:id/recommendations", consultation.getRecommendations);
 // === QUOTA ROUTES ===
 router.get("/quota", consultation.getQuota);
 router.post("/quota/buy", consultation.buyQuota);
-router.get("/quota/config", allowRoles("SUPER_ADMIN"), consultation.getQuotaConfig);
+router.get("/quota/config", consultation.getQuotaConfig);
 router.put("/quota/config", allowRoles("SUPER_ADMIN"), consultation.updateQuotaConfig);
 
 module.exports = router;

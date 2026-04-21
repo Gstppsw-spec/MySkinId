@@ -26,5 +26,6 @@ router.post("/config/bulk", verifyToken, allowRoles("SUPER_ADMIN"), adsControlle
 router.post("/config", verifyToken, allowRoles("SUPER_ADMIN"), adsController.upsertAdsConfig);
 router.put("/config/:id", verifyToken, allowRoles("SUPER_ADMIN"), adsController.updateAdsConfig);
 router.delete("/config", verifyToken, allowRoles("SUPER_ADMIN"), adsController.deleteAdsConfig);
+router.get("/company-balances", verifyToken, allowRoles("SUPER_ADMIN"), adsController.getCompanyBalances);
 
 module.exports = router;

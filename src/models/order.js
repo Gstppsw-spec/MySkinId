@@ -16,6 +16,10 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "orderId",
                 as: "payments",
             });
+            order.hasOne(models.AdsPurchase, {
+                foreignKey: "orderId",
+                as: "adsPurchase",
+            });
         }
     }
 

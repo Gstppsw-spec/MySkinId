@@ -53,6 +53,12 @@ module.exports = (sequelize, DataTypes) => {
         get() {
           const rawValue = this.getDataValue("iconUrl");
           if (!rawValue) return null;
+
+          // If already a full URL, return as is
+          if (rawValue.startsWith("http://") || rawValue.startsWith("https://")) {
+            return rawValue;
+          }
+
           const BASE_URL =
             process.env.BASE_URL ||
             `${process.env.APP_PROTOCOL || "http"}://${process.env.APP_HOST || "localhost"

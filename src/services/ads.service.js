@@ -8,6 +8,11 @@ const {
   masterPackage,
   order,
   orderPayment,
+  transaction,
+  transactionItem,
+  relationshipUserCompany,
+  masterUser,
+  masterRole,
   sequelize,
 } = require("../models");
 
@@ -248,10 +253,10 @@ module.exports = {
       });
 
       const responseData = {
-        banners: [],
-        carousels: [],
+        banners: null,
+        carousels: null,
         popup: null,
-        topDeals: [],
+        topDeals: null,
         premiumOutlets: [],
         premiumSearch: [],
         premiumHome: [],
@@ -270,11 +275,28 @@ module.exports = {
           referenceId: p.referenceId,
         };
 
-        if (p.adsType === "BANNER") responseData.banners.push(item);
-        else if (p.adsType === "CAROUSEL") responseData.carousels.push(item);
-        else if (p.adsType === "POPUP") responseData.popup = item;
-        else if (p.adsType === "TOPDEALS") responseData.topDeals.push(item);
-        else if (p.adsType === "PREMIUM_SEARCH" || p.adsType === "PREMIUM_BADGE")
+        if (p.adsType === "BANNER") {
+          if (!responseData.banners) responseData.banners = [];
+          responseData.banners.push(item);
+        } else if (p.adsType === "CAROUSEL") {
+          if (!responseData.carousels) responseData.carousels = [];
+          responseData.carousels.push(item);
+        } else if (p.adsType === "POPUP") {
+          responseData.popup = item;
+        } else if (p.adsType === "TOPDEALS") {
+          if (!responseData.topDeals) {
+            responseData.topDeals = { product: [], service: [], package: [] };
+          }
+          const group = p.referenceType
+            ? p.referenceType.toLowerCase()
+            : "product";
+          if (responseData.topDeals[group]) {
+            responseData.topDeals[group].push(item);
+          }
+        } else if (
+          p.adsType === "PREMIUM_SEARCH" ||
+          p.adsType === "PREMIUM_BADGE"
+        )
           responseData.premiumSearch.push(item);
         else if (p.adsType === "PREMIUM_HOME")
           responseData.premiumHome.push(item);
@@ -288,77 +310,22 @@ module.exports = {
 
       // --- Fallback Logic ---
 
-      // 1. Top Deals Fallback (Max 5)
-      if (responseData.topDeals.length < 5) {
-        const remaining = 5 - responseData.topDeals.length;
-        const latestProducts = await masterProduct.findAll({
-          where: { isactive: true, isVerified: true },
-          order: [["createdAt", "DESC"]],
-          limit: remaining,
-          include: [{ model: masterProductImage, as: "images", limit: 1 }],
-        });
-
-        latestProducts.forEach((prod) => {
-          responseData.topDeals.push({
-            id: prod.id,
-            type: "product",
-            name: prod.name,
-            price: prod.price,
-            image:
-              prod.images && prod.images.length > 0
-                ? prod.images[0].imageUrl
-                : null,
-            isAd: false,
-            isPremium: false,
-          });
-        });
-
-        // If still remaining, fetch packages
-        if (responseData.topDeals.length < 5) {
-          const remPackages = 5 - responseData.topDeals.length;
-          const latestPackages = await masterPackage.findAll({
-            where: { isactive: true, isVerified: true },
-            order: [["createdAt", "DESC"]],
-            limit: remPackages,
-          });
-          latestPackages.forEach((pkg) => {
-            responseData.topDeals.push({
-              id: pkg.id,
-              type: "package",
-              name: pkg.name,
-              price: pkg.price,
-              isAd: false,
-              isPremium: false,
-            });
-          });
-        }
-      }
+      // 1. Top Deals Fallback (Max 5) - REMOVED per FE request
+      // We only show what is purchased. If nothing is purchased, topDeals stays null.
 
       // 2. Premium Outlets Fallback (Max 5)
-      if (responseData.premiumOutlets.length < 5) {
-        const remaining = 5 - responseData.premiumOutlets.length;
-        const existingIds = responseData.premiumOutlets.map((p) => p.locationId);
-
+      // Only show fallback if NO PAID ADS exist for this category
+      if (responseData.premiumOutlets.length === 0) {
         const latestOutlets = await masterLocation.findAll({
           where: {
             isactive: true,
             isVerified: true,
-            id: {
-              [Op.notIn]:
-                existingIds.length > 0
-                  ? existingIds
-                  : [
-                      sequelize.literal(
-                        "'00000000-0000-0000-0000-000000000000'"
-                      ),
-                    ],
-            },
           },
           order: [
             ["isPremium", "DESC"], // Prioritize isPremium: true (Premium subscription)
             ["createdAt", "DESC"],
           ],
-          limit: remaining,
+          limit: 5,
           attributes: ["id", "name", "address", "ratingAvg", "isPremium"],
         });
 
@@ -410,36 +377,119 @@ module.exports = {
   /**
    * Admin Company: List ads waiting for payment
    */
-  async getWaitingPaymentAds(adminId) {
+  async getWaitingPaymentAds(adminId, { page = 1, pageSize = 10 }) {
     try {
       const transactionOrder = require("./transactionOrder");
       const locationIds = await transactionOrder._getAdminLocationIds(adminId);
 
-      const data = await AdsPurchase.findAll({
+      // Get Company IDs associated with the admin
+      const adminCompanies = await relationshipUserCompany.findAll({
+        where: { userId: adminId, isactive: true },
+        attributes: ["companyId"],
+        raw: true
+      });
+      const companyIds = adminCompanies.map(c => c.companyId);
+
+      const limit = pageSize;
+      const offset = (page - 1) * pageSize;
+
+      const { count, rows: transactions } = await transaction.findAndCountAll({
         where: {
-          locationId: { [Op.in]: locationIds },
-          status: "PENDING"
+          [Op.and]: [
+            {
+              [Op.or]: [
+                { locationId: { [Op.in]: locationIds } },
+                {
+                  [Op.and]: [
+                    { "$items.itemType$": "AD_BALANCE_TOPUP" },
+                    { "$items.itemId$": { [Op.in]: companyIds } }
+                  ]
+                }
+              ]
+            },
+            { "$order.paymentStatus$": "UNPAID" }
+          ]
         },
         include: [
-          {
-            model: AdsConfig,
-            as: "config"
-          },
           {
             model: order,
             as: "order",
             include: [
               {
                 model: orderPayment,
-                as: "payments"
+                as: "payments",
+                required: false
+              },
+              {
+                model: AdsPurchase,
+                as: "adsPurchase",
+                include: [{ model: AdsConfig, as: "config" }],
+                required: false
               }
             ]
+          },
+          {
+            model: transactionItem,
+            as: "items",
+            required: false // Needed for AD_BALANCE_TOPUP filter
           }
         ],
+        subQuery: false, // Prevents "Unknown column" errors when using limit/offset with joined where
+        distinct: true, 
+        limit,
+        offset,
         order: [["createdAt", "DESC"]]
       });
 
-      return { status: true, message: "Waiting payment ads fetched", data };
+      const mappedData = transactions.map((t) => {
+        const orderData = t.order || {};
+        const payments = orderData.payments || [];
+        const latestPayment = payments.length > 0 ? payments[0] : null;
+        const purchase = orderData.adsPurchase || null;
+        
+        // Identify type
+        let type = "PLACEMENT";
+        if (t.items && t.items.some(it => it.itemType === "AD_BALANCE_TOPUP")) {
+          type = "TOPUP";
+        }
+
+        return {
+          trxId: t.id,
+          transactionNumber: t.transactionNumber,
+          type: type,
+          amount: t.grandTotal,
+          status: orderData.paymentStatus,
+          createdAt: t.createdAt,
+          order: {
+            id: orderData.id,
+            orderNumber: orderData.orderNumber
+          },
+          payment: latestPayment ? {
+            paymentMethod: latestPayment.paymentMethod,
+            checkoutUrl: latestPayment.checkoutUrl,
+            instructions: latestPayment.instructions ? latestPayment.instructions.split("\n") : []
+          } : null,
+          details: purchase ? {
+            adsType: purchase.adsType,
+            config: purchase.config,
+            startDate: purchase.startDate,
+            endDate: purchase.endDate,
+            data: purchase.data
+          } : (type === "TOPUP" ? { name: "Balance Top-up" } : null)
+        };
+      });
+
+      return { 
+        status: true, 
+        message: "Waiting payment ads fetched", 
+        data: {
+          totalCount: count,
+          totalPages: Math.ceil(count / pageSize),
+          currentPage: page,
+          pageSize: pageSize,
+          rows: mappedData
+        } 
+      };
     } catch (error) {
       return { status: false, message: error.message };
     }

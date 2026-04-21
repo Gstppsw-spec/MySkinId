@@ -63,6 +63,10 @@ module.exports = (sequelize, DataTypes) => {
         },
         as: "verificationStatus",
       });
+      this.hasOne(models.CompanyAdsBalance, {
+        foreignKey: "companyId",
+        as: "balance",
+      });
     }
   }
 
