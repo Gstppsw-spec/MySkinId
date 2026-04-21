@@ -1,11 +1,21 @@
-const { Op } = require("sequelize");
+const { Op, Sequelize } = require("sequelize");
 const {
   AdsConfig,
   AdsPurchase,
   masterLocation,
+  masterLocationImage,
+  masterCity,
+  masterCompany,
   masterProduct,
   masterProductImage,
+  masterProductCategory,
+  masterConsultationCategory,
+  masterService,
+  masterSubCategoryService,
   masterPackage,
+  masterPackageItems,
+  flashSale,
+  flashSaleItem,
   order,
   orderPayment,
   transaction,
@@ -15,6 +25,8 @@ const {
   masterRole,
   sequelize,
 } = require("../models");
+const { sortPrimaryFirst } = require("../helpers/sortPrimaryImage");
+const flashSaleService = require("./flashSale.service");
 
 module.exports = {
   /**
@@ -236,6 +248,8 @@ module.exports = {
   async getActiveAds() {
     try {
       const now = new Date();
+
+      // 1. Fetch all active paid ads
       const activePurchases = await AdsPurchase.findAll({
         where: {
           status: "PAID",
@@ -243,14 +257,70 @@ module.exports = {
           startDate: { [Op.lte]: now },
           endDate: { [Op.gte]: now },
         },
-        include: [
-          {
-            model: masterLocation,
-            as: "location",
-            attributes: ["id", "name", "address", "ratingAvg", "isPremium"],
-          },
-        ],
       });
+
+      // 2. Identify referenced entities to bulk fetch
+      const productIds = [];
+      const serviceIds = [];
+      const packageIds = [];
+      const locationIds = [];
+
+      activePurchases.forEach(p => {
+        if (p.adsType === "TOPDEALS") {
+          if (p.referenceType === "PRODUCT") productIds.push(p.referenceId);
+          if (p.referenceType === "SERVICE") serviceIds.push(p.referenceId);
+          if (p.referenceType === "PACKAGE") packageIds.push(p.referenceId);
+        }
+        if (["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"].includes(p.adsType)) {
+          locationIds.push(p.locationId);
+        }
+      });
+
+      // Also need location details for Products/Services/Packages
+      const allLocationIds = [...new Set(locationIds)];
+
+      // 3. Bulk fetch full details
+      const [products, services, packages, locations, activeFlashSales] = await Promise.all([
+        // Products
+        masterProduct.findAll({
+          where: { id: { [Op.in]: productIds } },
+          include: [
+            { model: masterProductImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
+            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } }
+          ]
+        }),
+        // Services
+        masterService.findAll({
+          where: { id: { [Op.in]: serviceIds } },
+          include: [
+            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } }
+          ]
+        }),
+        // Packages
+        masterPackage.findAll({
+          where: { id: { [Op.in]: packageIds } },
+          include: [
+            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } }
+          ]
+        }),
+        // Locations (for Premium Outlets and detailing TopDeals)
+        masterLocation.findAll({
+          where: { id: { [Op.in]: allLocationIds } },
+          include: [
+            { model: masterLocationImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
+            { model: masterCity, as: "cityDetail", attributes: ["name"] },
+            { model: masterCompany, as: "company", attributes: ["id", "name"] }
+          ]
+        }),
+        // Flash Sales
+        (async () => {
+          await flashSaleService.syncStatuses();
+          return flashSale.findAll({
+            where: { status: "ACTIVE" },
+            include: [{ model: flashSaleItem, as: "items" }]
+          });
+        })()
+      ]);
 
       const responseData = {
         banners: null,
@@ -262,82 +332,120 @@ module.exports = {
         premiumHome: [],
       };
 
-      // Process Purchases
-      activePurchases.forEach((p) => {
-        const item = {
-          id: p.id,
-          locationId: p.locationId,
-          locationName: p.location ? p.location.name : null,
-          data: p.data,
-          isAd: true,
-          isPremium: p.location ? !!p.location.isPremium : false,
-          referenceType: p.referenceType,
-          referenceId: p.referenceId,
-        };
+      // Helper: Map entity to standard structure
+      const mapItem = (p, entity, type) => {
+        const plain = entity.get({ plain: true });
+        
+        // Handle images
+        if (plain.images) plain.images = sortPrimaryFirst(plain.images);
+        
+        // Handle Flash Sale
+        let flashSaleInfo = null;
+        let isFlashSale = false;
+        if (type !== "SERVICE") {
+          const fs = activeFlashSales.find(fs => 
+            fs.items.some(i => 
+              (type === "PRODUCT" && i.itemType === "PRODUCT" && i.productId === plain.id) ||
+              (type === "PACKAGE" && i.packageId === plain.id)
+            )
+          );
+          if (fs) {
+            const item = fs.items.find(i => 
+              (type === "PRODUCT" && i.productId === plain.id) ||
+              (type === "PACKAGE" && i.packageId === plain.id)
+            );
+            isFlashSale = true;
+            flashSaleInfo = {
+              flashPrice: item.flashPrice,
+              flashSaleId: fs.id,
+              flashSaleItemId: item.id,
+              titleFlashSale: fs.title,
+              quota: item.quota,
+              sold: item.sold,
+              endDateFlashSale: fs.endDate,
+            };
+          }
+        }
 
+        // Handle Location (match generic getter: pick the one assigned in AdsPurchase)
+        const loc = plain.locations ? plain.locations.find(l => l.id === p.locationId) : null;
+
+        return {
+          ...plain,
+          biteshipId: loc?.biteshipAreaId || null,
+          isFlashSale,
+          flashSale: flashSaleInfo,
+          isFavorite: false, // Default false for public ads endpoint
+          locationId: p.locationId,
+          location: loc || null,
+          isAd: true,
+          adsPurchaseId: p.id, // Keep reference to ads record
+          data: p.data // Banner/Carousel custom data
+        };
+      };
+
+      // 4. Process Purchases
+      activePurchases.forEach((p) => {
         if (p.adsType === "BANNER") {
           if (!responseData.banners) responseData.banners = [];
-          responseData.banners.push(item);
+          responseData.banners.push({ id: p.id, data: p.data, locationId: p.locationId, isAd: true });
         } else if (p.adsType === "CAROUSEL") {
           if (!responseData.carousels) responseData.carousels = [];
-          responseData.carousels.push(item);
+          responseData.carousels.push({ id: p.id, data: p.data, locationId: p.locationId, isAd: true });
         } else if (p.adsType === "POPUP") {
-          responseData.popup = item;
+          responseData.popup = { id: p.id, data: p.data, locationId: p.locationId, isAd: true };
         } else if (p.adsType === "TOPDEALS") {
-          if (!responseData.topDeals) {
-            responseData.topDeals = { product: [], service: [], package: [] };
+          if (!responseData.topDeals) responseData.topDeals = { product: [], service: [], package: [] };
+          
+          let entity = null;
+          if (p.referenceType === "PRODUCT") entity = products.find(i => i.id === p.referenceId);
+          if (p.referenceType === "SERVICE") entity = services.find(i => i.id === p.referenceId);
+          if (p.referenceType === "PACKAGE") entity = packages.find(i => i.id === p.referenceId);
+
+          if (entity) {
+            const mapped = mapItem(p, entity, p.referenceType);
+            responseData.topDeals[p.referenceType.toLowerCase()].push(mapped);
           }
-          const group = p.referenceType
-            ? p.referenceType.toLowerCase()
-            : "product";
-          if (responseData.topDeals[group]) {
-            responseData.topDeals[group].push(item);
+        } else if (["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"].includes(p.adsType)) {
+          const locEntity = locations.find(l => l.id === p.locationId);
+          if (locEntity) {
+            const plain = locEntity.get({ plain: true });
+            if (plain.images) plain.images = sortPrimaryFirst(plain.images);
+            
+            const item = {
+              ...plain,
+              city: plain.cityDetail ? plain.cityDetail.name : plain.city,
+              isAd: true,
+              adsType: p.adsType
+            };
+
+            if (p.adsType === "PREMIUM_HOME") responseData.premiumHome.push(item);
+            else responseData.premiumSearch.push(item);
           }
-        } else if (
-          p.adsType === "PREMIUM_SEARCH" ||
-          p.adsType === "PREMIUM_BADGE"
-        )
-          responseData.premiumSearch.push(item);
-        else if (p.adsType === "PREMIUM_HOME")
-          responseData.premiumHome.push(item);
+        }
       });
 
-      // Legacy support / merged list for convenience
-      responseData.premiumOutlets = [
-        ...responseData.premiumSearch,
-        ...responseData.premiumHome,
-      ];
+      responseData.premiumOutlets = [...responseData.premiumSearch, ...responseData.premiumHome];
 
-      // --- Fallback Logic ---
-
-      // 1. Top Deals Fallback (Max 5) - REMOVED per FE request
-      // We only show what is purchased. If nothing is purchased, topDeals stays null.
-
-      // 2. Premium Outlets Fallback (Max 5)
-      // Only show fallback if NO PAID ADS exist for this category
+      // 5. Fallback Logic for Premium Outlets
       if (responseData.premiumOutlets.length === 0) {
         const latestOutlets = await masterLocation.findAll({
-          where: {
-            isactive: true,
-            isVerified: true,
-          },
-          order: [
-            ["isPremium", "DESC"], // Prioritize isPremium: true (Premium subscription)
-            ["createdAt", "DESC"],
+          where: { isactive: true, isVerified: true },
+          include: [
+            { model: masterLocationImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
+            { model: masterCity, as: "cityDetail", attributes: ["name"] }
           ],
-          limit: 5,
-          attributes: ["id", "name", "address", "ratingAvg", "isPremium"],
+          order: [["isPremium", "DESC"], ["createdAt", "DESC"]],
+          limit: 5
         });
 
         latestOutlets.forEach((loc) => {
+          const plain = loc.get({ plain: true });
+          if (plain.images) plain.images = sortPrimaryFirst(plain.images);
           responseData.premiumOutlets.push({
-            id: loc.id,
-            locationId: loc.id,
-            locationName: loc.name,
-            address: loc.address,
-            rating: loc.ratingAvg,
+            ...plain,
+            city: plain.cityDetail ? plain.cityDetail.name : plain.city,
             isAd: false,
-            isPremium: !!loc.isPremium,
           });
         });
       }
@@ -359,7 +467,11 @@ module.exports = {
       
       const where = { locationId: { [Op.in]: locationIds } };
       if (type) {
-        where.adsType = type;
+        if (type === "PREMIUM_OUTLET") {
+          where.adsType = { [Op.in]: ["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"] };
+        } else {
+          where.adsType = type;
+        }
       }
 
       const data = await AdsPurchase.findAll({

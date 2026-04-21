@@ -1014,11 +1014,10 @@ class MasterLocationService {
             }
           ]
         },
-        include: [{ model: masterLocationImage, as: "images" }],
+        include: [{ model: masterLocationImage, as: "images", separate: true }],
         distinct: true,
         limit,
         offset,
-        subQuery: false,
         order,
       });
 
@@ -1069,7 +1068,7 @@ class MasterLocationService {
           isVerified: true
         },
         include: [
-          { model: masterLocationImage, as: "images" },
+          { model: masterLocationImage, as: "images", separate: true },
           {
             model: AdsPurchase,
             as: "adsPurchases",
@@ -1079,13 +1078,13 @@ class MasterLocationService {
               isActive: true,
               startDate: { [Op.lte]: now },
               endDate: { [Op.gte]: now }
-            }
+            },
+            attributes: [] // We only need it for filtering here
           }
         ],
         distinct: true,
         limit,
         offset,
-        subQuery: false,
         order: [["createdAt", "DESC"], ["id", "ASC"]],
       });
 
