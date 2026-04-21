@@ -286,21 +286,29 @@ module.exports = {
           where: { id: { [Op.in]: productIds } },
           include: [
             { model: masterProductImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
-            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } }
+            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } },
+            { model: masterProductCategory, as: "categories", attributes: ["id", "name"], through: { attributes: [] } },
+            { model: masterConsultationCategory, as: "consultationCategories", attributes: ["id", "name"], through: { attributes: [] } }
           ]
         }),
         // Services
         masterService.findAll({
           where: { id: { [Op.in]: serviceIds } },
           include: [
-            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } }
+            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } },
+            { model: masterSubCategoryService, as: "categories", attributes: ["id", "name"], through: { attributes: [] } }
           ]
         }),
         // Packages
         masterPackage.findAll({
           where: { id: { [Op.in]: packageIds } },
           include: [
-            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } }
+            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } },
+            { 
+              model: masterPackageItems, 
+              as: "items", 
+              include: [{ model: masterService, as: "service", attributes: ["id", "name"] }] 
+            }
           ]
         }),
         // Locations (for Premium Outlets and detailing TopDeals)
@@ -395,16 +403,26 @@ module.exports = {
         } else if (p.adsType === "POPUP") {
           responseData.popup = { id: p.id, data: p.data, locationId: p.locationId, isAd: true };
         } else if (p.adsType === "TOPDEALS") {
-          if (!responseData.topDeals) responseData.topDeals = { product: [], service: [], package: [] };
+          if (!responseData.topDeals) responseData.topDeals = { Product: [], Service: [], Package: [] };
           
           let entity = null;
-          if (p.referenceType === "PRODUCT") entity = products.find(i => i.id === p.referenceId);
-          if (p.referenceType === "SERVICE") entity = services.find(i => i.id === p.referenceId);
-          if (p.referenceType === "PACKAGE") entity = packages.find(i => i.id === p.referenceId);
+          let typeKey = "";
+          if (p.referenceType === "PRODUCT") {
+            entity = products.find(i => i.id === p.referenceId);
+            typeKey = "Product";
+          }
+          if (p.referenceType === "SERVICE") {
+            entity = services.find(i => i.id === p.referenceId);
+            typeKey = "Service";
+          }
+          if (p.referenceType === "PACKAGE") {
+            entity = packages.find(i => i.id === p.referenceId);
+            typeKey = "Package";
+          }
 
           if (entity) {
             const mapped = mapItem(p, entity, p.referenceType);
-            responseData.topDeals[p.referenceType.toLowerCase()].push(mapped);
+            responseData.topDeals[typeKey].push(mapped);
           }
         } else if (["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"].includes(p.adsType)) {
           const locEntity = locations.find(l => l.id === p.locationId);
