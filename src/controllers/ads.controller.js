@@ -66,8 +66,9 @@ module.exports = {
 
   async getOutletAds(req, res) {
     try {
+      const { type } = req.query;
       const userId = req.user.id;
-      const result = await adsService.getOutletAds(userId);
+      const result = await adsService.getOutletAds(userId, type);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {

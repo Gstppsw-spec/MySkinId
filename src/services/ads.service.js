@@ -167,30 +167,56 @@ module.exports = {
       if (!activeType) throw new Error("Ads type or adsConfigId is required");
 
       const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0); // Last day of month
+      const endDate = new Date(year, month, 0, 23, 59, 59); // End of the last day of the month
 
+      // 1. Ambil semua configId yang memiliki kriteria yang sama (type, position, slideNumber)
+      // Ini memastikan kita memblokir semua iklan yang identik pengaturannya
+      const relatedConfigs = await AdsConfig.findAll({
+        where: {
+          type: activeType,
+          ...(activePosition !== undefined && activePosition !== null ? { position: activePosition } : {}),
+          ...(activeSlideNumber !== undefined && activeSlideNumber !== null ? { slideNumber: activeSlideNumber } : {}),
+        },
+        attributes: ["id"],
+        raw: true
+      });
+      const configIds = relatedConfigs.map(c => c.id);
+
+      // 2. Cari pembelian yang tumpang tindih
       const existingPurchases = await AdsPurchase.findAll({
         where: {
           adsType: activeType,
           status: { [Op.in]: ["PAID", "PENDING"] },
           [Op.and]: [
-            sequelize.literal(`
-              configId IN (SELECT id FROM adsConfig WHERE type = '${activeType}' 
-              ${activePosition ? `AND position = ${activePosition}` : ""} 
-              ${activeSlideNumber ? `AND slideNumber = ${activeSlideNumber}` : ""})
-            `)
-          ],
-          [Op.or]: [
-            { startDate: { [Op.between]: [startDate, endDate] } },
-            { endDate: { [Op.between]: [startDate, endDate] } },
-            { 
-              [Op.and]: [
-                { startDate: { [Op.lte]: startDate } },
-                { endDate: { [Op.gte]: endDate } }
-              ] 
+            // Cek ketersediaan berdasarkan configId ATAU kecocokan manual jika configId null
+            {
+              [Op.or]: [
+                { configId: { [Op.in]: configIds } },
+                {
+                  [Op.and]: [
+                    { configId: null },
+                    { adsType: activeType }
+                    // Jika data posisi ada di JSON, bisa ditambahkan filter JSON di sini
+                  ]
+                }
+              ]
+            },
+            // Logika rentang tanggal
+            {
+              [Op.or]: [
+                { startDate: { [Op.between]: [startDate, endDate] } },
+                { endDate: { [Op.between]: [startDate, endDate] } },
+                {
+                  [Op.and]: [
+                    { startDate: { [Op.lte]: startDate } },
+                    { endDate: { [Op.gte]: endDate } }
+                  ]
+                }
+              ]
             }
           ]
-        }
+        },
+        order: [["startDate", "ASC"]]
       });
 
       return { status: true, message: "Available days fetched", data: existingPurchases };
@@ -359,13 +385,18 @@ module.exports = {
   /**
    * Admin Company: List ads for their outlet
    */
-  async getOutletAds(adminId) {
+  async getOutletAds(adminId, type) {
     try {
       const transactionOrder = require("./transactionOrder");
       const locationIds = await transactionOrder._getAdminLocationIds(adminId);
       
+      const where = { locationId: { [Op.in]: locationIds } };
+      if (type) {
+        where.adsType = type;
+      }
+
       const data = await AdsPurchase.findAll({
-        where: { locationId: { [Op.in]: locationIds } },
+        where,
         include: [{ model: AdsConfig, as: "config" }],
         order: [["createdAt", "DESC"]]
       });

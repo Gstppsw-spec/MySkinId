@@ -215,6 +215,13 @@ module.exports = {
         }
       }
 
+      // === QUOTA CHECK & CONSUME ===
+      const quotaService = require("./quota.service");
+      const quotaResult = await quotaService.checkAndConsumeQuota(customerId);
+      if (!quotaResult.status) {
+        return quotaResult;
+      }
+
       const roomCode = `ROOM-${nanoid(8).toUpperCase()}`;
 
       // Default status is pending

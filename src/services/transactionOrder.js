@@ -29,6 +29,7 @@ const {
   AdsConfig,
   AdsPurchase,
   masterUser,
+  masterRole,
   sequelize,
 } = require("../models");
 const { nanoid } = require("nanoid");
@@ -49,9 +50,16 @@ const SERVICE_FEE = 4500;
 
 module.exports = {
   async _getAdminLocationIds(adminId) {
-    // 0. Check if SUPER_ADMIN
-    const user = await masterUser.findByPk(adminId);
-    if (user && user.roleId === "7a6e84ac-1e95-4bcd-a51e-94113988868c") {
+    const user = await masterUser.findByPk(adminId, {
+      include: [{ model: masterRole, as: "role" }],
+    });
+
+    if (!user) return [];
+
+    const roleCode = user.role?.roleCode;
+
+    // 0. Super Admin / Operational Admin -> ALL locations
+    if (roleCode === "SUPER_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
       const allLocations = await masterLocation.findAll({
         attributes: ["id"],
         raw: true,
@@ -59,18 +67,17 @@ module.exports = {
       return allLocations.map((loc) => loc.id);
     }
 
-    // 1. Check direct outlet assignment (OUTLET_ADMIN)
+    const locationIdSet = new Set();
+
+    // 1. Check direct outlet assignment
     const userLocations = await relationshipUserLocation.findAll({
       where: { userId: adminId, isactive: true },
       attributes: ["locationId"],
       raw: true,
     });
+    userLocations.forEach((ul) => locationIdSet.add(ul.locationId));
 
-    if (userLocations.length > 0) {
-      return userLocations.map((ul) => ul.locationId);
-    }
-
-    // 2. Check company assignment (COMPANY_ADMIN) fallback
+    // 2. Check company assignment
     const userCompanies = await relationshipUserCompany.findAll({
       where: { userId: adminId, isactive: true },
       attributes: ["companyId"],
@@ -84,10 +91,10 @@ module.exports = {
         attributes: ["id"],
         raw: true,
       });
-      return companyLocations.map((loc) => loc.id);
+      companyLocations.forEach((loc) => locationIdSet.add(loc.id));
     }
 
-    return [];
+    return Array.from(locationIdSet);
   },
 
   async _createXenditPayment(orderNumber, amount, customer, paymentMethodCode) {
@@ -1763,7 +1770,6 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
-
   async buyAdBalance(data, customerId) {
     const t = await sequelize.transaction();
     try {
@@ -1862,6 +1868,118 @@ module.exports = {
       return {
         status: true,
         message: "Topup initiated",
+        data: {
+          ...newOrder.toJSON(),
+          paymentDetails: gatewayPayment,
+        },
+      };
+    } catch (error) {
+      if (t && !t.finished) await t.rollback();
+      return { status: false, message: error.message };
+    }
+  },
+
+  async buyConsultationQuota(data, customerId) {
+    const t = await sequelize.transaction();
+    try {
+      const { quantity, paymentMethod } = data;
+
+      if (!quantity || isNaN(quantity) || parseInt(quantity) <= 0) {
+        throw new Error("Invalid quantity");
+      }
+      if (!paymentMethod) throw new Error("Payment method is required");
+
+      const customer = await masterCustomer.findByPk(customerId);
+      if (!customer) {
+        throw new Error("Akses ditolak. Hanya akun customer yang dapat membeli kuota.");
+      }
+
+      const quotaService = require("./quota.service");
+      const configResult = await quotaService.getQuotaConfig();
+      if (!configResult.status) throw new Error(configResult.message);
+
+      const pricePerQuota = parseFloat(configResult.data.quotaPrice);
+      const totalPrice = pricePerQuota * parseInt(quantity);
+
+      const newOrder = await order.create(
+        {
+          orderNumber: `ORD-QUOTA-${nanoid(10).toUpperCase()}`,
+          customerId: customerId,
+          totalAmount: totalPrice,
+          paymentStatus: "UNPAID",
+        },
+        { transaction: t },
+      );
+
+      const newTransaction = await transaction.create(
+        {
+          orderId: newOrder.id,
+          transactionNumber: `TRX-QUOTA-${nanoid(10).toUpperCase()}`,
+          locationId: null,
+          subTotal: totalPrice,
+          shippingFee: 0,
+          grandTotal: totalPrice,
+          orderStatus: "CREATED",
+        },
+        { transaction: t },
+      );
+
+      await transactionItem.create(
+        {
+          transactionId: newTransaction.id,
+          itemType: "CONSULTATION_QUOTA",
+          itemId: customerId,
+          itemName: `Consultation Quota (${quantity} pcs)`,
+          quantity: parseInt(quantity),
+          unitPrice: pricePerQuota,
+          totalPrice: totalPrice,
+          isShippingRequired: false,
+        },
+        { transaction: t },
+      );
+
+      // Create Native Payment
+      const methodRecord = await masterPaymentMethod.findOne({
+        where: { code: paymentMethod, isActive: true },
+        transaction: t,
+      });
+
+      if (!methodRecord)
+        throw new Error(`Payment method ${paymentMethod} not found`);
+
+      const gatewayPayment = await this._createXenditPayment(
+        newOrder.orderNumber,
+        totalPrice,
+        customer,
+        paymentMethod,
+      );
+
+      await orderPayment.create(
+        {
+          orderId: newOrder.id,
+          paymentMethod: paymentMethod,
+          amount: totalPrice,
+          paymentStatus: "PENDING",
+          referenceNumber: gatewayPayment.id,
+          gatewayResponse: gatewayPayment.rawPayload,
+          checkoutUrl: gatewayPayment.checkoutUrl || gatewayPayment.invoiceUrl,
+          instructions: Array.isArray(gatewayPayment.instructions)
+            ? gatewayPayment.instructions.join("\n")
+            : gatewayPayment.instructions,
+        },
+        { transaction: t },
+      );
+
+      await t.commit();
+      schedulePaymentTimeout(
+        newOrder.id,
+        newOrder.orderNumber,
+        this._expireOrder.bind(this),
+      );
+
+      return {
+        status: true,
+        message: "Quota purchase initiated",
         data: {
           ...newOrder.toJSON(),
           paymentDetails: gatewayPayment,
@@ -2199,41 +2317,49 @@ module.exports = {
             paymentChannel: _payment_channel,
           });
 
-          // Push notification: payment success
-          const firstTrxId = orderData.transactions.length > 0 ? orderData.transactions[0].id : null;
-          await pushNotificationService.sendPushNotification(
-            orderData.customerId,
-            "customer",
-            {
-              title: "Pembayaran Berhasil ✅",
-              body: `Pesanan ${orderData.orderNumber} telah berhasil dibayar.`,
-              data: {
-                type: "payment",
-                orderId: orderData.id,
-                trxId: firstTrxId || "",
-                orderNumber: orderData.orderNumber,
-              },
-            }
-          );
+          // 🔹 SKIP Notifications for Ads and Topups
+          const isAdsOrTopupOrQuota =
+            orderData.orderNumber.startsWith("ORD-ADS-") ||
+            orderData.orderNumber.startsWith("ORD-TOPUP-") ||
+            orderData.orderNumber.startsWith("ORD-QUOTA-");
 
-          // === SEND ADMIN NOTIFICATION ===
-          for (const trx of orderData.transactions) {
-            try {
-              const loc = await masterLocation.findByPk(trx.locationId);
-              if (loc && loc.companyId) {
-                await NotificationService.createNotification({
-                  companyId: loc.companyId,
-                  locationId: loc.id,
-                  title: "Transaksi Baru ✅",
-                  body: `Ada pesanan baru ${orderData.orderNumber} senilai ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(trx.grandTotal)} untuk outlet ${loc.name}.`,
-                  category: "Transaction",
-                  type: "TRANSACTION_SUCCESS",
-                  referenceId: trx.id,
-                  referenceType: "transaction",
-                });
+          if (!isAdsOrTopupOrQuota) {
+            // Push notification: payment success
+            const firstTrxId = orderData.transactions.length > 0 ? orderData.transactions[0].id : null;
+            await pushNotificationService.sendPushNotification(
+              orderData.customerId,
+              "customer",
+              {
+                title: "Pembayaran Berhasil ✅",
+                body: `Pesanan ${orderData.orderNumber} telah berhasil dibayar.`,
+                data: {
+                  type: "payment",
+                  orderId: orderData.id,
+                  trxId: firstTrxId || "",
+                  orderNumber: orderData.orderNumber,
+                },
               }
-            } catch (adminNotifErr) {
-              console.error("[TransactionOrder] Admin Notification Error:", adminNotifErr.message);
+            );
+
+            // === SEND ADMIN NOTIFICATION ===
+            for (const trx of orderData.transactions) {
+              try {
+                const loc = await masterLocation.findByPk(trx.locationId);
+                if (loc && loc.companyId) {
+                  await NotificationService.createNotification({
+                    companyId: loc.companyId,
+                    locationId: loc.id,
+                    title: "Transaksi Baru ✅",
+                    body: `Ada pesanan baru ${orderData.orderNumber} senilai ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(trx.grandTotal)} untuk outlet ${loc.name}.`,
+                    category: "Transaction",
+                    type: "TRANSACTION_SUCCESS",
+                    referenceId: trx.id,
+                    referenceType: "transaction",
+                  });
+                }
+              } catch (adminNotifErr) {
+                console.error("[TransactionOrder] Admin Notification Error:", adminNotifErr.message);
+              }
             }
           }
 
@@ -2303,6 +2429,41 @@ module.exports = {
                   "TOPUP",
                   orderData.id,
                 );
+              }
+
+              // Handle CONSULTATION_QUOTA
+              if (item.itemType === "CONSULTATION_QUOTA") {
+                const quotaService = require("./quota.service");
+                const configResult = await quotaService.getQuotaConfig();
+                
+                let bonus = 0;
+                if (configResult.status && configResult.data) {
+                  const { buyThreshold, bonusQuota } = configResult.data;
+                  if (buyThreshold > 0 && bonusQuota > 0) {
+                    bonus = Math.floor(item.quantity / buyThreshold) * bonusQuota;
+                  }
+                }
+
+                const totalToAdd = item.quantity + bonus;
+                
+                const { ConsultationQuota } = require("../models");
+                let userQuota = await ConsultationQuota.findOne({
+                  where: { customerId: orderData.customerId },
+                  transaction: t
+                });
+
+                if (!userQuota) {
+                  userQuota = await ConsultationQuota.create({
+                    customerId: orderData.customerId,
+                    purchasedBalance: totalToAdd,
+                  }, { transaction: t });
+                } else {
+                  await userQuota.update({
+                    purchasedBalance: userQuota.purchasedBalance + totalToAdd
+                  }, { transaction: t });
+                }
+                
+                console.log(`[QuotaActivator] Added ${totalToAdd} quota (incl. ${bonus} bonus) to customer ${orderData.customerId}`);
               }
 
               // 🔹 Flash Sale sold update

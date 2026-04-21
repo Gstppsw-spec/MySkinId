@@ -1,5 +1,7 @@
 const response = require("../helpers/response");
 const consultation = require("../services/masterConsultation");
+const quotaService = require("../services/quota.service");
+const transactionOrder = require("../services/transactionOrder");
 const { formatPagination } = require("../utils/pagination");
 
 module.exports = {
@@ -252,6 +254,36 @@ module.exports = {
     const { id } = req.params;
     const { sortBy } = req.query;
     const result = await consultation.getRecommendations(id, sortBy);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async getQuota(req, res) {
+    const customerId = req.user.id;
+    const result = await quotaService.getUserQuota(customerId);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async buyQuota(req, res) {
+    const customerId = req.user.id;
+    const result = await transactionOrder.buyConsultationQuota(req.body, customerId);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async getQuotaConfig(req, res) {
+    const result = await quotaService.getQuotaConfig();
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
+
+  async updateQuotaConfig(req, res) {
+    const result = await quotaService.updateQuotaConfig(req.body);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
