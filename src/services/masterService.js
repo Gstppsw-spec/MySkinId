@@ -388,9 +388,17 @@ module.exports = {
         };
       }
 
-      // Check for duplicates (including soft-deleted)
+      // Check for duplicates (including soft-deleted) in ANY of the requested locations
       const existing = await masterService.findOne({
         where: { name },
+        include: [
+          {
+            model: masterLocation,
+            as: "locations",
+            where: { id: { [Op.in]: locationIds } },
+            required: true,
+          },
+        ],
         paranoid: false,
       });
 
@@ -398,7 +406,7 @@ module.exports = {
         if (existing.deletedAt) {
           // Restore and reuse
           await existing.restore();
-          console.log(`[Service Create] Restored soft-deleted service with name: ${name}`);
+          console.log(`[Service Create] Restored soft-deleted service with name: ${name} in overlapping locations`);
 
           await existing.update({
             description,
@@ -505,6 +513,38 @@ module.exports = {
 
       const np = Number(price ?? service.price);
       const dp = Number(discountPercent ?? service.discountPercent);
+
+      // Duplicate check (scoped by locations)
+      const targetName = name || service.name;
+      const targetLocations = (locationIds && Array.isArray(locationIds))
+        ? locationIds
+        : (await service.getLocations({ attributes: ["id"] })).map((l) => l.id);
+
+      if (targetLocations.length > 0) {
+        const conflict = await masterService.findOne({
+          where: {
+            name: targetName,
+            id: { [Op.ne]: id },
+          },
+          include: [
+            {
+              model: masterLocation,
+              as: "locations",
+              where: { id: { [Op.in]: targetLocations } },
+              required: true,
+            },
+          ],
+          paranoid: false,
+        });
+
+        if (conflict) {
+          return {
+            status: false,
+            message: "Service with this name already exists in one or more selected locations",
+            data: null,
+          };
+        }
+      }
 
       // Update record
       await service.update({

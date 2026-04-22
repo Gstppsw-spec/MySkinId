@@ -245,9 +245,57 @@ module.exports = {
   /**
    * Customer: Get all active ads with fallback to default values
    */
-  async getActiveAds() {
+  async getActiveAds(userLat, userLng) {
     try {
       const now = new Date();
+
+      const distanceLiteral =
+        userLat && userLng
+          ? Sequelize.literal(`
+            6371 * acos(
+              cos(radians(${userLat})) *
+              cos(radians(CAST(\`locations\`.latitude AS FLOAT))) *
+              cos(radians(CAST(\`locations\`.longitude AS FLOAT)) - radians(${userLng})) +
+              sin(radians(${userLat})) *
+              sin(radians(CAST(\`locations\`.latitude AS FLOAT)))
+            )
+          `)
+          : null;
+
+      const directDistanceLiteral =
+        userLat && userLng
+          ? Sequelize.literal(`
+            6371 * acos(
+              cos(radians(${userLat})) *
+              cos(radians(CAST(\`masterLocation\`.latitude AS FLOAT))) *
+              cos(radians(CAST(\`masterLocation\`.longitude AS FLOAT)) - radians(${userLng})) +
+              sin(radians(${userLat})) *
+              sin(radians(CAST(\`masterLocation\`.latitude AS FLOAT)))
+            )
+          `)
+          : null;
+
+      const locAttributes = [
+        "id",
+        "name",
+        "latitude",
+        "longitude",
+        "cityId",
+        "districtId",
+        "biteshipAreaId",
+        ...(distanceLiteral ? [[distanceLiteral, "distance"]] : []),
+      ];
+
+      const directLocAttributes = [
+        "id",
+        "name",
+        "latitude",
+        "longitude",
+        "cityId",
+        "districtId",
+        "biteshipAreaId",
+        ...(directDistanceLiteral ? [[directDistanceLiteral, "distance"]] : []),
+      ];
 
       // 1. Fetch all active paid ads
       const activePurchases = await AdsPurchase.findAll({
@@ -287,7 +335,7 @@ module.exports = {
           where: { id: { [Op.in]: productIds } },
           include: [
             { model: masterProductImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
-            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } },
+            { model: masterLocation, as: "locations", attributes: locAttributes, through: { attributes: ["isActive"] } },
             { model: masterProductCategory, as: "categories", attributes: ["id", "name"], through: { attributes: [] } },
             { model: masterConsultationCategory, as: "consultationCategories", attributes: ["id", "name"], through: { attributes: [] } }
           ]
@@ -296,7 +344,7 @@ module.exports = {
         masterService.findAll({
           where: { id: { [Op.in]: serviceIds } },
           include: [
-            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } },
+            { model: masterLocation, as: "locations", attributes: locAttributes, through: { attributes: ["isActive"] } },
             { model: masterSubCategoryService, as: "categories", attributes: ["id", "name"], through: { attributes: [] } }
           ]
         }),
@@ -304,7 +352,7 @@ module.exports = {
         masterPackage.findAll({
           where: { id: { [Op.in]: packageIds } },
           include: [
-            { model: masterLocation, as: "locations", attributes: ["id", "name", "latitude", "longitude", "cityId", "districtId", "biteshipAreaId"], through: { attributes: ["isActive"] } },
+            { model: masterLocation, as: "locations", attributes: locAttributes, through: { attributes: ["isActive"] } },
             { 
               model: masterPackageItems, 
               as: "items", 
@@ -319,7 +367,8 @@ module.exports = {
             { model: masterLocationImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
             { model: masterCity, as: "cityDetail", attributes: ["name"] },
             { model: masterCompany, as: "company", attributes: ["id", "name"] }
-          ]
+          ],
+          attributes: directLocAttributes
         }),
         // Flash Sales
         (async () => {
@@ -479,11 +528,14 @@ module.exports = {
       if (responseData.premiumOutlets.length === 0) {
         const latestOutlets = await masterLocation.findAll({
           where: { isactive: true, isVerified: true },
+          attributes: directLocAttributes,
           include: [
             { model: masterLocationImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
             { model: masterCity, as: "cityDetail", attributes: ["name"] }
           ],
-          order: [["isPremium", "DESC"], ["createdAt", "DESC"]],
+          order: [
+            ...(directDistanceLiteral ? [[directDistanceLiteral, "ASC"]] : [["isPremium", "DESC"], ["createdAt", "DESC"]])
+          ],
           limit: 5
         });
 

@@ -351,6 +351,106 @@ module.exports = {
       }
 
       let code = data.code;
+
+      // 🔹 1. Check for Duplicate NAME in any of the requested locations
+      const existingName = await masterPackage.findOne({
+        where: { name: data.name },
+        include: [
+          {
+            model: masterLocation,
+            as: "locations",
+            where: { id: { [Op.in]: locationIds } },
+            required: true,
+          },
+        ],
+        paranoid: false,
+        transaction,
+      });
+
+      if (existingName) {
+        if (existingName.deletedAt) {
+          // Restore and reuse
+          await existingName.restore({ transaction });
+          console.log(`[Package Create] Restored soft-deleted package with name: ${data.name}`);
+
+          await existingName.update(
+            {
+              name: data.name,
+              description: data.description || existingName.description,
+              price: data.price ?? existingName.price,
+              discountPercent: data.discountPercent ?? existingName.discountPercent,
+              isActive: data.isActive ?? existingName.isActive,
+              isVerified: false,
+            },
+            { transaction },
+          );
+
+          // Re-create items
+          if (data.items && Array.isArray(data.items)) {
+            await require("../models").masterPackageItems.destroy({
+              where: { packageId: existingName.id },
+              transaction,
+            });
+            const itemRecords = data.items.map((it) => ({
+              serviceId: it.serviceId,
+              qty: it.qty || 1,
+              packageId: existingName.id,
+            }));
+            await require("../models").masterPackageItems.bulkCreate(itemRecords, { transaction });
+          }
+
+          await transaction.commit();
+
+          // Re-assign associations (outside transaction)
+          if (locationIds && Array.isArray(locationIds)) {
+            await existingName.setLocations(locationIds);
+          }
+          if (consultationCategoryIds && Array.isArray(consultationCategoryIds)) {
+            await existingName.setConsultationCategories(consultationCategoryIds);
+          }
+
+          return {
+            status: true,
+            message: "Package restored and updated successfully",
+            data: existingName,
+          };
+        }
+
+        await transaction.rollback();
+        return {
+          status: false,
+          message: "Package with this name already exists in one or more selected locations",
+          data: null,
+        };
+      }
+
+      // 🔹 2. Check for Duplicate CODE (if provided) in any of the requested locations
+      if (code) {
+        const existingCode = await masterPackage.findOne({
+          where: { code },
+          include: [
+            {
+              model: masterLocation,
+              as: "locations",
+              where: { id: { [Op.in]: locationIds } },
+              required: true,
+            },
+          ],
+          paranoid: false,
+          transaction,
+        });
+
+        if (existingCode) {
+          await transaction.rollback();
+          return {
+            status: false,
+            message: "CODE already exists in one or more selected locations",
+            data: null,
+          };
+        }
+      }
+
+      // Auto-generate code if not provided
       if (!code) {
         const lastPackage = await masterPackage.findOne({
           order: [["code", "DESC"]],
@@ -364,69 +464,6 @@ module.exports = {
         }
 
         code = `PKG-${String(lastNumber + 1).padStart(3, "0")}`;
-      } else {
-        const existing = await masterPackage.findOne({
-          where: { code },
-          transaction,
-          paranoid: false,
-        });
-
-        if (existing) {
-          if (existing.deletedAt) {
-            // Restore and reuse
-            await existing.restore({ transaction });
-            console.log(`[Package Create] Restored soft-deleted package with code: ${code}`);
-
-            await existing.update(
-              {
-                name: data.name,
-                description: data.description || existing.description,
-                price: data.price ?? existing.price,
-                discountPercent: data.discountPercent ?? existing.discountPercent,
-                isActive: data.isActive ?? existing.isActive,
-                isVerified: false,
-              },
-              { transaction }
-            );
-
-            // Re-create items
-            if (data.items && Array.isArray(data.items)) {
-              await masterPackageItems.destroy({
-                where: { packageId: existing.id },
-                transaction,
-              });
-              const itemRecords = data.items.map(it => ({
-                serviceId: it.serviceId,
-                qty: it.qty || 1,
-                packageId: existing.id
-              }));
-              await masterPackageItems.bulkCreate(itemRecords, { transaction });
-            }
-
-            await transaction.commit();
-
-            // Re-assign associations (outside transaction)
-            if (locationIds && Array.isArray(locationIds)) {
-              await existing.setLocations(locationIds);
-            }
-            if (consultationCategoryIds && Array.isArray(consultationCategoryIds)) {
-              await existing.setConsultationCategories(consultationCategoryIds);
-            }
-
-            return {
-              status: true,
-              message: "Package restored and updated successfully",
-              data: existing,
-            };
-          }
-
-          await transaction.rollback();
-          return {
-            status: false,
-            message: "CODE already exists",
-            data: null,
-          };
-        }
       }
 
       const newPackage = await masterPackage.create(
@@ -486,6 +523,71 @@ module.exports = {
           message: "Package not found",
           data: null,
         };
+      }
+
+      // 🔹 Duplicate Check (scoped by locations)
+      const targetName = data.name || pkg.name;
+      const targetCode = data.code || pkg.code;
+      const targetLocations = (data.locationIds && Array.isArray(data.locationIds))
+        ? data.locationIds
+        : (await pkg.getLocations({ attributes: ["id"], transaction })).map((l) => l.id);
+
+      if (targetLocations.length > 0) {
+        // 1. Name Check
+        const conflictName = await require("../models").masterPackage.findOne({
+          where: {
+            name: targetName,
+            id: { [Op.ne]: id },
+          },
+          include: [
+            {
+              model: require("../models").masterLocation,
+              as: "locations",
+              where: { id: { [Op.in]: targetLocations } },
+              required: true,
+            },
+          ],
+          paranoid: false,
+          transaction,
+        });
+
+        if (conflictName) {
+          await transaction.rollback();
+          return {
+            status: false,
+            message: "Package with this name already exists in one or more selected locations",
+            data: null,
+          };
+        }
+
+        // 2. Code Check
+        if (targetCode) {
+          const conflictCode = await require("../models").masterPackage.findOne({
+            where: {
+              code: targetCode,
+              id: { [Op.ne]: id },
+            },
+            include: [
+              {
+                model: require("../models").masterLocation,
+                as: "locations",
+                where: { id: { [Op.in]: targetLocations } },
+                required: true,
+              },
+            ],
+            paranoid: false,
+            transaction,
+          });
+
+          if (conflictCode) {
+            await transaction.rollback();
+            return {
+              status: false,
+              message: "CODE already exists in one or more selected locations",
+              data: null,
+            };
+          }
+        }
       }
 
       if (pkg.isVerified) {

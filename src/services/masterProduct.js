@@ -470,6 +470,66 @@ module.exports = {
       }
 
       let sku = data.sku;
+
+      // 🔹 1. Check for Duplicate NAME in any of the requested locations
+      const existingName = await masterProduct.findOne({
+        where: { name: data.name },
+        include: [
+          {
+            model: masterLocation,
+            as: "locations",
+            where: { id: { [Op.in]: locationIds } },
+            required: true,
+          },
+        ],
+        paranoid: false,
+      });
+
+      if (existingName) {
+        if (existingName.deletedAt) {
+          // Restore and reuse
+          await existingName.restore();
+          console.log(`[Product Create] Restored soft-deleted product with name: ${data.name}`);
+          const updateProps = {
+            name: data.name,
+            description: data.description || existingName.description,
+            price: data.price ? Number(data.price) : existingName.price,
+            discountPercent: data.discountPercent !== undefined ? Number(data.discountPercent) : existingName.discountPercent,
+            isVerified: false,
+          };
+          await existingName.update(updateProps);
+          await existingName.setLocations(locationIds);
+          if (categoryIds && Array.isArray(categoryIds)) await existingName.setCategories(categoryIds);
+          
+          return {
+            status: true,
+            message: "Product restored and updated successfully",
+            data: existingName,
+          };
+        }
+        return { status: false, message: "Product with this name already exists in one or more selected locations", data: null };
+      }
+
+      // 🔹 2. Check for Duplicate SKU (if provided) in any of the requested locations
+      if (sku) {
+        const existingSku = await masterProduct.findOne({
+          where: { sku },
+          include: [
+            {
+              model: masterLocation,
+              as: "locations",
+              where: { id: { [Op.in]: locationIds } },
+              required: true,
+            },
+          ],
+          paranoid: false,
+        });
+        if (existingSku) {
+          return { status: false, message: "SKU already exists in one or more selected locations", data: null };
+        }
+      }
+
+      // Auto-generate SKU if not provided
       if (!sku) {
         const lastProduct = await masterProduct.findOne({
           order: [["sku", "DESC"]],
@@ -477,52 +537,12 @@ module.exports = {
         });
 
         let lastNumber = 0;
-
         if (lastProduct?.sku) {
           lastNumber = parseInt(lastProduct.sku.replace("PRD-", ""), 10) || 0;
         }
 
         const newNumber = lastNumber + 1;
         sku = `PRD-${String(newNumber).padStart(3, "0")}`;
-      } else {
-        const existing = await masterProduct.findOne({
-          where: { sku },
-          paranoid: false,
-        });
-        if (existing) {
-          if (existing.deletedAt) {
-            // Restore and reuse
-            await existing.restore();
-            console.log(`[Product Create] Restored soft-deleted product with SKU: ${sku}`);
-
-            // Redirect to update logic (or just update here)
-            // For now, we update it in place since we're in the create flow
-            const updateProps = {
-              name: data.name,
-              description: data.description || existing.description,
-              isAvailable: data.isAvailable ?? existing.isAvailable,
-              price: data.price ? Number(data.price) : existing.price,
-              discountPercent: data.discountPercent !== undefined ? Number(data.discountPercent) : existing.discountPercent,
-              isVerified: false, // Reset verification on significant recreation?
-            };
-            await existing.update(updateProps);
-
-            // Re-assign associations (locations, categories, etc.)
-            if (locationIds && Array.isArray(locationIds)) {
-              await existing.setLocations(locationIds);
-            }
-            if (categoryIds && Array.isArray(categoryIds)) {
-              await existing.setCategories(categoryIds);
-            }
-
-            return {
-              status: true,
-              message: "Product restored and updated successfully",
-              data: existing,
-            };
-          }
-          return { status: false, message: "SKU already exists", data: null };
-        }
       }
 
       const newProduct = await masterProduct.create({
@@ -592,6 +612,59 @@ module.exports = {
       const product = await masterProduct.findByPk(id);
       if (!product) {
         return { status: false, message: "Product not found", data: null };
+      }
+
+      // 🔹 Duplicate Check (scoped by locations)
+      const targetName = data.name || product.name;
+      const targetSku = data.sku || product.sku;
+      const targetLocations = (data.locationIds && Array.isArray(data.locationIds))
+        ? data.locationIds
+        : (await product.getLocations({ attributes: ["id"] })).map((l) => l.id);
+
+      if (targetLocations.length > 0) {
+        // 1. Name Check
+        const conflictName = await masterProduct.findOne({
+          where: { name: targetName, id: { [Op.ne]: id } },
+          include: [
+            {
+              model: masterLocation,
+              as: "locations",
+              where: { id: { [Op.in]: targetLocations } },
+              required: true,
+            },
+          ],
+          paranoid: false,
+        });
+        if (conflictName) {
+          return {
+            status: false,
+            message: "Product with this name already exists in one or more selected locations",
+            data: null,
+          };
+        }
+
+        // 2. SKU Check
+        if (targetSku) {
+          const conflictSku = await masterProduct.findOne({
+            where: { sku: targetSku, id: { [Op.ne]: id } },
+            include: [
+              {
+                model: masterLocation,
+                as: "locations",
+                where: { id: { [Op.in]: targetLocations } },
+                required: true,
+              },
+            ],
+            paranoid: false,
+          });
+          if (conflictSku) {
+            return {
+              status: false,
+              message: "SKU already exists in one or more selected locations",
+              data: null,
+            };
+          }
+        }
       }
 
       if (product.isVerified) {

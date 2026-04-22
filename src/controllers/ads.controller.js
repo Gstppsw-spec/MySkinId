@@ -21,7 +21,8 @@ module.exports = {
   // --- CUSTOMER ---
   async getAds(req, res) {
     try {
-      const result = await adsService.getActiveAds();
+      const { latt, long } = req.query;
+      const result = await adsService.getActiveAds(latt, long);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
@@ -220,7 +221,7 @@ module.exports = {
       return response.success(res, result.message, result.data);
     } catch (error) {
       return response.serverError(res, error);
-    },
+    }
   },
   
   async deleteAds(req, res) {
