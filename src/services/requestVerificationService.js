@@ -158,6 +158,18 @@ class RequestVerificationService {
                 required: false,
               },
               {
+                model: require("../models").masterGroupProduct,
+                as: "groupProduct",
+                through: { attributes: [] },
+                required: false,
+              },
+              {
+                model: require("../models").masterConsultationCategory,
+                as: "consultationCategories",
+                through: { attributes: [] },
+                required: false,
+              },
+              {
                 model: masterLocation,
                 as: "locations", // ⬅️ sesuai belongsToMany
                 through: { attributes: [] }, // hide pivot
@@ -279,6 +291,8 @@ class RequestVerificationService {
             ...(nameFilter && { where: nameFilter, required: false }),
             include: [
               { model: require("../models").masterProductCategory, as: "categories", through: { attributes: [] }, required: false },
+              { model: require("../models").masterGroupProduct, as: "groupProduct", through: { attributes: [] }, required: false },
+              { model: require("../models").masterConsultationCategory, as: "consultationCategories", through: { attributes: [] }, required: false },
               { model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }
             ]
           },
@@ -387,14 +401,125 @@ class RequestVerificationService {
 
   async detail(id) {
     try {
-      const request = await requestVerification.findByPk(id);
+      const basicRequest = await requestVerification.findByPk(id);
 
-      if (!request)
+      if (!basicRequest)
         return {
           status: false,
           message: "Belum ada request ditemukan",
           data: null,
         };
+
+      const type = basicRequest.refferenceType;
+      let include = [];
+
+      if (type === "product") {
+        include.push({
+          model: require("../models").masterProduct,
+          as: "product",
+          include: [
+            {
+              model: require("../models").masterProductCategory,
+              as: "categories",
+              through: { attributes: [] },
+              required: false,
+            },
+            {
+              model: require("../models").masterGroupProduct,
+              as: "groupProduct",
+              through: { attributes: [] },
+              required: false,
+            },
+            {
+              model: require("../models").masterConsultationCategory,
+              as: "consultationCategories",
+              through: { attributes: [] },
+              required: false,
+            },
+            {
+              model: masterLocation,
+              as: "locations",
+              through: { attributes: [] },
+              attributes: ["id", "name", "isVerified", "companyId"],
+              required: false,
+            },
+          ],
+        });
+      } else if (type === "service") {
+        include.push({
+          model: require("../models").masterService,
+          as: "service",
+          include: [
+            {
+              model: require("../models").masterSubCategoryService,
+              as: "categories",
+              through: { attributes: [] },
+              required: false,
+            },
+            {
+              model: masterLocation,
+              as: "locations",
+              through: { attributes: [] },
+              attributes: ["id", "name", "isVerified", "companyId"],
+              required: false,
+            },
+          ],
+        });
+      } else if (type === "package") {
+        include.push({
+          model: require("../models").masterPackage,
+          as: "package",
+          include: [
+            {
+              model: require("../models").masterConsultationCategory,
+              as: "consultationCategories",
+              through: { attributes: [] },
+              required: false,
+            },
+            {
+              model: require("../models").masterPackageItems,
+              as: "items",
+              include: [
+                {
+                  model: masterService,
+                  as: "service",
+                  include: {
+                    model: require("../models").masterSubCategoryService,
+                    as: "categories",
+                    through: { attributes: [] },
+                  },
+                },
+              ],
+            },
+            {
+              model: masterLocation,
+              as: "locations",
+              through: { attributes: [] },
+              attributes: ["id", "name", "isVerified", "companyId"],
+              required: false,
+            },
+          ],
+        });
+      } else if (type === "location") {
+        include.push({
+          model: masterLocation,
+          as: "location",
+          include: [
+            {
+              model: masterCompany,
+              as: "company",
+              attributes: ["id", "name", "isVerified"],
+            },
+          ],
+        });
+      } else if (type === "company") {
+        include.push({
+          model: masterCompany,
+          as: "company",
+        });
+      }
+
+      const request = await requestVerification.findByPk(id, { include });
 
       return { status: true, message: "Request ditemukan", data: request };
     } catch (error) {

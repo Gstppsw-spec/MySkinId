@@ -37,6 +37,7 @@ const googlePlacesRoute = require("./routes/master/googlePlaces.route");
 const adsRoute = require("./routes/ads.route");
 const pushTokenRoute = require("./routes/master/pushToken.route");
 const notificationRoute = require("./routes/notification.route");
+const voucherRoute = require("./routes/voucher.route");
 
 // Cron jobs
 const initGoogleRatingCron = require("./cron/googleRatingCron");
@@ -110,6 +111,7 @@ app.use("/api/v2/ads", adsRoute);
 app.use("/api/v2/push-token", pushTokenRoute);
 app.use("/api/v2/notification", notificationRoute);
 app.use("/api/v2/notifications", notificationRoute);
+app.use("/api/v2/voucher", voucherRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);

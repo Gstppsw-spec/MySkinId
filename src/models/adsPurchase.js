@@ -16,6 +16,28 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "configId",
         as: "config",
       });
+
+      // Polymorphic relationships for referenceId
+      AdsPurchase.belongsTo(models.masterProduct, {
+        foreignKey: "referenceId",
+        as: "product",
+        constraints: false,
+      });
+      AdsPurchase.belongsTo(models.masterService, {
+        foreignKey: "referenceId",
+        as: "service",
+        constraints: false,
+      });
+      AdsPurchase.belongsTo(models.masterPackage, {
+        foreignKey: "referenceId",
+        as: "package",
+        constraints: false,
+      });
+      AdsPurchase.belongsTo(models.masterLocation, {
+        foreignKey: "referenceId",
+        as: "referenceLocation",
+        constraints: false,
+      });
     }
   }
 

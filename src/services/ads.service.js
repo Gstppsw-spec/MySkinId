@@ -508,12 +508,28 @@ module.exports = {
   /**
    * Admin Company: List ads for their outlet
    */
-  async getOutletAds(adminId, type) {
+  async getOutletAds(adminId, { type, name, locationId } = {}) {
     try {
       const transactionOrder = require("./transactionOrder");
       const locationIds = await transactionOrder._getAdminLocationIds(adminId);
       
-      const where = { locationId: { [Op.in]: locationIds } };
+      const where = {};
+      
+      // Filter by permitted locations
+      if (locationId) {
+        const requestedIds = Array.isArray(locationId) ? locationId : [locationId];
+        const validIds = requestedIds.filter((id) => locationIds.includes(id));
+
+        if (validIds.length > 0) {
+          where.locationId = { [Op.in]: validIds };
+        } else {
+          // If trying to access unowned location, force no results
+          where.locationId = "00000000-0000-0000-0000-000000000000";
+        }
+      } else {
+        where.locationId = { [Op.in]: locationIds };
+      }
+
       if (type) {
         if (type === "PREMIUM_OUTLET") {
           where.adsType = { [Op.in]: ["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"] };
@@ -522,14 +538,34 @@ module.exports = {
         }
       }
 
+      if (name) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({
+          [Op.or]: [
+            { "$product.name$": { [Op.like]: `%${name}%` } },
+            { "$service.name$": { [Op.like]: `%${name}%` } },
+            { "$package.name$": { [Op.like]: `%${name}%` } },
+            { "$referenceLocation.name$": { [Op.like]: `%${name}%` } }
+          ]
+        });
+      }
+
       const data = await AdsPurchase.findAll({
         where,
-        include: [{ model: AdsConfig, as: "config" }],
-        order: [["createdAt", "DESC"]]
+        include: [
+          { model: AdsConfig, as: "config" },
+          { model: require("../models").masterProduct, as: "product", required: false },
+          { model: require("../models").masterService, as: "service", required: false },
+          { model: require("../models").masterPackage, as: "package", required: false },
+          { model: require("../models").masterLocation, as: "referenceLocation", required: false }
+        ],
+        order: [["createdAt", "DESC"]],
+        subQuery: false
       });
 
       return { status: true, message: "Outlet ads fetched", data };
     } catch (error) {
+      console.error("getOutletAds Error:", error);
       return { status: false, message: error.message };
     }
   },
@@ -681,6 +717,22 @@ module.exports = {
 
       return { status: true, message: "Ad activated" };
     } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async deleteAds(id) {
+    try {
+      const ad = await AdsPurchase.findByPk(id);
+      if (!ad) {
+        return { status: false, message: "Advertisement not found" };
+      }
+
+      await ad.destroy();
+
+      return { status: true, message: "Advertisement deleted successfully" };
+    } catch (error) {
+      console.error("deleteAds Error:", error);
       return { status: false, message: error.message };
     }
   }

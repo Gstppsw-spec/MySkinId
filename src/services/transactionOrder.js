@@ -45,6 +45,7 @@ const PDFDocument = require("pdfkit");
 const pushNotificationService = require("./pushNotification.service");
 const NotificationService = require("./notification.service");
 const xenditPlatformService = require("./xenditPlatform.service");
+const voucherService = require("./voucher.service");
 
 const SERVICE_FEE = 4500;
 
@@ -388,7 +389,7 @@ module.exports = {
   async checkoutFromCart(data, customerId) {
     const t = await sequelize.transaction();
     try {
-      const { paymentMethod, shippingOptions } = data;
+      const { paymentMethod, shippingOptions, voucherCode } = data;
 
       const selectedCartItems = await customerCart.findAll({
         where: { customerId, isSelected: true },
@@ -719,6 +720,34 @@ module.exports = {
 
       totalOrderAmount += SERVICE_FEE;
 
+      // 🔹 Voucher Discount Logic
+      let voucherDiscountAmount = 0;
+      let appliedVoucherCode = null;
+      if (voucherCode) {
+        // Build flat cart items array for validation
+        const allCartItems = [];
+        for (const locId in itemsByLocation) {
+          for (const item of itemsByLocation[locId]) {
+            allCartItems.push(item);
+          }
+        }
+
+        const voucherValidation = await voucherService.validateVoucher(
+          voucherCode,
+          customerId,
+          allCartItems
+        );
+
+        if (!voucherValidation.status) {
+          throw new Error(`Voucher error: ${voucherValidation.message}`);
+        }
+
+        voucherDiscountAmount = voucherValidation.data.discountAmount;
+        appliedVoucherCode = voucherCode.toUpperCase();
+        totalOrderAmount -= voucherDiscountAmount;
+        if (totalOrderAmount < 0) totalOrderAmount = 0;
+      }
+
       const newOrder = await order.create(
         {
           orderNumber: `ORD-${nanoid(10).toUpperCase()}`,
@@ -728,6 +757,20 @@ module.exports = {
         },
         { transaction: t },
       );
+
+      // 🔹 Apply voucher usage (record it, increment usedCount)
+      if (appliedVoucherCode && voucherDiscountAmount > 0) {
+        const applyResult = await voucherService.applyVoucher(
+          appliedVoucherCode,
+          customerId,
+          newOrder.id,
+          voucherDiscountAmount,
+          t
+        );
+        if (!applyResult.status) {
+          throw new Error(`Failed to apply voucher: ${applyResult.message}`);
+        }
+      }
 
       for (const locationId in itemsByLocation) {
         const items = itemsByLocation[locationId];
@@ -909,7 +952,7 @@ module.exports = {
   async directCheckout(data, customerId) {
     const t = await sequelize.transaction();
     try {
-      const { items, paymentMethod, shippingOptions } = data;
+      const { items, paymentMethod, shippingOptions, voucherCode } = data;
 
       if (!items || items.length === 0) {
         throw new Error("No items provided for checkout");
@@ -1231,6 +1274,33 @@ module.exports = {
 
       totalOrderAmount += SERVICE_FEE;
 
+      // 🔹 Voucher Discount Logic
+      let voucherDiscountAmount = 0;
+      let appliedVoucherCode = null;
+      if (voucherCode) {
+        const allCartItems = [];
+        for (const locId in itemsByLocation) {
+          for (const item of itemsByLocation[locId]) {
+            allCartItems.push(item);
+          }
+        }
+
+        const voucherValidation = await voucherService.validateVoucher(
+          voucherCode,
+          customerId,
+          allCartItems
+        );
+
+        if (!voucherValidation.status) {
+          throw new Error(`Voucher error: ${voucherValidation.message}`);
+        }
+
+        voucherDiscountAmount = voucherValidation.data.discountAmount;
+        appliedVoucherCode = voucherCode.toUpperCase();
+        totalOrderAmount -= voucherDiscountAmount;
+        if (totalOrderAmount < 0) totalOrderAmount = 0;
+      }
+
       const newOrder = await order.create(
         {
           orderNumber: `ORD-${nanoid(10).toUpperCase()}`,
@@ -1240,6 +1310,20 @@ module.exports = {
         },
         { transaction: t },
       );
+
+      // 🔹 Apply voucher usage
+      if (appliedVoucherCode && voucherDiscountAmount > 0) {
+        const applyResult = await voucherService.applyVoucher(
+          appliedVoucherCode,
+          customerId,
+          newOrder.id,
+          voucherDiscountAmount,
+          t
+        );
+        if (!applyResult.status) {
+          throw new Error(`Failed to apply voucher: ${applyResult.message}`);
+        }
+      }
 
       for (const locationId in itemsByLocation) {
         const items = itemsByLocation[locationId];
@@ -2475,6 +2559,13 @@ module.exports = {
                 );
               }
             }
+          }
+
+          // 🔹 Credit voucher subsidy to mitra's ads balance
+          try {
+            await voucherService.creditVoucherSubsidy(orderData.id);
+          } catch (voucherSubsidyErr) {
+            console.error("[XenditCallback] Voucher subsidy error:", voucherSubsidyErr.message);
           }
         }
       } else if (_status === "EXPIRED" || _status === "FAILED") {

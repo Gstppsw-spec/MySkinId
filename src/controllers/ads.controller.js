@@ -81,9 +81,9 @@ module.exports = {
 
   async getOutletAds(req, res) {
     try {
-      const { type } = req.query;
+      const { type, name, locationId } = req.query;
       const userId = req.user.id;
-      const result = await adsService.getOutletAds(userId, type);
+      const result = await adsService.getOutletAds(userId, { type, name, locationId });
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
@@ -216,6 +216,17 @@ module.exports = {
         return response.error(res, "ids (array) is required");
       }
       const result = await adsService.deleteConfig(ids);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    },
+  },
+  
+  async deleteAds(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await adsService.deleteAds(id);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
