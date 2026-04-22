@@ -1573,6 +1573,7 @@ module.exports = {
           totalPrice,
           null,
           `Purchase Ads ${config.type} for ${location.name}`,
+          t
         );
 
         if (spendResult.status) {

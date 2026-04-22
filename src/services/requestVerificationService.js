@@ -152,6 +152,12 @@ class RequestVerificationService {
             ...(nameFilter && { where: nameFilter, required: true }),
             include: [
               {
+                model: require("../models").masterProductCategory,
+                as: "categories",
+                through: { attributes: [] },
+                required: false,
+              },
+              {
                 model: masterLocation,
                 as: "locations", // ⬅️ sesuai belongsToMany
                 through: { attributes: [] }, // hide pivot
@@ -169,6 +175,12 @@ class RequestVerificationService {
             ...(nameFilter && { where: nameFilter, required: true }),
             include: [
               {
+                model: require("../models").masterSubCategoryService,
+                as: "categories",
+                through: { attributes: [] },
+                required: false,
+              },
+              {
                 model: masterLocation,
                 as: "locations",
                 through: { attributes: [] },
@@ -185,6 +197,29 @@ class RequestVerificationService {
             as: "package",
             ...(nameFilter && { where: nameFilter, required: true }),
             include: [
+              {
+                model: require("../models").masterConsultationCategory,
+                as: "consultationCategories",
+                through: { attributes: [] },
+                required: false,
+              },
+              {
+                model: require("../models").masterPackageItems,
+                as: "items",
+                include: [
+                  {
+                    model: masterService,
+                    as: "service",
+                    attributes: ["id", "name"],
+                    include: {
+                      model: require("../models").masterSubCategoryService,
+                      as: "categories",
+                      through: { attributes: [] },
+                      attributes: ["id", "name"],
+                    },
+                  },
+                ],
+              },
               {
                 model: masterLocation,
                 as: "locations",
@@ -242,19 +277,43 @@ class RequestVerificationService {
             model: masterProduct,
             as: "product",
             ...(nameFilter && { where: nameFilter, required: false }),
-            include: [{ model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }]
+            include: [
+              { model: require("../models").masterProductCategory, as: "categories", through: { attributes: [] }, required: false },
+              { model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }
+            ]
           },
           {
             model: masterService,
             as: "service",
             ...(nameFilter && { where: nameFilter, required: false }),
-            include: [{ model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }]
+            include: [
+              { model: require("../models").masterSubCategoryService, as: "categories", through: { attributes: [] }, required: false },
+              { model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }
+            ]
           },
           {
             model: masterPackage,
             as: "package",
             ...(nameFilter && { where: nameFilter, required: false }),
-            include: [{ model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }]
+            include: [
+              { model: require("../models").masterConsultationCategory, as: "consultationCategories", through: { attributes: [] }, required: false },
+              {
+                model: require("../models").masterPackageItems,
+                as: "items",
+                include: [
+                  {
+                    model: masterService,
+                    as: "service",
+                    include: {
+                      model: require("../models").masterSubCategoryService,
+                      as: "categories",
+                      through: { attributes: [] }
+                    },
+                  },
+                ],
+              },
+              { model: masterLocation, as: "locations", through: { attributes: [] }, attributes: ["id", "companyId"], required: false }
+            ]
           },
         ];
 

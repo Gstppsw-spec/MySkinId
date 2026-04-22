@@ -33,8 +33,8 @@ module.exports = {
   /**
    * Spend balance for an ad purchase
    */
-  async spendBalance(companyId, amount, referenceId, description) {
-    const t = await sequelize.transaction();
+  async spendBalance(companyId, amount, referenceId, description, externalTransaction = null) {
+    const t = externalTransaction || (await sequelize.transaction());
     try {
       const balanceRecord = await CompanyAdsBalance.findOne({
         where: { companyId },
@@ -57,10 +57,10 @@ module.exports = {
         description
       }, { transaction: t });
 
-      await t.commit();
+      if (!externalTransaction) await t.commit();
       return { status: true, message: "Balance deducted successfully", data: balanceRecord };
     } catch (error) {
-      if (t) await t.rollback();
+      if (!externalTransaction && t) await t.rollback();
       return { status: false, message: error.message };
     }
   },

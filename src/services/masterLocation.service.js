@@ -965,7 +965,7 @@ class MasterLocationService {
       } else if (sortBy === "recommendation") {
         // Already sorted by premium/date in DB, but re-confirming here
         result.sort((a, b) => {
-          if (a.isPremium !== b.isPremium) return b.isPremium ? -1 : 1;
+          if (a.isPremium !== b.isPremium) return a.isPremium ? -1 : 1;
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
       }
