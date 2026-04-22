@@ -517,13 +517,23 @@ module.exports = {
       // Normalize array inputs
       const locIds = locationIds || data["locationIds[]"];
 
+      // Get current locations to compare
+      const currentLocIds = (await service.getLocations({ attributes: ["id"] })).map((l) => l.id);
+
+      // Determine what actually changed
+      const nameChanged = name && name !== service.name;
+      const locationsChanged =
+        locIds &&
+        Array.isArray(locIds) &&
+        (locIds.length !== currentLocIds.length ||
+          !locIds.every((id) => currentLocIds.includes(id)));
+
       // Duplicate check (scoped by locations)
-      // Only check if name or locations are being changed
-      if (name || (locIds && Array.isArray(locIds))) {
+      // Only check if name or locations are being changed to something NEW
+      if (nameChanged || locationsChanged) {
         const targetName = name || service.name;
-        const targetLocations = (locIds && Array.isArray(locIds))
-          ? locIds
-          : (await service.getLocations({ attributes: ["id"] })).map((l) => l.id);
+        const targetLocations =
+          locIds && Array.isArray(locIds) ? locIds : currentLocIds;
 
         if (targetLocations.length > 0) {
           const conflict = await masterService.findOne({

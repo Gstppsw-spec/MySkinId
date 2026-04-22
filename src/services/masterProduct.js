@@ -618,18 +618,29 @@ module.exports = {
       const locationIds = data.locationIds || data["locationIds[]"];
       const sku = data.sku;
 
+      // 1. Get current locations to compare
+      const currentLocIds = (await product.getLocations({ attributes: ["id"] })).map((l) => l.id);
+
+      // 2. Determine what actually changed
+      const nameChanged = data.name && data.name !== product.name;
+      const skuChanged = sku && sku !== product.sku;
+      const locationsChanged =
+        locationIds &&
+        Array.isArray(locationIds) &&
+        (locationIds.length !== currentLocIds.length ||
+          !locationIds.every((id) => currentLocIds.includes(id)));
+
       // 🔹 Duplicate Check (scoped by locations)
-      // Only check if name, sku, or locations are being changed
-      if (data.name || sku || (locationIds && Array.isArray(locationIds))) {
+      // Only check if name, sku, or locations are being changed to something NEW
+      if (nameChanged || skuChanged || locationsChanged) {
         const targetName = data.name || product.name;
         const targetSku = sku || product.sku;
-        const targetLocations = (locationIds && Array.isArray(locationIds))
-          ? locationIds
-          : (await product.getLocations({ attributes: ["id"] })).map((l) => l.id);
+        const targetLocations =
+          locationIds && Array.isArray(locationIds) ? locationIds : currentLocIds;
 
         if (targetLocations.length > 0) {
-          // 1. Name Check (Only if name or locations changed)
-          if (data.name || (locationIds && Array.isArray(locationIds))) {
+          // 1. Name Check (Only if name changed or locations changed)
+          if (nameChanged || locationsChanged) {
             const conflictName = await masterProduct.findOne({
               where: { name: targetName, id: { [Op.ne]: id } },
               include: [
@@ -651,8 +662,8 @@ module.exports = {
             }
           }
 
-          // 2. SKU Check (Only if sku or locations changed)
-          if (sku || (locationIds && Array.isArray(locationIds))) {
+          // 2. SKU Check (Only if sku changed or locations changed)
+          if (skuChanged || locationsChanged) {
             const conflictSku = await masterProduct.findOne({
               where: { sku: targetSku, id: { [Op.ne]: id } },
               include: [

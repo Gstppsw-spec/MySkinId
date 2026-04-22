@@ -529,18 +529,29 @@ module.exports = {
       const locationIds = data.locationIds || data["locationIds[]"];
       const code = data.code;
 
+      // 1. Get current locations to compare
+      const currentLocIds = (await pkg.getLocations({ attributes: ["id"], transaction })).map((l) => l.id);
+
+      // 2. Determine what actually changed
+      const nameChanged = data.name && data.name !== pkg.name;
+      const codeChanged = code && code !== pkg.code;
+      const locationsChanged =
+        locationIds &&
+        Array.isArray(locationIds) &&
+        (locationIds.length !== currentLocIds.length ||
+          !locationIds.every((id) => currentLocIds.includes(id)));
+
       // 🔹 Duplicate Check (scoped by locations)
-      // Only check if name, code, or locations are being changed
-      if (data.name || code || (locationIds && Array.isArray(locationIds))) {
+      // Only check if name, code, or locations are being changed to something NEW
+      if (nameChanged || codeChanged || locationsChanged) {
         const targetName = data.name || pkg.name;
         const targetCode = code || pkg.code;
-        const targetLocations = (locationIds && Array.isArray(locationIds))
-          ? locationIds
-          : (await pkg.getLocations({ attributes: ["id"], transaction })).map((l) => l.id);
+        const targetLocations =
+          locationIds && Array.isArray(locationIds) ? locationIds : currentLocIds;
 
         if (targetLocations.length > 0) {
-          // 1. Name Check (Only if name or locations changed)
-          if (data.name || (locationIds && Array.isArray(locationIds))) {
+          // 1. Name Check (Only if name changed or locations changed)
+          if (nameChanged || locationsChanged) {
             const conflictName = await require("../models").masterPackage.findOne({
               where: {
                 name: targetName,
@@ -568,8 +579,8 @@ module.exports = {
             }
           }
 
-          // 2. Code Check (Only if code or locations changed)
-          if (code || (locationIds && Array.isArray(locationIds))) {
+          // 2. Code Check (Only if code changed or locations changed)
+          if (codeChanged || locationsChanged) {
             const conflictCode = await require("../models").masterPackage.findOne({
               where: {
                 code: targetCode,
