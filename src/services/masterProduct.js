@@ -614,55 +614,64 @@ module.exports = {
         return { status: false, message: "Product not found", data: null };
       }
 
+      // Normalize array inputs
+      const locationIds = data.locationIds || data["locationIds[]"];
+      const sku = data.sku;
+
       // 🔹 Duplicate Check (scoped by locations)
-      const targetName = data.name || product.name;
-      const targetSku = data.sku || product.sku;
-      const targetLocations = (data.locationIds && Array.isArray(data.locationIds))
-        ? data.locationIds
-        : (await product.getLocations({ attributes: ["id"] })).map((l) => l.id);
+      // Only check if name, sku, or locations are being changed
+      if (data.name || sku || (locationIds && Array.isArray(locationIds))) {
+        const targetName = data.name || product.name;
+        const targetSku = sku || product.sku;
+        const targetLocations = (locationIds && Array.isArray(locationIds))
+          ? locationIds
+          : (await product.getLocations({ attributes: ["id"] })).map((l) => l.id);
 
-      if (targetLocations.length > 0) {
-        // 1. Name Check
-        const conflictName = await masterProduct.findOne({
-          where: { name: targetName, id: { [Op.ne]: id } },
-          include: [
-            {
-              model: masterLocation,
-              as: "locations",
-              where: { id: { [Op.in]: targetLocations } },
-              required: true,
-            },
-          ],
-          paranoid: false,
-        });
-        if (conflictName) {
-          return {
-            status: false,
-            message: "Product with this name already exists in one or more selected locations",
-            data: null,
-          };
-        }
+        if (targetLocations.length > 0) {
+          // 1. Name Check (Only if name or locations changed)
+          if (data.name || (locationIds && Array.isArray(locationIds))) {
+            const conflictName = await masterProduct.findOne({
+              where: { name: targetName, id: { [Op.ne]: id } },
+              include: [
+                {
+                  model: masterLocation,
+                  as: "locations",
+                  where: { id: { [Op.in]: targetLocations } },
+                  required: true,
+                },
+              ],
+              paranoid: false,
+            });
+            if (conflictName) {
+              return {
+                status: false,
+                message: "Product with this name already exists in one or more selected locations",
+                data: null,
+              };
+            }
+          }
 
-        // 2. SKU Check
-        if (targetSku) {
-          const conflictSku = await masterProduct.findOne({
-            where: { sku: targetSku, id: { [Op.ne]: id } },
-            include: [
-              {
-                model: masterLocation,
-                as: "locations",
-                where: { id: { [Op.in]: targetLocations } },
-                required: true,
-              },
-            ],
-            paranoid: false,
-          });
-          if (conflictSku) {
-            return {
-              status: false,
-              message: "SKU already exists in one or more selected locations",
-              data: null,
-            };
+          // 2. SKU Check (Only if sku or locations changed)
+          if (sku || (locationIds && Array.isArray(locationIds))) {
+            const conflictSku = await masterProduct.findOne({
+              where: { sku: targetSku, id: { [Op.ne]: id } },
+              include: [
+                {
+                  model: masterLocation,
+                  as: "locations",
+                  where: { id: { [Op.in]: targetLocations } },
+                  required: true,
+                },
+              ],
+              paranoid: false,
+            });
+            if (conflictSku) {
+              return {
+                status: false,
+                message: "SKU already exists in one or more selected locations",
+                data: null,
+              };
+            }
           }
         }
       }

@@ -525,67 +525,76 @@ module.exports = {
         };
       }
 
+      // Normalize array inputs
+      const locationIds = data.locationIds || data["locationIds[]"];
+      const code = data.code;
+
       // 🔹 Duplicate Check (scoped by locations)
-      const targetName = data.name || pkg.name;
-      const targetCode = data.code || pkg.code;
-      const targetLocations = (data.locationIds && Array.isArray(data.locationIds))
-        ? data.locationIds
-        : (await pkg.getLocations({ attributes: ["id"], transaction })).map((l) => l.id);
+      // Only check if name, code, or locations are being changed
+      if (data.name || code || (locationIds && Array.isArray(locationIds))) {
+        const targetName = data.name || pkg.name;
+        const targetCode = code || pkg.code;
+        const targetLocations = (locationIds && Array.isArray(locationIds))
+          ? locationIds
+          : (await pkg.getLocations({ attributes: ["id"], transaction })).map((l) => l.id);
 
-      if (targetLocations.length > 0) {
-        // 1. Name Check
-        const conflictName = await require("../models").masterPackage.findOne({
-          where: {
-            name: targetName,
-            id: { [Op.ne]: id },
-          },
-          include: [
-            {
-              model: require("../models").masterLocation,
-              as: "locations",
-              where: { id: { [Op.in]: targetLocations } },
-              required: true,
-            },
-          ],
-          paranoid: false,
-          transaction,
-        });
-
-        if (conflictName) {
-          await transaction.rollback();
-          return {
-            status: false,
-            message: "Package with this name already exists in one or more selected locations",
-            data: null,
-          };
-        }
-
-        // 2. Code Check
-        if (targetCode) {
-          const conflictCode = await require("../models").masterPackage.findOne({
-            where: {
-              code: targetCode,
-              id: { [Op.ne]: id },
-            },
-            include: [
-              {
-                model: require("../models").masterLocation,
-                as: "locations",
-                where: { id: { [Op.in]: targetLocations } },
-                required: true,
+        if (targetLocations.length > 0) {
+          // 1. Name Check (Only if name or locations changed)
+          if (data.name || (locationIds && Array.isArray(locationIds))) {
+            const conflictName = await require("../models").masterPackage.findOne({
+              where: {
+                name: targetName,
+                id: { [Op.ne]: id },
               },
-            ],
-            paranoid: false,
-            transaction,
-          });
+              include: [
+                {
+                  model: require("../models").masterLocation,
+                  as: "locations",
+                  where: { id: { [Op.in]: targetLocations } },
+                  required: true,
+                },
+              ],
+              paranoid: false,
+              transaction,
+            });
 
-          if (conflictCode) {
-            await transaction.rollback();
-            return {
-              status: false,
-              message: "CODE already exists in one or more selected locations",
-              data: null,
-            };
+            if (conflictName) {
+              await transaction.rollback();
+              return {
+                status: false,
+                message: "Package with this name already exists in one or more selected locations",
+                data: null,
+              };
+            }
+          }
+
+          // 2. Code Check (Only if code or locations changed)
+          if (code || (locationIds && Array.isArray(locationIds))) {
+            const conflictCode = await require("../models").masterPackage.findOne({
+              where: {
+                code: targetCode,
+                id: { [Op.ne]: id },
+              },
+              include: [
+                {
+                  model: require("../models").masterLocation,
+                  as: "locations",
+                  where: { id: { [Op.in]: targetLocations } },
+                  required: true,
+                },
+              ],
+              paranoid: false,
+              transaction,
+            });
+
+            if (conflictCode) {
+              await transaction.rollback();
+              return {
+                status: false,
+                message: "CODE already exists in one or more selected locations",
+                data: null,
+              };
+            }
           }
         }
       }

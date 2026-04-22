@@ -514,35 +514,41 @@ module.exports = {
       const np = Number(price ?? service.price);
       const dp = Number(discountPercent ?? service.discountPercent);
 
+      // Normalize array inputs
+      const locIds = locationIds || data["locationIds[]"];
+
       // Duplicate check (scoped by locations)
-      const targetName = name || service.name;
-      const targetLocations = (locationIds && Array.isArray(locationIds))
-        ? locationIds
-        : (await service.getLocations({ attributes: ["id"] })).map((l) => l.id);
+      // Only check if name or locations are being changed
+      if (name || (locIds && Array.isArray(locIds))) {
+        const targetName = name || service.name;
+        const targetLocations = (locIds && Array.isArray(locIds))
+          ? locIds
+          : (await service.getLocations({ attributes: ["id"] })).map((l) => l.id);
 
-      if (targetLocations.length > 0) {
-        const conflict = await masterService.findOne({
-          where: {
-            name: targetName,
-            id: { [Op.ne]: id },
-          },
-          include: [
-            {
-              model: masterLocation,
-              as: "locations",
-              where: { id: { [Op.in]: targetLocations } },
-              required: true,
+        if (targetLocations.length > 0) {
+          const conflict = await masterService.findOne({
+            where: {
+              name: targetName,
+              id: { [Op.ne]: id },
             },
-          ],
-          paranoid: false,
-        });
+            include: [
+              {
+                model: masterLocation,
+                as: "locations",
+                where: { id: { [Op.in]: targetLocations } },
+                required: true,
+              },
+            ],
+            paranoid: false,
+          });
 
-        if (conflict) {
-          return {
-            status: false,
-            message: "Service with this name already exists in one or more selected locations",
-            data: null,
-          };
+          if (conflict) {
+            return {
+              status: false,
+              message: "Service with this name already exists in one or more selected locations",
+              data: null,
+            };
+          }
         }
       }
 
