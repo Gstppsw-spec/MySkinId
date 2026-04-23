@@ -811,7 +811,24 @@ module.exports = {
         distinct: true,
       });
 
-      return { status: true, message: "Success", data, totalCount: count };
+      // Add isClaimed flag for each voucher
+      let claimedVoucherIds = [];
+      if (customerId) {
+        const claimed = await CustomerClaimedVoucher.findAll({
+          where: { customerId },
+          attributes: ["voucherId"],
+          raw: true,
+        });
+        claimedVoucherIds = claimed.map((c) => c.voucherId);
+      }
+
+      const enrichedData = data.map((v) => {
+        const plain = v.toJSON();
+        plain.isClaimed = claimedVoucherIds.includes(plain.id);
+        return plain;
+      });
+
+      return { status: true, message: "Success", data: enrichedData, totalCount: count };
     } catch (error) {
       return { status: false, message: error.message };
     }
@@ -869,6 +886,15 @@ module.exports = {
           if (userUsage >= voucher.perUserLimit) continue;
         }
 
+        // Check if customer has claimed this voucher
+        let isClaimed = false;
+        if (customerId) {
+          const claimed = await CustomerClaimedVoucher.findOne({
+            where: { customerId, voucherId: voucher.id },
+          });
+          isClaimed = !!claimed;
+        }
+
         result.push({
           id: voucher.id,
           code: voucher.code,
@@ -880,6 +906,7 @@ module.exports = {
           maxDiscount: voucher.maxDiscount,
           startDate: voucher.startDate,
           endDate: voucher.endDate,
+          isClaimed,
         });
       }
 
