@@ -22,7 +22,9 @@ module.exports = {
   async getAds(req, res) {
     try {
       const { latt, long } = req.query;
-      const result = await adsService.getActiveAds(latt, long);
+      const userLat = latt ? parseFloat(latt) : undefined;
+      const userLng = long ? parseFloat(long) : undefined;
+      const result = await adsService.getActiveAds(userLat, userLng);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {

@@ -527,32 +527,6 @@ module.exports = {
       // premiumOutlets key is removed as per request.
       // premiumHome and premiumSearch are kept separate.
 
-      // 5. Fallback Logic for Premium Home (displayed on home screen)
-      if (responseData.premiumHome.length === 0) {
-        const latestOutlets = await masterLocation.findAll({
-          where: { isactive: true, isVerified: true },
-          attributes: directLocAttributes,
-          include: [
-            { model: masterLocationImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
-            { model: masterCity, as: "cityDetail", attributes: ["name"] }
-          ],
-          order: [
-            ...(directDistanceLiteral ? [[directDistanceLiteral, "ASC"]] : [["isPremium", "DESC"], ["createdAt", "DESC"]])
-          ],
-          limit: 5
-        });
-
-        latestOutlets.forEach((loc) => {
-          const plain = loc.get({ plain: true });
-          if (plain.images) plain.images = sortPrimaryFirst(plain.images);
-          responseData.premiumHome.push({
-            ...plain,
-            city: plain.cityDetail ? plain.cityDetail.name : plain.city,
-            isAd: false,
-          });
-        });
-      }
-
       return { status: true, message: "Active ads fetched", data: responseData };
     } catch (error) {
       console.error("getActiveAds Error:", error);
