@@ -187,4 +187,18 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  /* ═══════════════════════════════════════════════════
+     ADMIN: Participate in Voucher Template
+     ═══════════════════════════════════════════════════ */
+  async participate(req, res) {
+    try {
+      const result = await voucherService.participateInVoucher(req.body, req.user);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };
+

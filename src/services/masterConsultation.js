@@ -44,11 +44,6 @@ module.exports = {
         where.status = status;
       }
 
-      if (roleCode && roleCode !== "DOCTOR_GENERAL" && roleCode !== "customer") {
-        if (locationIds && locationIds.length > 0) {
-          where.locationId = { [Op.in]: locationIds };
-        }
-      }
 
       const { count, rows } = await masterRoomConsultation.findAndCountAll({
         where,
@@ -1631,7 +1626,15 @@ module.exports = {
     try {
       const room = await masterRoomConsultation.findOne({
         where: { id: roomId },
-        attributes: ["id", "locationId", "latitude", "longitude"],
+        attributes: ["id", "locationId", "latitude", "longitude", "doctorId"],
+        include: [
+          {
+            model: masterUser,
+            as: "doctor",
+            attributes: ["id", "name"],
+            include: [{ model: masterRole, as: "role", attributes: ["roleCode"] }],
+          },
+        ],
       });
 
       if (!room) {
@@ -1693,7 +1696,22 @@ module.exports = {
       let isLocationAvailable = !!(latitude && longitude);
       let nearestLocations = [];
 
-      if (isLocationAvailable) {
+      // Determine if we should show nearest locations or only the specific outlet
+      const doctorRole = room.doctor?.role?.roleCode;
+      const isGeneral = !room.locationId || doctorRole === "DOCTOR_GENERAL";
+
+      if (!isGeneral) {
+        // If it's an outlet consultation and NOT a general doctor, only show the outlet of the room
+        const fallbackOutlet = await masterLocation.findByPk(room.locationId, {
+          attributes: ["id", "name", "ratingAvg"],
+        });
+        if (fallbackOutlet) {
+          const outletJson = fallbackOutlet.toJSON();
+          outletJson.distance = 0;
+          nearestLocations = [outletJson];
+        }
+      } else if (isLocationAvailable) {
+        // If it's a general consultation (or handled by general doctor) and customer location is available, show 10 nearest
         const distanceLiteral = Sequelize.literal(`
           (6371 * acos(
             cos(radians(${parseFloat(latitude)})) *
@@ -1714,6 +1732,7 @@ module.exports = {
           limit: 10,
         });
       } else if (room.locationId) {
+        // Fallback: If it's a general doctor in an outlet room but GPS is not available, show the room's outlet
         const fallbackOutlet = await masterLocation.findByPk(room.locationId, {
           attributes: ["id", "name", "ratingAvg"],
         });

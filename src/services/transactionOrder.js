@@ -389,7 +389,8 @@ module.exports = {
   async checkoutFromCart(data, customerId) {
     const t = await sequelize.transaction();
     try {
-      const { paymentMethod, shippingOptions, voucherCode } = data;
+      const { paymentMethod, shippingOptions, voucherCode, voucherCodes } = data;
+      const codesToApply = Array.isArray(voucherCodes) ? voucherCodes : (voucherCode ? [voucherCode] : []);
 
       const selectedCartItems = await customerCart.findAll({
         where: { customerId, isSelected: true },
@@ -720,10 +721,11 @@ module.exports = {
 
       totalOrderAmount += SERVICE_FEE;
 
-      // 🔹 Voucher Discount Logic
-      let voucherDiscountAmount = 0;
-      let appliedVoucherCode = null;
-      if (voucherCode) {
+      // 🔹 Multiple Voucher Discount Logic
+      let totalVoucherDiscount = 0;
+      const vouchersToApply = [];
+
+      if (codesToApply.length > 0) {
         // Build flat cart items array for validation
         const allCartItems = [];
         for (const locId in itemsByLocation) {
@@ -732,19 +734,26 @@ module.exports = {
           }
         }
 
-        const voucherValidation = await voucherService.validateVoucher(
-          voucherCode,
-          customerId,
-          allCartItems
-        );
+        for (const vCode of codesToApply) {
+          const voucherValidation = await voucherService.validateVoucher(
+            vCode,
+            customerId,
+            allCartItems
+          );
 
-        if (!voucherValidation.status) {
-          throw new Error(`Voucher error: ${voucherValidation.message}`);
+          if (!voucherValidation.status) {
+            throw new Error(`Voucher error (${vCode}): ${voucherValidation.message}`);
+          }
+
+          const discountForThisVoucher = voucherValidation.data.discountAmount;
+          totalVoucherDiscount += discountForThisVoucher;
+          vouchersToApply.push({
+            code: vCode.toUpperCase(),
+            amount: discountForThisVoucher,
+          });
         }
 
-        voucherDiscountAmount = voucherValidation.data.discountAmount;
-        appliedVoucherCode = voucherCode.toUpperCase();
-        totalOrderAmount -= voucherDiscountAmount;
+        totalOrderAmount -= totalVoucherDiscount;
         if (totalOrderAmount < 0) totalOrderAmount = 0;
       }
 
@@ -759,16 +768,18 @@ module.exports = {
       );
 
       // 🔹 Apply voucher usage (record it, increment usedCount)
-      if (appliedVoucherCode && voucherDiscountAmount > 0) {
-        const applyResult = await voucherService.applyVoucher(
-          appliedVoucherCode,
-          customerId,
-          newOrder.id,
-          voucherDiscountAmount,
-          t
-        );
-        if (!applyResult.status) {
-          throw new Error(`Failed to apply voucher: ${applyResult.message}`);
+      for (const v of vouchersToApply) {
+        if (v.amount > 0) {
+          const applyResult = await voucherService.applyVoucher(
+            v.code,
+            customerId,
+            newOrder.id,
+            v.amount,
+            t
+          );
+          if (!applyResult.status) {
+            throw new Error(`Failed to apply voucher ${v.code}: ${applyResult.message}`);
+          }
         }
       }
 
@@ -952,7 +963,8 @@ module.exports = {
   async directCheckout(data, customerId) {
     const t = await sequelize.transaction();
     try {
-      const { items, paymentMethod, shippingOptions, voucherCode } = data;
+      const { items, paymentMethod, shippingOptions, voucherCode, voucherCodes } = data;
+      const codesToApply = Array.isArray(voucherCodes) ? voucherCodes : (voucherCode ? [voucherCode] : []);
 
       if (!items || items.length === 0) {
         throw new Error("No items provided for checkout");
@@ -1274,10 +1286,11 @@ module.exports = {
 
       totalOrderAmount += SERVICE_FEE;
 
-      // 🔹 Voucher Discount Logic
-      let voucherDiscountAmount = 0;
-      let appliedVoucherCode = null;
-      if (voucherCode) {
+      // 🔹 Multiple Voucher Discount Logic
+      let totalVoucherDiscount = 0;
+      const vouchersToApply = [];
+
+      if (codesToApply.length > 0) {
         const allCartItems = [];
         for (const locId in itemsByLocation) {
           for (const item of itemsByLocation[locId]) {
@@ -1285,19 +1298,26 @@ module.exports = {
           }
         }
 
-        const voucherValidation = await voucherService.validateVoucher(
-          voucherCode,
-          customerId,
-          allCartItems
-        );
+        for (const vCode of codesToApply) {
+          const voucherValidation = await voucherService.validateVoucher(
+            vCode,
+            customerId,
+            allCartItems
+          );
 
-        if (!voucherValidation.status) {
-          throw new Error(`Voucher error: ${voucherValidation.message}`);
+          if (!voucherValidation.status) {
+            throw new Error(`Voucher error (${vCode}): ${voucherValidation.message}`);
+          }
+
+          const discountForThisVoucher = voucherValidation.data.discountAmount;
+          totalVoucherDiscount += discountForThisVoucher;
+          vouchersToApply.push({
+            code: vCode.toUpperCase(),
+            amount: discountForThisVoucher,
+          });
         }
 
-        voucherDiscountAmount = voucherValidation.data.discountAmount;
-        appliedVoucherCode = voucherCode.toUpperCase();
-        totalOrderAmount -= voucherDiscountAmount;
+        totalOrderAmount -= totalVoucherDiscount;
         if (totalOrderAmount < 0) totalOrderAmount = 0;
       }
 
@@ -1312,16 +1332,18 @@ module.exports = {
       );
 
       // 🔹 Apply voucher usage
-      if (appliedVoucherCode && voucherDiscountAmount > 0) {
-        const applyResult = await voucherService.applyVoucher(
-          appliedVoucherCode,
-          customerId,
-          newOrder.id,
-          voucherDiscountAmount,
-          t
-        );
-        if (!applyResult.status) {
-          throw new Error(`Failed to apply voucher: ${applyResult.message}`);
+      for (const v of vouchersToApply) {
+        if (v.amount > 0) {
+          const applyResult = await voucherService.applyVoucher(
+            v.code,
+            customerId,
+            newOrder.id,
+            v.amount,
+            t
+          );
+          if (!applyResult.status) {
+            throw new Error(`Failed to apply voucher ${v.code}: ${applyResult.message}`);
+          }
         }
       }
 

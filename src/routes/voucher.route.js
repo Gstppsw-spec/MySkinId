@@ -57,4 +57,12 @@ router.delete(
   voucherController.delete
 );
 
+// Participate in a master voucher campaign
+router.post(
+  "/participate",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN"),
+  voucherController.participate
+);
+
 module.exports = router;

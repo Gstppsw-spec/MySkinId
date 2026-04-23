@@ -5,6 +5,8 @@ const {
   VoucherUsage,
   VoucherLocation,
   CustomerClaimedVoucher,
+  VoucherParticipation,
+  VoucherParticipationItem,
   masterCompany,
   masterProduct,
   masterPackage,
@@ -24,12 +26,25 @@ const balanceService = require("./balance.service");
  */
 async function syncVoucherStatuses() {
   const now = new Date();
+  
+  // 1. Expire vouchers that have passed their endDate
   await Voucher.update(
     { status: "EXPIRED" },
     {
       where: {
         status: "ACTIVE",
         endDate: { [Op.lte]: now },
+      },
+    }
+  );
+
+  // 2. Revive vouchers that were EXPIRED but now have a future endDate
+  await Voucher.update(
+    { status: "ACTIVE" },
+    {
+      where: {
+        status: "EXPIRED",
+        endDate: { [Op.gt]: now },
       },
     }
   );
@@ -326,6 +341,9 @@ module.exports = {
 
       await t.commit();
 
+      // Trigger status sync in case dates were changed
+      await syncVoucherStatuses();
+
       const result = await Voucher.findByPk(id, {
         include: [
           { model: VoucherItem, as: "items" },
@@ -362,10 +380,23 @@ module.exports = {
         }
       }
 
-      voucher.status = "INACTIVE";
-      await voucher.save();
+      // Check if voucher has usages
+      const usageCount = await VoucherUsage.count({ where: { voucherId: id } });
+      if (usageCount > 0) {
+        // If it has usages, we can't hard delete it. Just deactivate.
+        voucher.status = "INACTIVE";
+        await voucher.save();
+        return { 
+          status: true, 
+          message: "Voucher has transaction history, so it was deactivated instead of deleted", 
+          data: { id, status: "INACTIVE" } 
+        };
+      }
 
-      return { status: true, message: "Voucher deactivated successfully", data: { id } };
+      // Hard delete if no usages
+      await voucher.destroy();
+
+      return { status: true, message: "Voucher deleted successfully", data: { id } };
     } catch (error) {
       return { status: false, message: error.message };
     }
@@ -589,6 +620,77 @@ module.exports = {
           return {
             status: false,
             message: "None of your cart items are eligible for this voucher",
+          };
+        }
+      }
+
+      // --- DIRECT COMPANY VOUCHER CHECK ---
+      if (voucher.companyId) {
+        eligibleItems = eligibleItems.filter((item) => item.companyId === voucher.companyId);
+        if (eligibleItems.length === 0) {
+          return {
+            status: false,
+            message: "This voucher is only valid for items from a specific merchant",
+          };
+        }
+      }
+
+      // --- CAMPAIGN PARTICIPATION CHECK (for Super Admin Templates) ---
+      if (voucher.companyId === null && voucher.createdByType === "SUPER_ADMIN") {
+        // Group items by company to check individual participation
+        const companyItems = {};
+        cartItems.forEach((item) => {
+          if (!companyItems[item.companyId]) companyItems[item.companyId] = [];
+          companyItems[item.companyId].push(item);
+        });
+
+        const participatingCompanies = await VoucherParticipation.findAll({
+          where: {
+            voucherId: voucher.id,
+            companyId: Object.keys(companyItems),
+            status: "ACTIVE",
+          },
+          include: [{ model: VoucherParticipationItem, as: "items" }],
+        });
+
+        const participatingMap = {};
+        participatingCompanies.forEach((p) => {
+          participatingMap[p.companyId] = p;
+        });
+
+        // Pick only the FIRST participating company found in the cart order
+        let activeParticipationCompanyId = null;
+        for (const item of cartItems) {
+          if (participatingMap[item.companyId]) {
+            activeParticipationCompanyId = item.companyId;
+            break;
+          }
+        }
+
+        if (!activeParticipationCompanyId) {
+          return {
+            status: false,
+            message: "None of the items in your cart are from participating outlets for this voucher",
+          };
+        }
+
+        const participation = participatingMap[activeParticipationCompanyId];
+
+        // Refilter eligibleItems: MUST be from the picked company AND match the participation items
+        eligibleItems = eligibleItems.filter((item) => {
+          if (item.companyId !== activeParticipationCompanyId) return false;
+
+          if (participation.isAllItems) return true;
+
+          const itemKey = `${item.itemType.toUpperCase()}:${item.itemId}`;
+          const participationItemMap = participation.items.map((pi) => `${pi.itemType.toUpperCase()}:${pi.itemId}`);
+          return participationItemMap.includes(itemKey);
+        });
+
+        if (eligibleItems.length === 0) {
+          return {
+            status: false,
+            message: "Items from the selected outlet are not eligible for this voucher",
           };
         }
       }
@@ -1036,4 +1138,60 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
+  /* ═══════════════════════════════════════════════════
+     PARTICIPATE IN VOUCHER (for Company Admin)
+     Allows a company to opt-in to a Super Admin template.
+     ═══════════════════════════════════════════════════ */
+  async participateInVoucher(data, user) {
+    const t = await sequelize.transaction();
+    try {
+      const { voucherId, isAllItems, items } = data;
+      const { id: userId, roleCode } = user;
+
+      if (roleCode !== "COMPANY_ADMIN") {
+        throw new Error("Only Company Admins can participate in vouchers");
+      }
+
+      const userCompany = await relationshipUserCompany.findOne({
+        where: { userId, isactive: true },
+        attributes: ["companyId"],
+      });
+      if (!userCompany) throw new Error("No company assigned to this user");
+      const companyId = userCompany.companyId;
+
+      const voucher = await Voucher.findByPk(voucherId);
+      if (!voucher) throw new Error("Voucher template not found");
+      if (voucher.companyId !== null) throw new Error("This is not a template voucher");
+
+      // Create or Update participation
+      const [participation, created] = await VoucherParticipation.findOrCreate({
+        where: { voucherId, companyId },
+        defaults: { status: "ACTIVE", isAllItems: isAllItems ?? true },
+        transaction: t,
+      });
+
+      if (!created) {
+        await participation.update({ status: "ACTIVE", isAllItems: isAllItems ?? true }, { transaction: t });
+        // Clear old items if it was specific items before
+        await VoucherParticipationItem.destroy({ where: { participationId: participation.id }, transaction: t });
+      }
+
+      if (!(isAllItems ?? true) && items && items.length > 0) {
+        const pItems = items.map((item) => ({
+          participationId: participation.id,
+          itemType: item.itemType.toUpperCase(),
+          itemId: item.itemId,
+        }));
+        await VoucherParticipationItem.bulkCreate(pItems, { transaction: t });
+      }
+
+      await t.commit();
+      return { status: true, message: "Participation updated successfully", data: participation };
+    } catch (error) {
+      if (t) await t.rollback();
+      return { status: false, message: error.message };
+    }
+  },
 };
+

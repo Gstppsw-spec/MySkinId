@@ -26,6 +26,11 @@ module.exports = (sequelize, DataTypes) => {
         as: "locations",
         onDelete: "CASCADE",
       });
+      Voucher.hasMany(models.VoucherParticipation, {
+        foreignKey: "voucherId",
+        as: "participations",
+        onDelete: "CASCADE",
+      });
     }
   }
 

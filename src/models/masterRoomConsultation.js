@@ -82,6 +82,11 @@ module.exports = (sequelize, DataTypes) => {
       as: "product",
     });
 
+    masterRoomConsultation.belongsTo(models.masterUser, {
+      foreignKey: "doctorId",
+      as: "doctor",
+    });
+
     masterRoomConsultation.hasMany(models.masterConsultationImage, {
       foreignKey: "roomId",
       as: "consultationImage",
