@@ -503,7 +503,8 @@ module.exports = {
             const mapped = mapItem(p, entity, p.referenceType);
             responseData.topDeals[typeKey].push(mapped);
           }
-        } else if (["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"].includes(p.adsType)) {
+        } else if (["PREMIUM_SEARCH", "PREMIUM_HOME"].includes(p.adsType)) {
+          // Note: PREMIUM_BADGE is excluded from customer response as per request
           const locEntity = locations.find(l => l.id === p.locationId);
           if (locEntity) {
             const plain = locEntity.get({ plain: true });
@@ -513,7 +514,8 @@ module.exports = {
               ...plain,
               city: plain.cityDetail ? plain.cityDetail.name : plain.city,
               isAd: true,
-              adsType: p.adsType
+              adsType: p.adsType,
+              adsPurchaseId: p.id // Added missing ID
             };
 
             if (p.adsType === "PREMIUM_HOME") responseData.premiumHome.push(item);
@@ -522,10 +524,11 @@ module.exports = {
         }
       });
 
-      responseData.premiumOutlets = [...responseData.premiumSearch, ...responseData.premiumHome];
+      // premiumOutlets key is removed as per request.
+      // premiumHome and premiumSearch are kept separate.
 
-      // 5. Fallback Logic for Premium Outlets
-      if (responseData.premiumOutlets.length === 0) {
+      // 5. Fallback Logic for Premium Home (displayed on home screen)
+      if (responseData.premiumHome.length === 0) {
         const latestOutlets = await masterLocation.findAll({
           where: { isactive: true, isVerified: true },
           attributes: directLocAttributes,
@@ -542,7 +545,7 @@ module.exports = {
         latestOutlets.forEach((loc) => {
           const plain = loc.get({ plain: true });
           if (plain.images) plain.images = sortPrimaryFirst(plain.images);
-          responseData.premiumOutlets.push({
+          responseData.premiumHome.push({
             ...plain,
             city: plain.cityDetail ? plain.cityDetail.name : plain.city,
             isAd: false,
@@ -785,6 +788,137 @@ module.exports = {
       return { status: true, message: "Advertisement deleted successfully" };
     } catch (error) {
       console.error("deleteAds Error:", error);
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Super Admin: Get all active ads (unfiltered list for admin monitoring)
+   */
+  async getAdminActiveAds() {
+    try {
+      const now = new Date();
+      const activePurchases = await AdsPurchase.findAll({
+        where: {
+          status: "PAID",
+          isActive: true,
+          startDate: { [Op.lte]: now },
+          endDate: { [Op.gte]: now },
+        },
+        include: [{ model: AdsConfig, as: "config" }],
+      });
+
+      const productIds = [];
+      const serviceIds = [];
+      const packageIds = [];
+      const locationIds = [];
+
+      activePurchases.forEach(p => {
+        if (p.adsType === "TOPDEALS") {
+          if (p.referenceType === "PRODUCT") productIds.push(p.referenceId);
+          if (p.referenceType === "SERVICE") serviceIds.push(p.referenceId);
+          if (p.referenceType === "PACKAGE") packageIds.push(p.referenceId);
+        }
+        if (["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"].includes(p.adsType)) {
+          locationIds.push(p.locationId);
+        }
+      });
+
+      const allLocationIds = [...new Set(locationIds)];
+
+      const [products, services, packages, locations, activeFlashSales] = await Promise.all([
+        masterProduct.findAll({
+          where: { id: { [Op.in]: productIds } },
+          include: [
+            { model: masterProductImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
+            { model: masterLocation, as: "locations", attributes: ["id", "name"], through: { attributes: ["isActive"] } },
+            { model: masterProductCategory, as: "categories", attributes: ["id", "name"], through: { attributes: [] } }
+          ]
+        }),
+        masterService.findAll({
+          where: { id: { [Op.in]: serviceIds } },
+          include: [
+            { model: masterLocation, as: "locations", attributes: ["id", "name"], through: { attributes: ["isActive"] } },
+            { model: masterSubCategoryService, as: "categories", attributes: ["id", "name"], through: { attributes: [] } }
+          ]
+        }),
+        masterPackage.findAll({
+          where: { id: { [Op.in]: packageIds } },
+          include: [
+            { model: masterLocation, as: "locations", attributes: ["id", "name"], through: { attributes: ["isActive"] } }
+          ]
+        }),
+        masterLocation.findAll({
+          where: { id: { [Op.in]: allLocationIds } },
+          include: [
+            { model: masterLocationImage, as: "images", attributes: ["id", "imageUrl", "isPrimary"], separate: true },
+            { model: masterCity, as: "cityDetail", attributes: ["name"] },
+            { model: masterCompany, as: "company", attributes: ["id", "name"] }
+          ]
+        }),
+        (async () => {
+          await flashSaleService.syncStatuses();
+          return flashSale.findAll({
+            where: { status: "ACTIVE" },
+            include: [{ model: flashSaleItem, as: "items" }]
+          });
+        })()
+      ]);
+
+      const responseData = {
+        banners: [],
+        carousels: [],
+        popup: null,
+        topDeals: { Product: [], Service: [], Package: [] },
+        premiumSearch: [],
+        premiumHome: [],
+        premiumBadge: [] // Specifically for admin to monitor badges
+      };
+
+      // Reuse mapping logic from getActiveAds (simplified for admin)
+      const mapItem = (p, entity, type) => {
+        const plain = entity.get({ plain: true });
+        if (plain.images) plain.images = sortPrimaryFirst(plain.images);
+        return {
+          ...plain,
+          adsPurchaseId: p.id,
+          adsType: p.adsType,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          data: p.data
+        };
+      };
+
+      activePurchases.forEach((p) => {
+        if (p.adsType === "BANNER") {
+          responseData.banners.push({ id: p.id, data: p.data, locationId: p.locationId, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate });
+        } else if (p.adsType === "CAROUSEL") {
+          responseData.carousels.push({ id: p.id, data: p.data, locationId: p.locationId, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate });
+        } else if (p.adsType === "POPUP") {
+          responseData.popup = { id: p.id, data: p.data, locationId: p.locationId, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate };
+        } else if (p.adsType === "TOPDEALS") {
+          let entity = null;
+          let typeKey = "";
+          if (p.referenceType === "PRODUCT") { entity = products.find(i => i.id === p.referenceId); typeKey = "Product"; }
+          if (p.referenceType === "SERVICE") { entity = services.find(i => i.id === p.referenceId); typeKey = "Service"; }
+          if (p.referenceType === "PACKAGE") { entity = packages.find(i => i.id === p.referenceId); typeKey = "Package"; }
+          if (entity) responseData.topDeals[typeKey].push(mapItem(p, entity, p.referenceType));
+        } else if (["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"].includes(p.adsType)) {
+          const locEntity = locations.find(l => l.id === p.locationId);
+          if (locEntity) {
+            const item = mapItem(p, locEntity, "LOCATION");
+            item.city = item.cityDetail ? item.cityDetail.name : item.city;
+            
+            if (p.adsType === "PREMIUM_HOME") responseData.premiumHome.push(item);
+            else if (p.adsType === "PREMIUM_SEARCH") responseData.premiumSearch.push(item);
+            else if (p.adsType === "PREMIUM_BADGE") responseData.premiumBadge.push(item);
+          }
+        }
+      });
+
+      return { status: true, message: "Admin active ads fetched", data: responseData };
+    } catch (error) {
+      console.error("getAdminActiveAds Error:", error);
       return { status: false, message: error.message };
     }
   }

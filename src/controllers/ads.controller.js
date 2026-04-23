@@ -233,5 +233,15 @@ module.exports = {
     } catch (error) {
       return response.serverError(res, error);
     }
+  },
+
+  async getAdminActiveAds(req, res) {
+    try {
+      const result = await adsService.getAdminActiveAds();
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   }
 };

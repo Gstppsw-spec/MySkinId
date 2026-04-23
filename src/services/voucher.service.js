@@ -4,6 +4,7 @@ const {
   VoucherItem,
   VoucherUsage,
   VoucherLocation,
+  CustomerClaimedVoucher,
   masterCompany,
   masterProduct,
   masterPackage,
@@ -679,6 +680,15 @@ module.exports = {
       // Increment used count
       await voucher.increment("usedCount", { transaction: t });
 
+      // Mark claimed voucher as USED (if customer had claimed it)
+      await CustomerClaimedVoucher.update(
+        { status: "USED", usedAt: new Date() },
+        {
+          where: { customerId, voucherId: voucher.id, status: "CLAIMED" },
+          transaction: t,
+        }
+      );
+
       if (!externalTransaction) await t.commit();
 
       return {
@@ -874,6 +884,127 @@ module.exports = {
       }
 
       return { status: true, message: "Success", data: result };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /* ═══════════════════════════════════════════════════
+     CLAIM VOUCHER (Customer)
+     Customer saves a voucher to their collection.
+     ═══════════════════════════════════════════════════ */
+  async claimVoucher(voucherId, customerId) {
+    try {
+      await syncVoucherStatuses();
+
+      const voucher = await Voucher.findByPk(voucherId);
+      if (!voucher) return { status: false, message: "Voucher not found" };
+      if (voucher.status !== "ACTIVE") return { status: false, message: "Voucher is no longer active" };
+
+      const now = new Date();
+      if (now < voucher.startDate || now > voucher.endDate) {
+        return { status: false, message: "Voucher is not within the valid period" };
+      }
+
+      // Check if already claimed
+      const existing = await CustomerClaimedVoucher.findOne({
+        where: { customerId, voucherId },
+      });
+      if (existing) {
+        return { status: false, message: "You have already claimed this voucher" };
+      }
+
+      // Check quota
+      if (voucher.quota !== null && voucher.usedCount >= voucher.quota) {
+        return { status: false, message: "Voucher has reached its usage limit" };
+      }
+
+      const claimed = await CustomerClaimedVoucher.create({
+        customerId,
+        voucherId,
+        status: "CLAIMED",
+        claimedAt: now,
+      });
+
+      return {
+        status: true,
+        message: "Voucher claimed successfully",
+        data: {
+          id: claimed.id,
+          voucherId: voucher.id,
+          code: voucher.code,
+          title: voucher.title,
+          status: "CLAIMED",
+          claimedAt: claimed.claimedAt,
+        },
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /* ═══════════════════════════════════════════════════
+     GET MY VOUCHERS (Customer)
+     Returns all vouchers the customer has claimed.
+     ═══════════════════════════════════════════════════ */
+  async getMyVouchers(customerId, filters = {}, pagination = {}) {
+    try {
+      await syncVoucherStatuses();
+
+      const { limit, offset } = pagination;
+      const { status } = filters;
+
+      const where = { customerId };
+      if (status) where.status = status;
+
+      // Auto-expire claimed vouchers whose parent voucher has expired
+      await CustomerClaimedVoucher.update(
+        { status: "EXPIRED" },
+        {
+          where: {
+            customerId,
+            status: "CLAIMED",
+            voucherId: {
+              [Op.in]: sequelize.literal(
+                `(SELECT \`id\` FROM \`vouchers\` WHERE \`status\` = 'EXPIRED' OR \`endDate\` < NOW())`
+              ),
+            },
+          },
+        }
+      );
+
+      const { count, rows: data } = await CustomerClaimedVoucher.findAndCountAll({
+        where,
+        include: [
+          {
+            model: Voucher,
+            as: "voucher",
+            attributes: [
+              "id", "code", "title", "description",
+              "discountType", "discountValue", "minPurchase", "maxDiscount",
+              "startDate", "endDate", "status",
+            ],
+            include: [
+              {
+                model: VoucherItem,
+                as: "items",
+                include: [
+                  { model: masterProduct, as: "product", attributes: ["id", "name"] },
+                  { model: masterPackage, as: "package", attributes: ["id", "name"] },
+                  { model: masterService, as: "service", attributes: ["id", "name"] },
+                ],
+              },
+              { model: VoucherLocation, as: "locations", include: [{ model: masterLocation, as: "location", attributes: ["id", "name"] }] },
+            ],
+          },
+        ],
+        order: [["claimedAt", "DESC"]],
+        limit,
+        offset,
+        distinct: true,
+      });
+
+      return { status: true, message: "Success", data, totalCount: count };
     } catch (error) {
       return { status: false, message: error.message };
     }

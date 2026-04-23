@@ -144,4 +144,47 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  /* ═══════════════════════════════════════════════════
+     CUSTOMER: Claim Voucher
+     ═══════════════════════════════════════════════════ */
+  async claim(req, res) {
+    try {
+      const { voucherId } = req.body;
+      if (!voucherId) return response.error(res, "voucherId is required");
+
+      const customerId = req.user?.id || req.customer?.id;
+      if (!customerId) return response.error(res, "Customer ID is required", null, 401);
+
+      const result = await voucherService.claimVoucher(voucherId, customerId);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  /* ═══════════════════════════════════════════════════
+     CUSTOMER: Get My Claimed Vouchers
+     ═══════════════════════════════════════════════════ */
+  async getMyVouchers(req, res) {
+    try {
+      const { page, pageSize, status } = req.query;
+      const pagination = getPagination(page, pageSize);
+      const customerId = req.user?.id || req.customer?.id;
+      if (!customerId) return response.error(res, "Customer ID is required", null, 401);
+
+      const result = await voucherService.getMyVouchers(customerId, { status }, pagination);
+      if (!result.status) return response.error(res, result.message);
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: result.data,
+        pagination: formatPagination(result.totalCount, page, pageSize),
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };
