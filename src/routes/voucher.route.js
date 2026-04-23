@@ -8,6 +8,9 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
 // Get available vouchers (public, but uses optional auth to check per-user limit)
 router.get("/available", optionalAuth, voucherController.getAvailable);
 
+// Check applicable vouchers for a specific item + location
+router.get("/check", optionalAuth, voucherController.getForItem);
+
 // Validate voucher code (needs customer auth)
 router.post("/validate", verifyToken, voucherController.validate);
 

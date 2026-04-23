@@ -123,4 +123,25 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  /* ═══════════════════════════════════════════════════
+     CUSTOMER: Get Vouchers for a Specific Item + Location
+     ═══════════════════════════════════════════════════ */
+  async getForItem(req, res) {
+    try {
+      const { itemType, itemId, locationId } = req.query;
+      const customerId = req.user?.id || req.customer?.id || null;
+
+      const result = await voucherService.getVouchersForItem({
+        itemType,
+        itemId,
+        locationId,
+        customerId,
+      });
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

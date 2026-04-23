@@ -775,7 +775,7 @@ module.exports = {
           endDate: { [Op.gte]: now },
           [Op.or]: [
             { quota: null },
-            sequelize.literal('"usedCount" < "quota"'),
+            sequelize.literal('`usedCount` < `quota`'),
           ],
         },
         attributes: [
@@ -802,6 +802,78 @@ module.exports = {
       });
 
       return { status: true, message: "Success", data, totalCount: count };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /* ═══════════════════════════════════════════════════
+     GET VOUCHERS FOR SPECIFIC ITEM + LOCATION
+     Returns active vouchers applicable to this item at this location.
+     ═══════════════════════════════════════════════════ */
+  async getVouchersForItem({ itemType, itemId, locationId, customerId } = {}) {
+    try {
+      await syncVoucherStatuses();
+
+      const now = new Date();
+
+      // Fetch all active vouchers with their items and locations
+      const allActive = await Voucher.findAll({
+        where: {
+          status: "ACTIVE",
+          startDate: { [Op.lte]: now },
+          endDate: { [Op.gte]: now },
+          [Op.or]: [
+            { quota: null },
+            sequelize.literal('`usedCount` < `quota`'),
+          ],
+        },
+        include: [
+          { model: VoucherItem, as: "items" },
+          { model: VoucherLocation, as: "locations" },
+        ],
+      });
+
+      const result = [];
+
+      for (const voucher of allActive) {
+        // Check location restriction
+        if (locationId && voucher.locations && voucher.locations.length > 0) {
+          const allowedLocIds = voucher.locations.map((vl) => vl.locationId);
+          if (!allowedLocIds.includes(locationId)) continue;
+        }
+
+        // Check item restriction
+        if (itemType && itemId && voucher.items && voucher.items.length > 0) {
+          const match = voucher.items.find(
+            (vi) => vi.itemType === itemType.toUpperCase() && vi.itemId === itemId
+          );
+          if (!match) continue;
+        }
+
+        // Check per-user limit (if customerId provided)
+        if (customerId) {
+          const userUsage = await VoucherUsage.count({
+            where: { voucherId: voucher.id, customerId },
+          });
+          if (userUsage >= voucher.perUserLimit) continue;
+        }
+
+        result.push({
+          id: voucher.id,
+          code: voucher.code,
+          title: voucher.title,
+          description: voucher.description,
+          discountType: voucher.discountType,
+          discountValue: voucher.discountValue,
+          minPurchase: voucher.minPurchase,
+          maxDiscount: voucher.maxDiscount,
+          startDate: voucher.startDate,
+          endDate: voucher.endDate,
+        });
+      }
+
+      return { status: true, message: "Success", data: result };
     } catch (error) {
       return { status: false, message: error.message };
     }
