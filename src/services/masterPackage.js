@@ -1214,9 +1214,16 @@ module.exports = {
     const { name, locationId } = filters;
     const { limit, offset } = pagination;
 
+    const targetIdsFromFilter = locationId
+      ? Array.isArray(locationId)
+        ? locationId
+        : locationId.toString().split(",")
+      : undefined;
+
     // Authorization check for locationId filter
-    if (locationId && roleCode !== "SUPER_ADMIN" && roleCode !== "OPERATIONAL_ADMIN") {
-      if (!locationIds.includes(locationId)) {
+    if (targetIdsFromFilter && roleCode !== "SUPER_ADMIN" && roleCode !== "OPERATIONAL_ADMIN") {
+      const isAllowed = targetIdsFromFilter.every(id => locationIds.includes(id));
+      if (!isAllowed) {
         return { status: false, message: "Location not allowed or not found for this user" };
       }
     }
@@ -1261,12 +1268,12 @@ module.exports = {
     try {
       let finalInclude;
       if (roleCode === "SUPER_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
-        if (locationId) {
+        if (targetIdsFromFilter) {
           finalInclude = include.map((inc) => {
             if (inc.as === "locations") {
               return {
                 ...inc,
-                where: { id: locationId },
+                where: { id: { [Op.in]: targetIdsFromFilter } },
                 required: true,
               };
             }
@@ -1277,7 +1284,7 @@ module.exports = {
         }
       } else {
         // Filter by user's locations via pivot (further restricted if locationId filter provided)
-        const targetIds = locationId ? [locationId] : locationIds;
+        const targetIds = targetIdsFromFilter || locationIds;
         finalInclude = include.map((inc) => {
           if (inc.as === "locations") {
             return {

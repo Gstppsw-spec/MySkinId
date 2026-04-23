@@ -15,6 +15,8 @@ module.exports = {
       page,
       pageSize,
       status,
+      roleCode: user.roleCode,
+      locationIds: user.locationIds,
     });
 
     if (!result.status) {

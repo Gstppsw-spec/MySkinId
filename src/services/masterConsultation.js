@@ -33,7 +33,7 @@ const pushNotificationService = require("./pushNotification.service");
 module.exports = {
   async getRoomByUser(userId, filters = {}) {
     try {
-      const { page = 1, pageSize = 10, status } = filters;
+      const { page = 1, pageSize = 10, status, roleCode, locationIds } = filters;
       const offset = (page - 1) * pageSize;
 
       const where = {
@@ -42,6 +42,12 @@ module.exports = {
 
       if (status && status !== "all") {
         where.status = status;
+      }
+
+      if (roleCode && roleCode !== "DOCTOR_GENERAL" && roleCode !== "customer") {
+        if (locationIds && locationIds.length > 0) {
+          where.locationId = { [Op.in]: locationIds };
+        }
       }
 
       const { count, rows } = await masterRoomConsultation.findAndCountAll({
@@ -1813,14 +1819,17 @@ module.exports = {
 
       const [products, packages, services] = await Promise.all([
         allProductCategoryIds.length > 0 ? masterProduct.findAll({
+          where: { isActive: true, isVerified: true },
           attributes: ["id", "name", "description", "price", "discountPercent", "weightGram", "ratingAvg"],
           include: productIncludeList,
         }) : Promise.resolve([]),
         allPackageCategoryIds.length > 0 ? masterPackage.findAll({
+          where: { isActive: true, isVerified: true },
           attributes: ["id", "name", "description", "price", "discountPercent", "ratingAvg"],
           include: packageIncludeList,
         }) : Promise.resolve([]),
         allPackageCategoryIds.length > 0 ? masterService.findAll({
+          where: { isActive: true, isVerified: true },
           attributes: ["id", "name", "description", "price", "duration", "discountPercent", "ratingAvg"],
           include: serviceIncludeList,
         }) : Promise.resolve([]),
