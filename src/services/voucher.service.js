@@ -946,7 +946,7 @@ module.exports = {
      GET VOUCHERS FOR SPECIFIC ITEM + LOCATION
      Returns active vouchers applicable to this item at this location.
      ═══════════════════════════════════════════════════ */
-  async getVouchersForItem({ itemType, itemId, locationId, customerId } = {}) {
+  async getVouchersForItem({ itemType, itemId, locationId, customerId, price } = {}) {
     try {
       await syncVoucherStatuses();
 
@@ -972,6 +972,13 @@ module.exports = {
       const result = [];
 
       for (const voucher of allActive) {
+        // Check min purchase if price is provided
+        if (price !== null && price !== undefined) {
+          if (price < parseFloat(voucher.minPurchase)) {
+            continue;
+          }
+        }
+
         // Check location restriction
         if (locationId && voucher.locations && voucher.locations.length > 0) {
           const allowedLocIds = voucher.locations.map((vl) => vl.locationId);

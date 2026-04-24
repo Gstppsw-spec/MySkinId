@@ -129,7 +129,7 @@ module.exports = {
      ═══════════════════════════════════════════════════ */
   async getForItem(req, res) {
     try {
-      const { itemType, itemId, locationId } = req.query;
+      const { itemType, itemId, locationId, price } = req.query;
       const customerId = req.user?.id || req.customer?.id || null;
 
       const result = await voucherService.getVouchersForItem({
@@ -137,6 +137,7 @@ module.exports = {
         itemId,
         locationId,
         customerId,
+        price: price ? parseFloat(price) : null,
       });
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
