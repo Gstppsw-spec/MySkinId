@@ -657,6 +657,9 @@ module.exports = {
         }
       }
 
+      let activeParticipationCompanyId = null;
+      let participation = null;
+
       // --- DIRECT COMPANY VOUCHER CHECK ---
       if (voucher.companyId) {
         // If targetCompanyId is derived from targetItemId, it must match the voucher's owner
@@ -697,8 +700,7 @@ module.exports = {
           participatingMap[p.companyId] = p;
         });
 
-        let activeParticipationCompanyId = null;
-        let participation = null;
+
 
         // Determine which company to apply the voucher to
         if (targetCompanyId) {
