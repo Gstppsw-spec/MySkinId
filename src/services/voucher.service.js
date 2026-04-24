@@ -570,35 +570,31 @@ module.exports = {
         
         if (!id) continue;
 
-        if (!item.companyId || !item.locationId) {
-          let dbItem;
+        // 1. Resolve locationId first if missing
+        if (!item.locationId) {
           const normalizedType = type?.toLowerCase();
+          let pivot;
           if (normalizedType === "product") {
-            dbItem = await masterProduct.findByPk(id);
-            if (dbItem && !item.locationId) {
-              const loc = await relationshipProductLocation.findOne({ where: { productId: id, isActive: true } });
-              if (loc) item.locationId = loc.locationId;
-            }
+            pivot = await relationshipProductLocation.findOne({ where: { productId: id, isActive: true } });
           } else if (normalizedType === "package") {
-            dbItem = await masterPackage.findByPk(id);
-            if (dbItem && !item.locationId) {
-              const loc = await relationshipPackageLocation.findOne({ where: { packageId: id, isActive: true } });
-              if (loc) item.locationId = loc.locationId;
-            }
+            pivot = await relationshipPackageLocation.findOne({ where: { packageId: id, isActive: true } });
           } else if (normalizedType === "service") {
-            dbItem = await masterService.findByPk(id);
-            if (dbItem && !item.locationId) {
-              const loc = await relationshipServiceLocation.findOne({ where: { serviceId: id, isActive: true } });
-              if (loc) item.locationId = loc.locationId;
-            }
+            pivot = await relationshipServiceLocation.findOne({ where: { serviceId: id, isActive: true } });
           }
-          
-          if (dbItem) {
-            item.companyId = dbItem.companyId;
-            item.itemId = id; 
-            item.itemType = type;
+          if (pivot) item.locationId = pivot.locationId;
+        }
+
+        // 2. Resolve companyId from masterLocation (Since items don't have companyId directly)
+        if (item.locationId && !item.companyId) {
+          const location = await masterLocation.findByPk(item.locationId);
+          if (location) {
+            item.companyId = location.companyId;
           }
         }
+
+        // 3. Ensure itemId and itemType are set for consistency
+        item.itemId = id;
+        item.itemType = type;
       }
 
       // Re-map targetItemId to targetCompanyId with robust check
