@@ -650,29 +650,24 @@ module.exports = {
           participatingMap[p.companyId] = p;
         });
 
-        // Pick only the FIRST participating company found in the cart order
+        // Try to find a merchant in the cart that has participated AND matches the location requirement
         let activeParticipationCompanyId = null;
+        let participation = null;
+
         for (const item of cartItems) {
-          if (participatingMap[item.companyId]) {
-            activeParticipationCompanyId = item.companyId;
-            break;
+          const p = participatingMap[item.companyId];
+          if (p) {
+            // Check if this item's location is allowed
+            const allowedLocationIds = p.locations.map(l => l.locationId);
+            if (p.isAllLocations || allowedLocationIds.includes(item.locationId)) {
+              activeParticipationCompanyId = item.companyId;
+              participation = p;
+              break; // Found a valid merchant-participation match
+            }
           }
         }
 
         if (!activeParticipationCompanyId) {
-          return {
-            status: false,
-            message: "None of the items in your cart are from participating outlets for this voucher",
-          };
-        }
-
-        const participation = participatingMap[activeParticipationCompanyId];
-
-        // 🔹 CHECK PARTICIPATING LOCATIONS
-        const allowedLocationIds = participation.locations.map(l => l.locationId);
-        const cartItemFromPickedCompany = cartItems.find(ci => ci.companyId === activeParticipationCompanyId);
-        
-        if (!participation.isAllLocations && !allowedLocationIds.includes(cartItemFromPickedCompany.locationId)) {
           return {
             status: false,
             message: "The outlet for this product is not participating in this voucher campaign",
@@ -788,14 +783,21 @@ module.exports = {
       // Increment used count
       await voucher.increment("usedCount", { transaction: t });
 
-      // Mark claimed voucher as USED (if customer had claimed it)
-      await CustomerClaimedVoucher.update(
-        { status: "USED", usedAt: new Date() },
-        {
-          where: { customerId, voucherId: voucher.id, status: "CLAIMED" },
-          transaction: t,
-        }
-      );
+      // Mark claimed voucher as USED (if customer had claimed it and reached perUserLimit)
+      const userUsageCount = await VoucherUsage.count({
+        where: { voucherId: voucher.id, customerId },
+        transaction: t,
+      });
+
+      if (userUsageCount >= voucher.perUserLimit) {
+        await CustomerClaimedVoucher.update(
+          { status: "USED", usedAt: new Date() },
+          {
+            where: { customerId, voucherId: voucher.id, status: "CLAIMED" },
+            transaction: t,
+          }
+        );
+      }
 
       if (!externalTransaction) await t.commit();
 
@@ -1094,10 +1096,10 @@ module.exports = {
       await syncVoucherStatuses();
 
       const { limit, offset } = pagination;
-      const { status } = filters;
+      const { status = "CLAIMED" } = filters;
 
       const where = { customerId };
-      if (status) where.status = status;
+      if (status !== "ALL") where.status = status;
 
       // Auto-expire claimed vouchers whose parent voucher has expired
       await CustomerClaimedVoucher.update(
