@@ -608,7 +608,7 @@ module.exports = {
         if (eligibleItems.length === 0) {
           return {
             status: false,
-            message: "None of your cart items are eligible for this voucher",
+            message: "Items from this merchant are found, but none of them match the specific products/services allowed by this voucher.",
           };
         }
       }
@@ -632,7 +632,7 @@ module.exports = {
         if (eligibleItems.length === 0) {
           return {
             status: false,
-            message: "This voucher is only valid for items from a specific merchant",
+            message: `Voucher is valid for ${voucher.companyId}, but none of your cart items are from this merchant.`,
           };
         }
       }
@@ -690,7 +690,7 @@ module.exports = {
         if (!activeParticipationCompanyId) {
           return {
             status: false,
-            message: "The outlet for this product is not participating in this voucher campaign",
+            message: "None of the merchants in your cart have opted-in to this voucher campaign or their participating outlets don't match your items' locations.",
           };
         }
 
@@ -717,16 +717,16 @@ module.exports = {
       }
 
       // Calculate potential discount
-      const eligibleSubtotal = eligibleItems.reduce(
+          const eligibleSubtotal = eligibleItems.reduce(
         (sum, item) => sum + parseFloat(item.totalPrice || 0),
         0
       );
 
-      // Check minimum purchase
-      if (eligibleSubtotal < parseFloat(voucher.minPurchase || 0)) {
+      // Check minimum purchase against eligible subtotal
+      if (parseFloat(voucher.minPurchase || 0) > eligibleSubtotal) {
         return {
           status: false,
-          message: `Minimum purchase of Rp${parseFloat(voucher.minPurchase).toLocaleString("id-ID")} is required`,
+          message: `This voucher requires a minimum purchase of ${parseFloat(voucher.minPurchase).toLocaleString("id-ID")}. Your eligible subtotal is ${eligibleSubtotal.toLocaleString("id-ID")}.`,
         };
       }
 
