@@ -563,20 +563,50 @@ module.exports = {
 
       const now = new Date();
 
-      // Ensure all cart items have companyId
+      // Ensure all cart items have companyId & locationId (Robust Check)
       for (const item of cartItems) {
-        if (!item.companyId) {
+        const id = item.itemId || item.id || item.refferenceId;
+        const type = item.itemType || item.type || item.refferenceType;
+        
+        if (!id) continue;
+
+        if (!item.companyId || !item.locationId) {
           let dbItem;
-          if (item.itemType?.toLowerCase() === "product") {
-            dbItem = await masterProduct.findByPk(item.itemId);
-          } else if (item.itemType?.toLowerCase() === "package") {
-            dbItem = await masterPackage.findByPk(item.itemId);
-          } else if (item.itemType?.toLowerCase() === "service") {
-            dbItem = await masterService.findByPk(item.itemId);
+          const normalizedType = type?.toLowerCase();
+          if (normalizedType === "product") {
+            dbItem = await masterProduct.findByPk(id);
+            if (dbItem && !item.locationId) {
+              const loc = await relationshipProductLocation.findOne({ where: { productId: id, isActive: true } });
+              if (loc) item.locationId = loc.locationId;
+            }
+          } else if (normalizedType === "package") {
+            dbItem = await masterPackage.findByPk(id);
+            if (dbItem && !item.locationId) {
+              const loc = await relationshipPackageLocation.findOne({ where: { packageId: id, isActive: true } });
+              if (loc) item.locationId = loc.locationId;
+            }
+          } else if (normalizedType === "service") {
+            dbItem = await masterService.findByPk(id);
+            if (dbItem && !item.locationId) {
+              const loc = await relationshipServiceLocation.findOne({ where: { serviceId: id, isActive: true } });
+              if (loc) item.locationId = loc.locationId;
+            }
           }
+          
           if (dbItem) {
             item.companyId = dbItem.companyId;
+            item.itemId = id; 
+            item.itemType = type;
           }
+        }
+      }
+
+      // Re-map targetItemId to targetCompanyId with robust check
+      let targetCompanyId = null;
+      if (targetItemId) {
+        const targetedItem = cartItems.find(i => (i.itemId === targetItemId || i.id === targetItemId || i.refferenceId === targetItemId));
+        if (targetedItem) {
+          targetCompanyId = targetedItem.companyId;
         }
       }
 
@@ -628,15 +658,6 @@ module.exports = {
             status: false,
             message: "Items from this merchant are found, but none of them match the specific products/services allowed by this voucher.",
           };
-        }
-      }
-
-      // Derive targetCompanyId from targetItemId if provided
-      let targetCompanyId = null;
-      if (targetItemId) {
-        const targetedItem = cartItems.find(i => i.itemId === targetItemId);
-        if (targetedItem) {
-          targetCompanyId = targetedItem.companyId;
         }
       }
 
