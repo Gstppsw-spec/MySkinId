@@ -21,6 +21,7 @@ const {
   masterQuestionnaireAnswer,
   consultationRecommendationCategory,
   masterUser,
+  masterRole,
 } = require("../models");
 
 const { Op, Sequelize, where, Model } = require("sequelize");
