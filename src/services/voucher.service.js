@@ -727,9 +727,10 @@ module.exports = {
         }
 
         if (!activeParticipationCompanyId) {
+          const foundCompanyIds = Object.keys(companyItems).join(", ");
           return {
             status: false,
-            message: "None of the merchants in your cart have opted-in to this voucher campaign or their participating outlets don't match your items' locations.",
+            message: `Voucher error: No participation found for Voucher ID ${voucher.id} and Merchant IDs [${foundCompanyIds}]. Found ${participatingCompanies.length} participation records in DB for this voucher. Check if merchant IDs match exactly and locations are opted-in.`,
           };
         }
 
