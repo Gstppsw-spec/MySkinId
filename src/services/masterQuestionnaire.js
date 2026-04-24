@@ -5,6 +5,7 @@ const {
     relationshipQuestionnaireCategoryConsultation,
     masterRoomConsultation,
 } = require("../models");
+const { Op, Sequelize } = require("sequelize");
 
 module.exports = {
     // ============================
