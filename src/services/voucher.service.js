@@ -7,6 +7,7 @@ const {
   CustomerClaimedVoucher,
   VoucherParticipation,
   VoucherParticipationItem,
+  VoucherParticipationLocation,
   masterCompany,
   masterProduct,
   masterPackage,
@@ -427,65 +428,42 @@ module.exports = {
       }
 
       // Scope by role
+      let userCompanyId = null;
       if (roleCode === "COMPANY_ADMIN") {
         const userCompany = await relationshipUserCompany.findOne({
           where: { userId, isactive: true },
           attributes: ["companyId"],
         });
         if (userCompany) {
+          userCompanyId = userCompany.companyId;
           // Show company's own vouchers + super admin vouchers that target this company (or global)
-          where[Op.or] = [
-            ...(where[Op.or] || []),
-            { companyId: userCompany.companyId },
+          const scopeCondition = [
+            { companyId: userCompanyId },
             {
               createdByType: "SUPER_ADMIN",
               [Op.or]: [
-                { companyId: null }, // global super admin vouchers
-                { companyId: userCompany.companyId }, // targeted to this company
+                { companyId: null },
+                { companyId: userCompanyId },
               ],
             },
           ];
-          // Override the search `or` if both exist
+
           if (search) {
             const searchCondition = [
               { code: { [Op.like]: `%${search}%` } },
               { title: { [Op.like]: `%${search}%` } },
             ];
-            const scopeCondition = [
-              { companyId: userCompany.companyId },
-              {
-                createdByType: "SUPER_ADMIN",
-                [Op.or]: [
-                  { companyId: null },
-                  { companyId: userCompany.companyId },
-                ],
-              },
-            ];
-            delete where[Op.or];
             where[Op.and] = [
               { [Op.or]: searchCondition },
               { [Op.or]: scopeCondition },
             ];
           } else {
-            // Just scope
-            const scopeCondition = [
-              { companyId: userCompany.companyId },
-              {
-                createdByType: "SUPER_ADMIN",
-                [Op.or]: [
-                  { companyId: null },
-                  { companyId: userCompany.companyId },
-                ],
-              },
-            ];
-            delete where[Op.or];
             where[Op.or] = scopeCondition;
           }
         } else {
           return { status: true, message: "No company assigned", data: [], totalCount: 0 };
         }
       }
-      // SUPER_ADMIN / OPERATIONAL_ADMIN see all
 
       const { count, rows: data } = await Voucher.findAndCountAll({
         where,
@@ -502,6 +480,17 @@ module.exports = {
           { model: VoucherLocation, as: "locations", include: [{ model: masterLocation, as: "location", attributes: ["id", "name"] }] },
           { model: masterCompany, as: "company", attributes: ["id", "name"] },
           { model: masterUser, as: "creator", attributes: ["id", "name"] },
+          // Include participation for COMPANY_ADMIN to see their status
+          ...(userCompanyId ? [{
+            model: VoucherParticipation,
+            as: "participations",
+            where: { companyId: userCompanyId },
+            required: false,
+            include: [
+              { model: VoucherParticipationItem, as: "items" },
+              { model: VoucherParticipationLocation, as: "locations" }
+            ]
+          }] : [])
         ],
         order: [["createdAt", "DESC"]],
         limit,
@@ -650,7 +639,10 @@ module.exports = {
             companyId: Object.keys(companyItems),
             status: "ACTIVE",
           },
-          include: [{ model: VoucherParticipationItem, as: "items" }],
+          include: [
+            { model: VoucherParticipationItem, as: "items" },
+            { model: VoucherParticipationLocation, as: "locations" }
+          ],
         });
 
         const participatingMap = {};
@@ -676,9 +668,23 @@ module.exports = {
 
         const participation = participatingMap[activeParticipationCompanyId];
 
+        // 🔹 CHECK PARTICIPATING LOCATIONS
+        const allowedLocationIds = participation.locations.map(l => l.locationId);
+        const cartItemFromPickedCompany = cartItems.find(ci => ci.companyId === activeParticipationCompanyId);
+        
+        if (!participation.isAllLocations && !allowedLocationIds.includes(cartItemFromPickedCompany.locationId)) {
+          return {
+            status: false,
+            message: "The outlet for this product is not participating in this voucher campaign",
+          };
+        }
+
         // Refilter eligibleItems: MUST be from the picked company AND match the participation items
         eligibleItems = eligibleItems.filter((item) => {
           if (item.companyId !== activeParticipationCompanyId) return false;
+
+          // Also check specific item's location if it's not all locations
+          if (!participation.isAllLocations && !allowedLocationIds.includes(item.locationId)) return false;
 
           if (participation.isAllItems) return true;
 
@@ -1146,7 +1152,7 @@ module.exports = {
   async participateInVoucher(data, user) {
     const t = await sequelize.transaction();
     try {
-      const { voucherId, isAllItems, items } = data;
+      const { voucherId, isAllItems, items, isAllLocations, locationIds } = data;
       const { id: userId, roleCode } = user;
 
       if (roleCode !== "COMPANY_ADMIN") {
@@ -1167,16 +1173,27 @@ module.exports = {
       // Create or Update participation
       const [participation, created] = await VoucherParticipation.findOrCreate({
         where: { voucherId, companyId },
-        defaults: { status: "ACTIVE", isAllItems: isAllItems ?? true },
+        defaults: { 
+          status: "ACTIVE", 
+          isAllItems: isAllItems ?? true,
+          isAllLocations: isAllLocations ?? true
+        },
         transaction: t,
       });
 
       if (!created) {
-        await participation.update({ status: "ACTIVE", isAllItems: isAllItems ?? true }, { transaction: t });
-        // Clear old items if it was specific items before
+        await participation.update({ 
+          status: "ACTIVE", 
+          isAllItems: isAllItems ?? true,
+          isAllLocations: isAllLocations ?? true
+        }, { transaction: t });
+        
+        // Clear old items and locations
         await VoucherParticipationItem.destroy({ where: { participationId: participation.id }, transaction: t });
+        await VoucherParticipationLocation.destroy({ where: { participationId: participation.id }, transaction: t });
       }
 
+      // Handle items
       if (!(isAllItems ?? true) && items && items.length > 0) {
         const pItems = items.map((item) => ({
           participationId: participation.id,
@@ -1184,6 +1201,15 @@ module.exports = {
           itemId: item.itemId,
         }));
         await VoucherParticipationItem.bulkCreate(pItems, { transaction: t });
+      }
+
+      // Handle locations
+      if (!(isAllLocations ?? true) && locationIds && locationIds.length > 0) {
+        const pLocs = locationIds.map((locId) => ({
+          participationId: participation.id,
+          locationId: locId,
+        }));
+        await VoucherParticipationLocation.bulkCreate(pLocs, { transaction: t });
       }
 
       await t.commit();

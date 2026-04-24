@@ -17,6 +17,11 @@ module.exports = (sequelize, DataTypes) => {
         as: "items",
         onDelete: "CASCADE",
       });
+      VoucherParticipation.hasMany(models.VoucherParticipationLocation, {
+        foreignKey: "participationId",
+        as: "locations",
+        onDelete: "CASCADE",
+      });
     }
   }
 
@@ -42,6 +47,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       isAllItems: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+        allowNull: false,
+      },
+      isAllLocations: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
         allowNull: false,
