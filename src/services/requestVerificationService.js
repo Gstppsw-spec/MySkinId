@@ -58,6 +58,27 @@ class RequestVerificationService {
         };
       }
 
+      if (refferenceType === "location") {
+        const company = await masterCompany.findByPk(entity.companyId);
+        if (company && !company.isVerified) {
+          return {
+            status: false,
+            message: "Perusahaan harus terverifikasi sebelum mengajukan verifikasi lokasi",
+            data: null,
+          };
+        }
+      } else if (["product", "service", "package"].includes(refferenceType)) {
+        const locations = await entity.getLocations();
+        const allVerified = locations.length > 0 && locations.every((loc) => loc.isVerified);
+        if (!allVerified) {
+          return {
+            status: false,
+            message: `Seluruh lokasi harus terverifikasi sebelum mengajukan verifikasi ${refferenceType}`,
+            data: null,
+          };
+        }
+      }
+
       const checkRequest = await requestVerification.findOne({
         where: {
           refferenceId,

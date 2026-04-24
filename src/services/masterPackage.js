@@ -345,6 +345,33 @@ module.exports = {
       const locationIds = data.locationIds || data["locationIds[]"];
       const consultationCategoryIds = data.consultationCategoryIds || data["consultationCategoryIds[]"];
 
+      if (!locationIds || !Array.isArray(locationIds) || locationIds.length === 0) {
+        await transaction.rollback();
+        return {
+          status: false,
+          message: "Lokasi tidak boleh kosong (kirim locationIds array)",
+          data: null,
+        };
+      }
+
+      // 🔹 0. Validate locations are verified
+      const verifiedLocations = await masterLocation.findAll({
+        where: {
+          id: { [Op.in]: locationIds },
+          isVerified: true,
+        },
+        transaction,
+      });
+      if (verifiedLocations.length !== locationIds.length) {
+        await transaction.rollback();
+        return {
+          status: false,
+          message:
+            "Seluruh lokasi harus sudah terverifikasi sebelum menambahkan paket",
+          data: null,
+        };
+      }
+
       if (!data.name || data.name.trim() === "") {
         await transaction.rollback();
         return { status: false, message: "Name is required", data: null };
@@ -540,6 +567,24 @@ module.exports = {
         Array.isArray(locationIds) &&
         (locationIds.length !== currentLocIds.length ||
           !locationIds.every((id) => currentLocIds.includes(id)));
+
+      if (locationsChanged) {
+        const verifiedLocations = await masterLocation.findAll({
+          where: {
+            id: { [Op.in]: locationIds },
+            isVerified: true,
+          },
+          transaction,
+        });
+        if (verifiedLocations.length !== locationIds.length) {
+          await transaction.rollback();
+          return {
+            status: false,
+            message: "Seluruh lokasi harus sudah terverifikasi",
+            data: null,
+          };
+        }
+      }
 
       // 🔹 Duplicate Check (scoped by locations)
       // Only check if name, code, or locations are being changed to something NEW

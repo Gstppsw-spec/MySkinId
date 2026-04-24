@@ -380,6 +380,22 @@ module.exports = {
         };
       }
 
+      // 🔹 0. Validate locations are verified
+      const verifiedLocations = await masterLocation.findAll({
+        where: {
+          id: { [Op.in]: locationIds },
+          isVerified: true,
+        },
+      });
+      if (verifiedLocations.length !== locationIds.length) {
+        return {
+          status: false,
+          message:
+            "Seluruh lokasi harus sudah terverifikasi sebelum menambahkan layanan",
+          data: null,
+        };
+      }
+
       if (!price) {
         return {
           status: false,
@@ -527,6 +543,22 @@ module.exports = {
         Array.isArray(locIds) &&
         (locIds.length !== currentLocIds.length ||
           !locIds.every((id) => currentLocIds.includes(id)));
+
+      if (locationsChanged) {
+        const verifiedLocations = await masterLocation.findAll({
+          where: {
+            id: { [Op.in]: locIds },
+            isVerified: true,
+          },
+        });
+        if (verifiedLocations.length !== locIds.length) {
+          return {
+            status: false,
+            message: "Seluruh lokasi harus sudah terverifikasi",
+            data: null,
+          };
+        }
+      }
 
       // Duplicate check (scoped by locations)
       // Only check if name or locations are being changed to something NEW

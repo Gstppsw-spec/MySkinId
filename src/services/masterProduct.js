@@ -469,6 +469,26 @@ module.exports = {
         return { status: false, message: "Name is required", data: null };
       }
 
+      if (!locationIds || !Array.isArray(locationIds) || locationIds.length === 0) {
+        return { status: false, message: "Location is required", data: null };
+      }
+
+      // 🔹 0. Validate locations are verified
+      const verifiedLocations = await masterLocation.findAll({
+        where: {
+          id: { [Op.in]: locationIds },
+          isVerified: true,
+        },
+      });
+      if (verifiedLocations.length !== locationIds.length) {
+        return {
+          status: false,
+          message:
+            "Seluruh lokasi harus sudah terverifikasi sebelum menambahkan produk",
+          data: null,
+        };
+      }
+
       let sku = data.sku;
 
       // 🔹 1. Check for Duplicate NAME in any of the requested locations
@@ -629,6 +649,22 @@ module.exports = {
         Array.isArray(locationIds) &&
         (locationIds.length !== currentLocIds.length ||
           !locationIds.every((id) => currentLocIds.includes(id)));
+
+      if (locationsChanged) {
+        const verifiedLocations = await masterLocation.findAll({
+          where: {
+            id: { [Op.in]: locationIds },
+            isVerified: true,
+          },
+        });
+        if (verifiedLocations.length !== locationIds.length) {
+          return {
+            status: false,
+            message: "Seluruh lokasi harus sudah terverifikasi",
+            data: null,
+          };
+        }
+      }
 
       // 🔹 Duplicate Check (scoped by locations)
       // Only check if name, sku, or locations are being changed to something NEW

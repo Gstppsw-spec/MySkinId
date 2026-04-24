@@ -19,9 +19,11 @@ module.exports = {
                 return { status: false, message: "Pertanyaan tidak boleh kosong", data: null };
             }
 
+/* 
             if (!consultationCategoryIds || consultationCategoryIds.length === 0) {
                 return { status: false, message: "Minimal 1 kategori konsultasi harus dipilih", data: null };
             }
+            */
 
             if (!options || (Array.isArray(options) && options.length === 0)) {
                 return { status: false, message: "Opsi jawaban harus diisi", data: null };
@@ -35,12 +37,14 @@ module.exports = {
                 isActive: isActive !== undefined ? isActive : true,
             });
 
-            // Create pivot records
-            const pivotData = consultationCategoryIds.map((catId) => ({
-                questionnaireId: questionnaire.id,
-                consultationCategoryId: catId,
-            }));
-            await relationshipQuestionnaireCategoryConsultation.bulkCreate(pivotData);
+            // Create pivot records only if categories are selected
+            if (consultationCategoryIds && consultationCategoryIds.length > 0) {
+                const pivotData = consultationCategoryIds.map((catId) => ({
+                    questionnaireId: questionnaire.id,
+                    consultationCategoryId: catId,
+                }));
+                await relationshipQuestionnaireCategoryConsultation.bulkCreate(pivotData);
+            }
 
             // Reload with associations
             const result = await masterQuestionnaire.findByPk(questionnaire.id, {
@@ -77,19 +81,21 @@ module.exports = {
 
             await questionnaire.save();
 
-            // Update category associations if provided
-            if (consultationCategoryIds && consultationCategoryIds.length > 0) {
+            // Update category associations if provided (allows empty array to make it global)
+            if (Array.isArray(consultationCategoryIds)) {
                 // Remove old associations
                 await relationshipQuestionnaireCategoryConsultation.destroy({
                     where: { questionnaireId: id },
                 });
 
-                // Create new ones
-                const pivotData = consultationCategoryIds.map((catId) => ({
-                    questionnaireId: id,
-                    consultationCategoryId: catId,
-                }));
-                await relationshipQuestionnaireCategoryConsultation.bulkCreate(pivotData);
+                if (consultationCategoryIds.length > 0) {
+                    // Create new ones
+                    const pivotData = consultationCategoryIds.map((catId) => ({
+                        questionnaireId: id,
+                        consultationCategoryId: catId,
+                    }));
+                    await relationshipQuestionnaireCategoryConsultation.bulkCreate(pivotData);
+                }
             }
 
             const result = await masterQuestionnaire.findByPk(id, {
@@ -141,16 +147,18 @@ module.exports = {
                 },
             ];
 
-            // If filtering by category, use inner join through the pivot
+            // If filtering by category, include questionnaires for that category PLUS global ones
             if (consultationCategoryId) {
-                includeOpts = [
-                    {
-                        model: masterConsultationCategory,
-                        as: "consultationCategories",
-                        attributes: ["id", "name"],
-                        through: { attributes: [] },
-                        where: { id: consultationCategoryId },
-                    },
+                whereClause[Op.or] = [
+                    Sequelize.literal(`EXISTS (
+                        SELECT 1 FROM relationshipQuestionnaireCategoryConsultation AS pivot
+                        WHERE pivot.questionnaireId = masterQuestionnaire.id
+                        AND pivot.consultationCategoryId = '${consultationCategoryId}'
+                    )`),
+                    Sequelize.literal(`NOT EXISTS (
+                        SELECT 1 FROM relationshipQuestionnaireCategoryConsultation AS pivot
+                        WHERE pivot.questionnaireId = masterQuestionnaire.id
+                    )`)
                 ];
             }
 
@@ -182,16 +190,20 @@ module.exports = {
             }
 
             const questionnaires = await masterQuestionnaire.findAll({
-                where: { isActive: true },
-                include: [
-                    {
-                        model: masterConsultationCategory,
-                        as: "consultationCategories",
-                        attributes: [],
-                        through: { attributes: [] },
-                        where: { id: consultationCategoryId },
-                    },
-                ],
+                where: { 
+                    isActive: true,
+                    [Op.or]: [
+                        Sequelize.literal(`EXISTS (
+                            SELECT 1 FROM relationshipQuestionnaireCategoryConsultation AS pivot
+                            WHERE pivot.questionnaireId = masterQuestionnaire.id
+                            AND pivot.consultationCategoryId = '${consultationCategoryId}'
+                        )`),
+                        Sequelize.literal(`NOT EXISTS (
+                            SELECT 1 FROM relationshipQuestionnaireCategoryConsultation AS pivot
+                            WHERE pivot.questionnaireId = masterQuestionnaire.id
+                        )`)
+                    ]
+                },
                 attributes: ["id", "question", "options", "sortOrder", "isRequired"],
                 order: [["sortOrder", "ASC"]],
             });
@@ -213,18 +225,22 @@ module.exports = {
                 return { status: false, message: "Room tidak ditemukan", data: null };
             }
 
-            // Get all questions for this category
+            // Get all questions for this category + global ones
             const questions = await masterQuestionnaire.findAll({
-                where: { isActive: true },
-                include: [
-                    {
-                        model: masterConsultationCategory,
-                        as: "consultationCategories",
-                        attributes: [],
-                        through: { attributes: [] },
-                        where: { id: room.consultationCategoryId },
-                    },
-                ],
+                where: { 
+                    isActive: true,
+                    [Op.or]: [
+                        Sequelize.literal(`EXISTS (
+                            SELECT 1 FROM relationshipQuestionnaireCategoryConsultation AS pivot
+                            WHERE pivot.questionnaireId = masterQuestionnaire.id
+                            AND pivot.consultationCategoryId = '${room.consultationCategoryId}'
+                        )`),
+                        Sequelize.literal(`NOT EXISTS (
+                            SELECT 1 FROM relationshipQuestionnaireCategoryConsultation AS pivot
+                            WHERE pivot.questionnaireId = masterQuestionnaire.id
+                        )`)
+                    ]
+                },
                 attributes: ["id", "question", "options", "sortOrder", "isRequired"],
                 order: [["sortOrder", "ASC"]],
             });

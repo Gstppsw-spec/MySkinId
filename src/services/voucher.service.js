@@ -1017,7 +1017,14 @@ module.exports = {
 
       const now = new Date();
 
-      // Fetch all active vouchers with their items and locations
+      // 1. Resolve companyId from locationId
+      let targetCompanyId = null;
+      if (locationId) {
+        const loc = await masterLocation.findByPk(locationId);
+        if (loc) targetCompanyId = loc.companyId;
+      }
+
+      // 2. Fetch all active vouchers
       const allActive = await Voucher.findAll({
         where: {
           status: "ACTIVE",
@@ -1037,25 +1044,59 @@ module.exports = {
       const result = [];
 
       for (const voucher of allActive) {
-        // Check min purchase if price is provided
+        // --- 3. BASIC CHECKS (Price) ---
         if (price !== null && price !== undefined) {
-          if (price < parseFloat(voucher.minPurchase)) {
-            continue;
+          if (price < parseFloat(voucher.minPurchase)) continue;
+        }
+
+        // --- 4. CAMPAIGN (SUPER ADMIN) LOGIC ---
+        if (!voucher.companyId && voucher.createdByType === "SUPER_ADMIN") {
+          // If no merchant detected, we can't verify campaign eligibility
+          if (!targetCompanyId) continue;
+
+          // Find if this specific merchant participates in this campaign
+          const participation = await VoucherParticipation.findOne({
+            where: {
+              voucherId: voucher.id,
+              companyId: targetCompanyId,
+              status: "ACTIVE"
+            },
+            include: [
+              { model: VoucherParticipationItem, as: "items" },
+              { model: VoucherParticipationLocation, as: "locations" }
+            ]
+          });
+
+          if (!participation) continue;
+
+          // Check Location Restriction in Participation
+          if (locationId && !participation.isAllLocations) {
+            const allowedLocIds = participation.locations.map(l => l.locationId);
+            if (!allowedLocIds.includes(locationId)) continue;
           }
-        }
 
-        // Check location restriction
-        if (locationId && voucher.locations && voucher.locations.length > 0) {
-          const allowedLocIds = voucher.locations.map((vl) => vl.locationId);
-          if (!allowedLocIds.includes(locationId)) continue;
-        }
+          // Check Item Restriction in Participation
+          if (itemType && itemId && !participation.isAllItems) {
+            const itemKey = `${itemType.toUpperCase()}:${itemId}`;
+            const allowedItemKeys = participation.items.map(pi => `${pi.itemType.toUpperCase()}:${pi.itemId}`);
+            if (!allowedItemKeys.includes(itemKey)) continue;
+          }
+        } 
+        else {
+          // --- 5. DIRECT MERCHANT VOUCHER LOGIC ---
+          // Check Location Restriction
+          if (locationId && voucher.locations && voucher.locations.length > 0) {
+            const allowedLocIds = voucher.locations.map((vl) => vl.locationId);
+            if (!allowedLocIds.includes(locationId)) continue;
+          }
 
-        // Check item restriction
-        if (itemType && itemId && voucher.items && voucher.items.length > 0) {
-          const match = voucher.items.find(
-            (vi) => vi.itemType === itemType.toUpperCase() && vi.itemId === itemId
-          );
-          if (!match) continue;
+          // Check Item Restriction
+          if (itemType && itemId && voucher.items && voucher.items.length > 0) {
+            const match = voucher.items.find(
+              (vi) => vi.itemType === itemType.toUpperCase() && vi.itemId === itemId
+            );
+            if (!match) continue;
+          }
         }
 
         // Check per-user limit (if customerId provided)
