@@ -735,9 +735,13 @@ module.exports = {
 
         const allowedLocationIds = participation.locations.map(l => l.locationId);
         eligibleItems = eligibleItems.filter((item) => {
+          // 1. Must match the merchant company
           if (item.companyId !== activeParticipationCompanyId) return false;
 
-          // Check location
+          // 2. If targetItemId is provided, only include that specific item
+          if (targetItemId && item.itemId !== targetItemId) return false;
+
+          // 3. Check location participation
           if (!participation.isAllLocations && !allowedLocationIds.includes(item.locationId)) return false;
 
           // Check items
