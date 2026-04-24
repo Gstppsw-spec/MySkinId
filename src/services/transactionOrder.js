@@ -734,11 +734,15 @@ module.exports = {
           }
         }
 
-        for (const vCode of codesToApply) {
+        for (const vData of codesToApply) {
+          const vCode = typeof vData === "object" ? vData.code : vData;
+          const targetItemId = typeof vData === "object" ? vData.itemId : null;
+
           const voucherValidation = await voucherService.validateVoucher(
             vCode,
             customerId,
-            allCartItems
+            allCartItems,
+            targetItemId
           );
 
           if (!voucherValidation.status) {
@@ -1298,11 +1302,15 @@ module.exports = {
           }
         }
 
-        for (const vCode of codesToApply) {
+        for (const vData of codesToApply) {
+          const vCode = typeof vData === "object" ? vData.code : vData;
+          const targetItemId = typeof vData === "object" ? vData.itemId : null;
+
           const voucherValidation = await voucherService.validateVoucher(
             vCode,
             customerId,
-            allCartItems
+            allCartItems,
+            targetItemId
           );
 
           if (!voucherValidation.status) {

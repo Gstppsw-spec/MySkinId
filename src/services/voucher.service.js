@@ -546,7 +546,7 @@ module.exports = {
      Checks if a voucher code is valid for the customer and cart items.
      Does NOT consume the voucher.
      ═══════════════════════════════════════════════════ */
-  async validateVoucher(code, customerId, cartItems = []) {
+  async validateVoucher(code, customerId, cartItems = [], targetItemId = null) {
     try {
       await syncVoucherStatuses();
 
@@ -613,8 +613,21 @@ module.exports = {
         }
       }
 
+      // Derive targetCompanyId from targetItemId if provided
+      let targetCompanyId = null;
+      if (targetItemId) {
+        const targetedItem = cartItems.find(i => i.itemId === targetItemId);
+        if (targetedItem) {
+          targetCompanyId = targetedItem.companyId;
+        }
+      }
+
       // --- DIRECT COMPANY VOUCHER CHECK ---
       if (voucher.companyId) {
+        // If targetCompanyId is derived from targetItemId, it must match the voucher's owner
+        if (targetCompanyId && targetCompanyId !== voucher.companyId) {
+          return { status: false, message: "This voucher is not valid for the merchant of the selected item" };
+        }
         eligibleItems = eligibleItems.filter((item) => item.companyId === voucher.companyId);
         if (eligibleItems.length === 0) {
           return {
@@ -626,7 +639,6 @@ module.exports = {
 
       // --- CAMPAIGN PARTICIPATION CHECK (for Super Admin Templates) ---
       if (voucher.companyId === null && voucher.createdByType === "SUPER_ADMIN") {
-        // Group items by company to check individual participation
         const companyItems = {};
         cartItems.forEach((item) => {
           if (!companyItems[item.companyId]) companyItems[item.companyId] = [];
@@ -650,19 +662,27 @@ module.exports = {
           participatingMap[p.companyId] = p;
         });
 
-        // Try to find a merchant in the cart that has participated AND matches the location requirement
         let activeParticipationCompanyId = null;
         let participation = null;
 
-        for (const item of cartItems) {
-          const p = participatingMap[item.companyId];
-          if (p) {
-            // Check if this item's location is allowed
-            const allowedLocationIds = p.locations.map(l => l.locationId);
-            if (p.isAllLocations || allowedLocationIds.includes(item.locationId)) {
-              activeParticipationCompanyId = item.companyId;
-              participation = p;
-              break; // Found a valid merchant-participation match
+        // Determine which company to apply the voucher to
+        if (targetCompanyId) {
+          participation = participatingMap[targetCompanyId];
+          if (!participation) {
+            return { status: false, message: "The merchant of the selected item is not participating in this campaign" };
+          }
+          activeParticipationCompanyId = targetCompanyId;
+        } else {
+          // Fallback: Pick the first participating merchant that matches location
+          for (const item of cartItems) {
+            const p = participatingMap[item.companyId];
+            if (p) {
+              const allowedLocationIds = p.locations.map(l => l.locationId);
+              if (p.isAllLocations || allowedLocationIds.includes(item.locationId)) {
+                activeParticipationCompanyId = item.companyId;
+                participation = p;
+                break;
+              }
             }
           }
         }
@@ -674,15 +694,15 @@ module.exports = {
           };
         }
 
-        // Refilter eligibleItems: MUST be from the picked company AND match the participation items
+        const allowedLocationIds = participation.locations.map(l => l.locationId);
         eligibleItems = eligibleItems.filter((item) => {
           if (item.companyId !== activeParticipationCompanyId) return false;
 
-          // Also check specific item's location if it's not all locations
+          // Check location
           if (!participation.isAllLocations && !allowedLocationIds.includes(item.locationId)) return false;
 
+          // Check items
           if (participation.isAllItems) return true;
-
           const itemKey = `${item.itemType.toUpperCase()}:${item.itemId}`;
           const participationItemMap = participation.items.map((pi) => `${pi.itemType.toUpperCase()}:${pi.itemId}`);
           return participationItemMap.includes(itemKey);
@@ -738,6 +758,7 @@ module.exports = {
           eligibleItemCount: eligibleItems.length,
           myskinSharePercent: voucher.myskinSharePercent,
           mitraSharePercent: voucher.mitraSharePercent,
+          targetCompanyId: activeParticipationCompanyId || voucher.companyId
         },
       };
     } catch (error) {

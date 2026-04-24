@@ -86,14 +86,19 @@ module.exports = {
      ═══════════════════════════════════════════════════ */
   async validate(req, res) {
     try {
-      const { code, cartItems } = req.body;
+      const { code, cartItems, itemId } = req.body;
       if (!code) return response.error(res, "Voucher code is required");
 
       // customerId comes from customer auth middleware
       const customerId = req.user?.id || req.customer?.id;
       if (!customerId) return response.error(res, "Customer ID is required", null, 401);
 
-      const result = await voucherService.validateVoucher(code, customerId, cartItems || []);
+      const result = await voucherService.validateVoucher(
+        code,
+        customerId,
+        cartItems || [],
+        itemId
+      );
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
