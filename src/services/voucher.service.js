@@ -562,6 +562,24 @@ module.exports = {
         return { status: false, message: "Voucher code not found or inactive" };
 
       const now = new Date();
+
+      // Ensure all cart items have companyId
+      for (const item of cartItems) {
+        if (!item.companyId) {
+          let dbItem;
+          if (item.itemType?.toLowerCase() === "product") {
+            dbItem = await masterProduct.findByPk(item.itemId);
+          } else if (item.itemType?.toLowerCase() === "package") {
+            dbItem = await masterPackage.findByPk(item.itemId);
+          } else if (item.itemType?.toLowerCase() === "service") {
+            dbItem = await masterService.findByPk(item.itemId);
+          }
+          if (dbItem) {
+            item.companyId = dbItem.companyId;
+          }
+        }
+      }
+
       // Check date range
       if (now < voucher.startDate || now > voucher.endDate) {
         return { status: false, message: "Voucher is not within the valid period" };
