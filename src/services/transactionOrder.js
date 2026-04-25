@@ -499,6 +499,7 @@ module.exports = {
         const totalWeight = unitWeight * item.qty;
 
         itemsByLocation[locationId].push({
+          id: item.id, // Cart Item ID
           itemType: type,
           itemId: actualItem.id,
           itemName: actualItem.name,
@@ -1072,6 +1073,7 @@ module.exports = {
         const totalWeight = unitWeight * item.qty;
 
         itemsByLocation[locationId].push({
+          id: item.id, // Provided ID (Product ID in direct checkout)
           itemType: item.type,
           itemId: actualItem.id,
           itemName: actualItem.name,

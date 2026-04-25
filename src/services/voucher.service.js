@@ -600,7 +600,12 @@ module.exports = {
       // Re-map targetItemId to targetCompanyId with robust check
       let targetCompanyId = null;
       if (targetItemId) {
-        const targetedItem = cartItems.find(i => (i.itemId === targetItemId || i.id === targetItemId || i.refferenceId === targetItemId));
+        const tid = String(targetItemId).toLowerCase();
+        const targetedItem = cartItems.find(i => 
+          (i.itemId && String(i.itemId).toLowerCase() === tid) || 
+          (i.id && String(i.id).toLowerCase() === tid) || 
+          (i.refferenceId && String(i.refferenceId).toLowerCase() === tid)
+        );
         if (targetedItem) {
           targetCompanyId = targetedItem.companyId;
         }
@@ -663,10 +668,11 @@ module.exports = {
       // --- DIRECT COMPANY VOUCHER CHECK ---
       if (voucher.companyId) {
         // If targetCompanyId is derived from targetItemId, it must match the voucher's owner
-        if (targetCompanyId && targetCompanyId !== voucher.companyId) {
+        // Check if voucher is targeted to a specific item from a different merchant
+        if (targetCompanyId && String(targetCompanyId).toLowerCase() !== String(voucher.companyId).toLowerCase()) {
           return { status: false, message: "This voucher is not valid for the merchant of the selected item" };
         }
-        eligibleItems = eligibleItems.filter((item) => item.companyId === voucher.companyId);
+        eligibleItems = eligibleItems.filter((item) => item.companyId && String(item.companyId).toLowerCase() === String(voucher.companyId).toLowerCase());
         if (eligibleItems.length === 0) {
           return {
             status: false,
@@ -735,13 +741,20 @@ module.exports = {
         const allowedLocationIds = participation.locations.map(l => l.locationId);
         eligibleItems = eligibleItems.filter((item) => {
           // 1. Must match the merchant company
-          if (item.companyId !== activeParticipationCompanyId) return false;
+          if (item.companyId && activeParticipationCompanyId && String(item.companyId).toLowerCase() !== String(activeParticipationCompanyId).toLowerCase()) return false;
 
           // 2. If targetItemId is provided, only include that specific item
-          if (targetItemId && item.itemId !== targetItemId) return false;
+          if (targetItemId) {
+            const tid = String(targetItemId).toLowerCase();
+            if (String(item.itemId).toLowerCase() !== tid && String(item.id).toLowerCase() !== tid) return false;
+          }
 
           // 3. Check location participation
-          if (!participation.isAllLocations && !allowedLocationIds.includes(item.locationId)) return false;
+          if (!participation.isAllLocations) {
+            const lid = String(item.locationId).toLowerCase();
+            const isAllowed = allowedLocationIds.some(id => String(id).toLowerCase() === lid);
+            if (!isAllowed) return false;
+          }
 
           // Check items
           if (participation.isAllItems) return true;
