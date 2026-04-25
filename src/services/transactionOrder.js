@@ -2336,46 +2336,34 @@ module.exports = {
       let _status = null;
       let _payment_channel = null;
 
-      // Detect Payload Type
-      if (
-        payload.event &&
-        (payload.event.startsWith("payment_request.") ||
-          payload.event.startsWith("payment."))
-      ) {
-        // Payment Request Callback (V2)
-        _external_id = payload.data.reference_id;
-        _status =
-          payload.data.status === "SUCCEEDED" ? "PAID" : payload.data.status;
-        const pm = payload.data.payment_method;
-        _payment_channel = pm
-          ? pm.ewallet
-            ? pm.ewallet.channel_code
-            : pm.virtual_account
-              ? pm.virtual_account.bank_code
-              : pm.type
-          : null;
-      } else if (payload.event && payload.event.startsWith("ewallet.")) {
-        // E-Wallet Charge Callback (Legacy/V1)
-        _external_id = payload.data.reference_id;
-        _status = payload.data.status === "SUCCEEDED" ? "PAID" : "FAILED";
-        _payment_channel = payload.data.channel_code;
-      } else if (payload.event === "qr_code.payment") {
-        // QRIS Callback
-        _external_id = payload.data.external_id;
-        _status = payload.data.status === "COMPLETED" ? "PAID" : "FAILED";
-        _payment_channel = "QRIS";
-      } else if (payload.payment_id && payload.callback_virtual_account_id) {
-        // Fixed Virtual Account Payment Callback
-        _external_id = payload.external_id;
-        _status = "PAID"; // Receiving this callback implies payment received
-        _payment_channel = payload.bank_code;
+      // Aggressive Payload Extraction to handle different Xendit Webhook Versions
+      const payloadData = payload.data || {};
+      
+      _external_id = 
+        payload.external_id || 
+        payloadData.external_id || 
+        payload.reference_id || 
+        payloadData.reference_id || 
+        payload.qr_id ||
+        payloadData.qr_id ||
+        payload.id ||
+        payloadData.id;
+
+      const rawStatus = payload.status || payloadData.status;
+      if (rawStatus === "SUCCEEDED" || rawStatus === "COMPLETED" || rawStatus === "SETTLED") {
+        _status = "PAID";
       } else {
-        // Fallback / Standard Invoice / Retail Outlet Callback
-        _external_id =
-          payload.external_id || payload.reference_id || payload.id;
-        _status = payload.status;
-        _payment_channel = payload.payment_channel || payload.payment_method;
+        _status = rawStatus;
       }
+
+      _payment_channel = 
+        payload.payment_channel || 
+        payload.payment_method || 
+        payload.bank_code || 
+        payloadData.channel_code || 
+        (payloadData.payment_method && payloadData.payment_method.type) || 
+        "UNKNOWN";
+
 
       console.log(
         `Xendit Callback Processed: ID=${_external_id}, Status=${_status}, Channel=${_payment_channel}`,
