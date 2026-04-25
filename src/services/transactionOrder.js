@@ -2338,14 +2338,17 @@ module.exports = {
 
       // Aggressive Payload Extraction to handle different Xendit Webhook Versions
       const payloadData = payload.data || {};
+      const payloadQrCode = payload.qr_code || {};
       
       _external_id = 
         payload.external_id || 
         payloadData.external_id || 
+        payloadQrCode.external_id ||
         payload.reference_id || 
         payloadData.reference_id || 
         payload.qr_id ||
         payloadData.qr_id ||
+        payloadQrCode.id ||
         payload.id ||
         payloadData.id;
 
