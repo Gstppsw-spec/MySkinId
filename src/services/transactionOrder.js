@@ -2359,13 +2359,16 @@ module.exports = {
         _status = rawStatus;
       }
 
+      const paymentDetails = payload.payment_details || payloadData.payment_details || {};
+
       _payment_channel = 
         payload.payment_channel || 
         payload.payment_method || 
         payload.bank_code || 
         payloadData.channel_code || 
         (payloadData.payment_method && payloadData.payment_method.type) || 
-        "UNKNOWN";
+        paymentDetails.source ||
+        (payload.event === "qr.payment" ? "QRIS" : null);
 
 
       console.log(
