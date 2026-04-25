@@ -585,7 +585,7 @@ module.exports = {
         }
 
         // 2. Resolve companyId from masterLocation (Since items don't have companyId directly)
-        if (item.locationId && !item.companyId) {
+        if (item.locationId && (!item.companyId || item.companyId === "undefined" || item.companyId === null)) {
           const location = await masterLocation.findByPk(item.locationId);
           if (location) {
             item.companyId = location.companyId;

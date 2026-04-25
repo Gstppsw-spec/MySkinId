@@ -440,13 +440,15 @@ module.exports = {
               : "packageId";
         const firstPivot = await pivotModel.findOne({
           where: { [fkField]: actualItem.id, isActive: true },
+          include: [{ model: masterLocation, as: "location", attributes: ["id", "companyId"] }],
         });
-        if (!firstPivot) {
+        if (!firstPivot || !firstPivot.location) {
           throw new Error(
             `${actualItem.name} tidak tersedia di lokasi manapun`,
           );
         }
         const locationId = firstPivot.locationId;
+        const companyId = firstPivot.location.companyId;
         if (!itemsByLocation[locationId]) {
           itemsByLocation[locationId] = [];
         }
@@ -500,7 +502,7 @@ module.exports = {
           itemType: type,
           itemId: actualItem.id,
           itemName: actualItem.name,
-          companyId: actualItem.companyId,
+          companyId: companyId,
           quantity: item.qty,
           unitPrice: unitPrice,
           discountAmount: discountAmount * item.qty,
@@ -1013,12 +1015,14 @@ module.exports = {
               : "packageId";
         const pivotRow = await pivotModel.findOne({
           where: { [fkField]: actualItem.id, locationId, isActive: true },
+          include: [{ model: masterLocation, as: "location", attributes: ["id", "companyId"] }],
         });
-        if (!pivotRow) {
+        if (!pivotRow || !pivotRow.location) {
           throw new Error(
             `${actualItem.name} tidak tersedia di lokasi yang dipilih`,
           );
         }
+        const companyId = pivotRow.location.companyId;
         if (!itemsByLocation[locationId]) {
           itemsByLocation[locationId] = [];
         }
@@ -1071,7 +1075,7 @@ module.exports = {
           itemType: item.type,
           itemId: actualItem.id,
           itemName: actualItem.name,
-          companyId: actualItem.companyId,
+          companyId: companyId,
           quantity: item.qty,
           unitPrice: unitPrice,
           discountAmount: discountAmount * item.qty,
