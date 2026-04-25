@@ -2622,10 +2622,24 @@ module.exports = {
           }
         }
       } else if (_status === "EXPIRED" || _status === "FAILED") {
-        const orderData = await order.findOne({
+        let orderData = await order.findOne({
           where: { orderNumber: _external_id },
           include: [{ model: transaction, as: "transactions" }],
         });
+
+        if (!orderData) {
+          const paymentRecord = await orderPayment.findOne({
+            where: { referenceNumber: _external_id },
+            include: [{
+              model: order,
+              as: "order",
+              include: [{ model: transaction, as: "transactions" }]
+            }]
+          });
+          if (paymentRecord && paymentRecord.order) {
+            orderData = paymentRecord.order;
+          }
+        }
 
         if (orderData && orderData.paymentStatus !== "PAID") {
           await orderData.update(
