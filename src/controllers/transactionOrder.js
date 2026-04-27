@@ -226,15 +226,18 @@ module.exports = {
       const adminId = req.user.id;
       const page = parseInt(req.query.page) || 1;
       const pageSize = parseInt(req.query.pageSize) || 10;
-      const { search } = req.query;
-      const { status } = req.query;
-
-      const result = await transactionOrder.getOutletTransactions(adminId, {
+      const { search, status, locationId, companyId } = req.query;
+      
+      const filters = {
         page,
         pageSize,
         search,
         status,
-      });
+        locationId: locationId ? (Array.isArray(locationId) ? locationId : [locationId]) : null,
+        companyId: companyId ? (Array.isArray(companyId) ? companyId : [companyId]) : null,
+      };
+      
+      const result = await transactionOrder.getOutletTransactions(adminId, filters);
 
       if (!result.status) return response.error(res, result.message);
 
@@ -531,7 +534,7 @@ module.exports = {
       const result = await transactionOrder.getFinancialReport(adminId, {
         startDate,
         endDate,
-        locationId,
+        locationId: locationId ? (Array.isArray(locationId) ? locationId : [locationId]) : null,
         page,
         pageSize,
       });

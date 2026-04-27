@@ -34,7 +34,7 @@ module.exports = {
 
   async createUser(req, res) {
     try {
-      const result = await authService.createUser(req.user, req.body);
+      const result = await authService.createUser(req.user, req.body, req.file);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }
@@ -115,7 +115,7 @@ module.exports = {
   async editUser(req, res) {
     try {
       const { id } = req.params;
-      const result = await authService.updateUser(req.user, id, req.body);
+      const result = await authService.updateUser(req.user, id, req.body, req.file);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }

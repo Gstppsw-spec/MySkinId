@@ -136,9 +136,27 @@ module.exports = {
     };
   },
 
-  async createUser(userObj, data) {
+  async createUser(userObj, data, file = null) {
     try {
-      const { name, email, password, locationId, roleName, companyId } = data;
+      let { name, username, email, password, locationId, roleName, companyId, profile } = data;
+
+      // Handle profile object if exists (could be JSON string if using form-data)
+      let profileData = profile;
+      if (typeof profile === "string") {
+        try {
+          profileData = JSON.parse(profile);
+        } catch (e) {
+          profileData = null;
+        }
+      }
+
+      let finalName = name;
+      let finalUsername = username;
+
+      if (profileData) {
+        if (profileData.name) finalName = profileData.name;
+        if (profileData.username) finalUsername = profileData.username;
+      }
 
       if (
         userObj &&
@@ -152,7 +170,7 @@ module.exports = {
         };
       }
 
-      if (!name || !email || !password || !roleName)
+      if (!finalName || !email || !password || !roleName)
         return { status: false, message: "Data tidak lengkap" };
 
       const role = await masterRole.findOne({
@@ -225,12 +243,20 @@ module.exports = {
       }
 
       const hashPassword = await bcrypt.hash(password, 10);
+      let avatar = profileData?.photo || null;
+
+      // File upload takes priority for avatar
+      if (file) {
+        avatar = file.path.replace(/\\/g, "/");
+      }
 
       const user = await masterUser.create({
-        name: name,
+        name: finalName,
+        username: finalUsername,
         email,
         roleId: role.id,
         password: hashPassword,
+        avatar: avatar,
         isactive: true,
       });
 
@@ -484,7 +510,7 @@ module.exports = {
           locationName = companyName;
         }
 
-        return {
+        const result = {
           id: user.id,
           name: user.name,
           email: user.email,
@@ -495,6 +521,15 @@ module.exports = {
           location: locationName,
           companyName: companyName,
         };
+
+        if (user.role?.roleCode === "DOCTOR_GENERAL" || user.role?.roleCode === "OUTLET_DOCTOR") {
+          result.profile = {
+            username: user.username,
+            photo: user.avatar,
+          };
+        }
+
+        return result;
       });
 
       return {
@@ -634,7 +669,7 @@ module.exports = {
           locationName = companyName;
         }
 
-        return {
+        const result = {
           id: user.id,
           name: user.name,
           email: user.email,
@@ -645,6 +680,15 @@ module.exports = {
           location: locationName,
           companyName: companyName,
         };
+
+        if (user.role?.roleCode === "DOCTOR_GENERAL" || user.role?.roleCode === "OUTLET_DOCTOR") {
+          result.profile = {
+            username: user.username,
+            photo: user.avatar,
+          };
+        }
+
+        return result;
       });
 
       return {
@@ -712,6 +756,13 @@ module.exports = {
 
       // 🔥 convert ke object biasa
       user = user.toJSON();
+
+      if (user.role?.roleCode === "DOCTOR_GENERAL" || user.role?.roleCode === "OUTLET_DOCTOR") {
+        user.profile = {
+          username: user.username,
+          photo: user.avatar,
+        };
+      }
 
       const isSuperAdmin = user.role?.roleCode === "SUPER_ADMIN";
 
@@ -809,16 +860,35 @@ module.exports = {
     }
   },
 
-  async updateUser(userObj, id, data) {
+  async updateUser(userObj, id, data, file = null) {
     try {
-      const { name, email, password, phone, roleId, locationId, isactive } =
+      let { name, username, email, password, phone, roleId, locationId, isactive, profile } =
         data;
+
       const user = await masterUser.findByPk(id, {
         include: [{ model: masterRole, as: "role" }],
       });
 
       if (!user) {
         return { status: false, message: "User tidak ditemukan", data: null };
+      }
+
+      // Handle profile object if exists
+      let profileData = profile;
+      if (typeof profile === "string") {
+        try {
+          profileData = JSON.parse(profile);
+        } catch (e) {
+          profileData = null;
+        }
+      }
+
+      let finalName = name || user.name;
+      let finalUsername = username || user.username;
+
+      if (profileData) {
+        if (profileData.name) finalName = profileData.name;
+        if (profileData.username) finalUsername = profileData.username;
       }
 
       if (
@@ -842,7 +912,14 @@ module.exports = {
         }
       }
 
-      const updateData = { name, email, phone, roleId, isactive };
+      let avatar = profileData?.photo || user.avatar;
+
+      // File upload takes priority for avatar
+      if (file) {
+        avatar = file.path.replace(/\\/g, "/");
+      }
+
+      const updateData = { name: finalName, username: finalUsername, email, phone, roleId, isactive, avatar };
 
       if (password) {
         updateData.password = await bcrypt.hash(password, 10);

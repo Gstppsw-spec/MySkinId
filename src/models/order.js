@@ -20,6 +20,10 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "orderId",
                 as: "adsPurchase",
             });
+            order.hasMany(models.VoucherUsage, {
+                foreignKey: "orderId",
+                as: "vouchers",
+            });
         }
     }
 

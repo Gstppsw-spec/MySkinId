@@ -447,7 +447,47 @@ module.exports = {
         newMessage.message = JSON.stringify(messageContent);
       }
 
-      socketInstance.emitConsultationMessage(roomId, newMessage);
+      // Fetch sender profile for socket/response
+      let senderProfile = null;
+      const roomWithProfiles = await masterRoomConsultation.findByPk(roomId, {
+        include: [
+          {
+            model: masterUser,
+            as: "doctor",
+            attributes: ["id", "username", "name", "avatar"],
+            include: [{ model: masterRole, as: "role", attributes: ["roleName", "roleCode"] }]
+          },
+          {
+            model: masterCustomer,
+            as: "customer",
+            attributes: ["id", "name", "profileImageUrl"]
+          }
+        ]
+      });
+
+      if (roomWithProfiles) {
+        if (senderRole === "doctor" && roomWithProfiles.doctor) {
+          senderProfile = {
+            name: roomWithProfiles.doctor.username || roomWithProfiles.doctor.name,
+            image: roomWithProfiles.doctor.avatar,
+            role: roomWithProfiles.doctor.role?.roleName,
+            roleCode: roomWithProfiles.doctor.role?.roleCode
+          };
+        } else if (senderRole === "customer" && roomWithProfiles.customer) {
+          senderProfile = {
+            name: roomWithProfiles.customer.name,
+            image: roomWithProfiles.customer.profileImageUrl,
+            role: "Customer"
+          };
+        }
+      }
+
+      const messageWithProfile = {
+        ...newMessage.get({ plain: true }),
+        senderProfile
+      };
+
+      socketInstance.emitConsultationMessage(roomId, messageWithProfile);
 
       // === PUSH NOTIFICATION ===
       try {
@@ -504,7 +544,7 @@ module.exports = {
         console.error("[PushNotif] Error in addMessage:", pushErr.message);
       }
 
-      return { status: true, message: "Success", data: newMessage };
+      return { status: true, message: "Success", data: messageWithProfile };
     } catch (error) {
       return { status: false, message: error.message, data: null };
     }
@@ -545,14 +585,61 @@ module.exports = {
             model: masterConsultationImage,
             as: "consultationImage",
           },
+          {
+            model: masterRoomConsultation,
+            as: "room",
+            attributes: ["id", "customerId", "doctorId"],
+            include: [
+              {
+                model: masterUser,
+                as: "doctor",
+                attributes: ["id", "username", "name", "avatar"],
+                include: [{ model: masterRole, as: "role", attributes: ["roleName", "roleCode"] }]
+              },
+              {
+                model: masterCustomer,
+                as: "customer",
+                attributes: ["id", "name", "profileImageUrl"]
+              }
+            ]
+          }
         ],
         order: [["createdAt", "DESC"]],
         limit,
       });
+
+      const formattedMessages = messages.map(msg => {
+        const plain = msg.get({ plain: true });
+        let senderProfile = null;
+
+        if (plain.senderRole === "doctor" && plain.room?.doctor) {
+          senderProfile = {
+            name: plain.room.doctor.username || plain.room.doctor.name,
+            image: plain.room.doctor.avatar,
+            role: plain.room.doctor.role?.roleName,
+            roleCode: plain.room.doctor.role?.roleCode
+          };
+        } else if (plain.senderRole === "customer" && plain.room?.customer) {
+          senderProfile = {
+            name: plain.room.customer.name,
+            image: plain.room.customer.profileImageUrl,
+            role: "Customer"
+          };
+        }
+
+        // Clean up the response
+        delete plain.room;
+
+        return {
+          ...plain,
+          senderProfile
+        };
+      });
+
       return {
         status: true,
         message: "Berhasil",
-        data: messages,
+        data: formattedMessages,
       };
     } catch (error) {
       return {
@@ -1818,6 +1905,7 @@ module.exports = {
           model: masterLocation,
           as: "locations",
           attributes: ["id"],
+          include: [{ model: masterLocationImage, as: "images", attributes: ["imageUrl"] }],
           through: { attributes: [] },
           required: true,
           where: { id: { [Op.in]: locationIds } },
@@ -1922,6 +2010,8 @@ module.exports = {
           const price = parseFloat(sj.price) || 0;
           const discountPercent = parseFloat(sj.discountPercent) || 0;
           const discountPrice = price - (price * discountPercent) / 100;
+          const firstLocation = sj.locations && sj.locations.length > 0 ? sj.locations[0] : null;
+          const media = firstLocation && firstLocation.images && firstLocation.images.length > 0 ? firstLocation.images[0] : null;
 
           return {
             id: sj.id,
@@ -1931,6 +2021,7 @@ module.exports = {
             discountPrice,
             discountPercent,
             duration: sj.duration,
+            media,
             ratingAvg: sj.ratingAvg,
             categories: sj.categories.map(cat => ({ id: cat.id, name: cat.name }))
           };

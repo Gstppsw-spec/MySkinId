@@ -43,6 +43,11 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
+      username: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        unique: true,
+      },
       name: DataTypes.STRING,
       email: {
         type: DataTypes.STRING,
@@ -51,7 +56,25 @@ module.exports = (sequelize, DataTypes) => {
       phone: DataTypes.STRING,
       password: DataTypes.STRING,
       roleId: DataTypes.UUID,
-      avatar: DataTypes.STRING,
+      avatar: {
+        type: DataTypes.STRING,
+        get() {
+          const rawValue = this.getDataValue("avatar");
+          if (!rawValue) return null;
+
+          // If already a full URL, return as is
+          if (rawValue.startsWith("http://") || rawValue.startsWith("https://")) {
+            return rawValue;
+          }
+
+          const BASE_URL =
+            process.env.BASE_URL ||
+            `${process.env.APP_PROTOCOL || "http"}://${process.env.APP_HOST || "localhost"
+            }:${process.env.APP_PORT || 3000}`;
+
+          return `${BASE_URL}/${rawValue}`;
+        },
+      },
       isactive: DataTypes.BOOLEAN,
       isAvailableConsul: {
         type: DataTypes.BOOLEAN,

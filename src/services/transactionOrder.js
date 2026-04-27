@@ -31,6 +31,7 @@ const {
   masterUser,
   masterRole,
   sequelize,
+  VoucherUsage,
 } = require("../models");
 const { nanoid } = require("nanoid");
 const axios = require("axios");
@@ -3572,6 +3573,8 @@ module.exports = {
       pageSize = 10,
       search = "",
       status = "",
+      locationId = null,
+      companyId = null,
       productOnlyForPaid = false,
     },
   ) {
@@ -3586,9 +3589,28 @@ module.exports = {
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
+      // Filter allowed locations
+      let targetLocationIds = locationIds;
+      if (locationId && locationId.length > 0) {
+        targetLocationIds = locationId.filter(id => locationIds.includes(id));
+      }
+
+      if (targetLocationIds.length === 0) {
+        return {
+          status: true,
+          message: "No transactions found for requested filters",
+          data: [],
+          totalCount: 0,
+        };
+      }
+
       const whereClause = {
-        locationId: { [Op.in]: locationIds },
+        locationId: { [Op.in]: targetLocationIds },
       };
+
+      if (companyId && companyId.length > 0) {
+        whereClause["$location.companyId$"] = { [Op.in]: companyId };
+      }
 
       if (search) {
         whereClause[Op.or] = [
@@ -3652,7 +3674,12 @@ module.exports = {
               {
                 model: orderPayment,
                 as: "payments",
-                attributes: ["paymentMethod", "paymentStatus", "amount"],
+                attributes: ["paymentMethod", "paymentStatus", "amount", "mdrFee"],
+              },
+              {
+                model: VoucherUsage,
+                as: "vouchers",
+                attributes: ["discountAmount", "myskinSubsidy", "mitraSubsidy"],
               },
             ],
           },
@@ -3680,11 +3707,55 @@ module.exports = {
 
       const result = rows.map((r) => {
         const plain = r.get({ plain: true });
+        
+        // --- Financial Breakdown Calculation ---
+        const orderData = plain.order;
+        const paymentData = orderData && orderData.payments && orderData.payments.length > 0 ? orderData.payments[0] : null;
+        const vouchers = orderData && orderData.vouchers ? orderData.vouchers : [];
+        
+        const subtotal = parseFloat(plain.grandTotal || 0); // This is usually sum(items) + shipping
+        const shippingFee = parseFloat(plain.shipping?.shippingCost || 0);
+        
+        // 🔹 Proportional Calculation for MDR and Voucher
+        const totalOrderAmountBeforeDiscount = parseFloat(orderData?.totalAmount || 0) + vouchers.reduce((sum, v) => sum + parseFloat(v.discountAmount), 0);
+        
+        // Proportion of this transaction relative to the whole order
+        const proportion = totalOrderAmountBeforeDiscount > 0 ? subtotal / totalOrderAmountBeforeDiscount : 0;
+
+        // MDR Calculation
+        let mdrFee = 0;
+        if (paymentData && paymentData.mdrFee > 0) {
+          mdrFee = Math.round(proportion * parseFloat(paymentData.mdrFee));
+        }
+
+        // Voucher Calculation (Proportional)
+        const totalVoucherDiscount = vouchers.reduce((sum, v) => sum + parseFloat(v.discountAmount), 0);
+        const totalMitraSubsidy = vouchers.reduce((sum, v) => sum + parseFloat(v.mitraSubsidy), 0);
+        
+        const voucherDiscountPortion = Math.round(proportion * totalVoucherDiscount);
+        const mitraSubsidyPortion = Math.round(proportion * totalMitraSubsidy);
+
+        // Platform Fee (1% of subtotal before voucher if we want, or after? usually after item discount but before voucher)
+        // Let's stick to 1% of the subtotal (grandTotal) as defined in getFinancialReport
+        const platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+        const platformFee = Math.round((subtotal * platformFeePercent) / 100);
+
+        // Net for Outlet: Subtotal - platformFee - mdrFee - (portion of voucher that outlet pays)
+        const netForOutlet = subtotal - platformFee - mdrFee - mitraSubsidyPortion;
+
         const res = {
           ...plain,
           customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
           outletPhone: plain.location?.phone || null,
           serviceFee: plain.order?.orderNumber?.startsWith("ORD-") ? SERVICE_FEE : 0,
+          financials: {
+            subtotal,
+            shippingFee,
+            voucherDiscount: voucherDiscountPortion,
+            xenditMdrFee: mdrFee,
+            platformFee: platformFee,
+            netForOutlet: netForOutlet,
+          }
         };
         if (res.order?.customer) {
           delete res.order.customer.phoneNumber;
@@ -4688,12 +4759,17 @@ module.exports = {
               {
                 model: masterCustomer,
                 as: "customer",
-                attributes: ["phoneNumber"],
+                attributes: ["id", "name", "email", "phoneNumber", "profileImageUrl"],
               },
               {
                 model: orderPayment,
                 as: "payments",
-                attributes: ["paymentMethod", "paymentStatus", "amount"],
+                attributes: ["paymentMethod", "paymentStatus", "amount", "mdrFee"],
+              },
+              {
+                model: VoucherUsage,
+                as: "vouchers",
+                attributes: ["discountAmount", "myskinSubsidy", "mitraSubsidy"],
               },
             ],
           },
@@ -4754,16 +4830,66 @@ module.exports = {
       }
 
       const plain = trx.get({ plain: true });
+      
+      // --- Financial Constants ---
+      const orderData = plain.order;
+      const paymentData = orderData && orderData.payments && orderData.payments.length > 0 ? orderData.payments[0] : null;
+      const vouchers = orderData && orderData.vouchers ? orderData.vouchers : [];
+      const totalVoucherDiscount = vouchers.reduce((sum, v) => sum + parseFloat(v.discountAmount), 0);
+      const totalMitraSubsidy = vouchers.reduce((sum, v) => sum + parseFloat(v.mitraSubsidy), 0);
+      const totalMyskinSubsidy = vouchers.reduce((sum, v) => sum + parseFloat(v.myskinSubsidy), 0);
+      
+      const totalOrderAmountBeforeDiscount = parseFloat(orderData?.totalAmount || 0) + totalVoucherDiscount;
+
       const resultData = {
         ...plain,
-        customerPhone:
-          plain.shipping?.receiverPhone ||
-          plain.order?.customer?.phoneNumber ||
-          null,
+        customerPhone: plain.shipping?.receiverPhone || plain.order?.customer?.phoneNumber || null,
         outletPhone: plain.location?.phone || null,
+        items: plain.items.map(item => {
+          const itemSubtotal = parseFloat(item.totalPrice || 0); // Price * Qty (after item-level discount)
+          
+          // Proportion of this item relative to the WHOLE order
+          const proportion = totalOrderAmountBeforeDiscount > 0 ? itemSubtotal / totalOrderAmountBeforeDiscount : 0;
+
+          // MDR Calculation for this item
+          let mdrFee = 0;
+          if (paymentData && paymentData.mdrFee > 0) {
+            mdrFee = Math.round(proportion * parseFloat(paymentData.mdrFee));
+          }
+
+          // Voucher Calculation for this item
+          const voucherDiscount = Math.round(proportion * totalVoucherDiscount);
+          const mitraSubsidy = Math.round(proportion * totalMitraSubsidy);
+          const myskinSubsidy = Math.round(proportion * totalMyskinSubsidy);
+
+          // Platform Fee (1%)
+          const platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+          const platformFee = Math.round((itemSubtotal * platformFeePercent) / 100);
+
+          // Net for Item
+          const netForItem = itemSubtotal - platformFee - mdrFee - mitraSubsidy;
+
+          return {
+            ...item,
+            financials: {
+              itemSubtotal,
+              itemMdrFee: mdrFee,
+              itemPlatformFee: platformFee,
+              itemVoucherDiscount: voucherDiscount,
+              itemVoucherSubsidySplit: {
+                myskin: myskinSubsidy,
+                mitra: mitraSubsidy
+              },
+              netForItem: netForItem
+            }
+          };
+        })
       };
-      if (resultData.order?.customer)
-        delete resultData.order.customer.phoneNumber;
+
+      if (resultData.order?.customer) {
+        // Keep the customer object but can remove sensitive fields if needed
+        // resultData.customer = resultData.order.customer; 
+      }
       if (resultData.location) delete resultData.location.phone;
 
       return {
@@ -5094,9 +5220,10 @@ module.exports = {
         throw new Error("Admin not assigned to any location");
       }
 
-      const targetLocationIds = locationId 
-        ? [locationId].filter(id => locationIds.includes(id)) 
-        : locationIds;
+      let targetLocationIds = locationIds;
+      if (locationId && locationId.length > 0) {
+        targetLocationIds = locationId.filter(id => locationIds.includes(id));
+      }
 
       if (targetLocationIds.length === 0) {
         throw new Error("Unauthorized access to requested location");
