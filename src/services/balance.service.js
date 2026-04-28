@@ -69,10 +69,14 @@ module.exports = {
    * Add balance (Topup or Grant)
    */
   async addBalance(companyId, amount, type = "TOPUP", referenceId = null, description = null) {
+    if (!companyId) {
+      return { status: false, message: "companyId is required for balance update" };
+    }
+
     const t = await sequelize.transaction();
     try {
       let balanceRecord = await CompanyAdsBalance.findOne({
-        where: { companyId },
+        where: { companyId: companyId },
         transaction: t,
         lock: true
       });

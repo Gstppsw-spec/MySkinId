@@ -137,7 +137,6 @@ module.exports = {
 
       if (!targetCompanyId) return response.error(res, "companyId is required");
 
-      const balanceService = require("../services/balance.service");
       const result = await balanceService.getBalance(targetCompanyId);
       const history = await balanceService.getHistory(targetCompanyId, { limit: 10 });
 
@@ -156,7 +155,6 @@ module.exports = {
   async adminTopup(req, res) {
     try {
       const { companyId, companyIds, amount, description } = req.body;
-      const balanceService = require("../services/balance.service");
 
       if (!amount || parseFloat(amount) <= 0) {
         return response.error(res, "amount is required and must be greater than 0");
