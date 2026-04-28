@@ -165,10 +165,12 @@ module.exports = {
       // Support multi-company: companyIds (array) takes priority, fallback to single companyId
       let targetIds = [];
       if (companyIds && Array.isArray(companyIds) && companyIds.length > 0) {
-        targetIds = companyIds;
+        targetIds = companyIds.filter(id => id != null && id !== "");
       } else if (companyId) {
         targetIds = [companyId];
-      } else {
+      }
+
+      if (targetIds.length === 0) {
         return response.error(res, "companyId or companyIds is required");
       }
 
