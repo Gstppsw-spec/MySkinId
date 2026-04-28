@@ -20,6 +20,10 @@ module.exports = (sequelize, DataTypes) => {
                 foreignKey: "locationId",
                 as: "location",
             });
+            transaction.hasMany(models.platformTransfer, {
+                foreignKey: "transactionId",
+                as: "transfers",
+            });
         }
     }
 

@@ -332,6 +332,22 @@ async function createOrder(data) {
     }
 }
 
+/**
+ * Get order detail from Biteship
+ * Used to retrieve order data for shipping label generation
+ * @param {string} orderId - Biteship order ID
+ * @returns {Promise<Object>} Order detail data
+ */
+async function getOrderDetail(orderId) {
+    try {
+        const res = await api.get(`/orders/${orderId}`);
+        return res.data;
+    } catch (error) {
+        console.error("Biteship getOrderDetail Error:", error.response?.data || error.message);
+        throw new Error(error.response?.data?.error || "Failed to fetch order detail from Biteship");
+    }
+}
+
 module.exports = {
     searchArea,
     getCouriers,
@@ -341,4 +357,5 @@ module.exports = {
     resolveAreaId,
     getAreaByDetails,
     createOrder,
+    getOrderDetail,
 };

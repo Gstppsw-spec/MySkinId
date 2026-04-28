@@ -2816,6 +2816,268 @@ module.exports = {
     }
   },
 
+
+  async getShippingLabel(transactionId, adminId) {
+    try {
+      // 1. Verify admin access
+      const locationIds = await this._getAdminLocationIds(adminId);
+      if (!locationIds || locationIds.length === 0) {
+        throw new Error("Admin not assigned to any location");
+      }
+
+      // 2. Fetch transaction with shipping & items
+      const trx = await transaction.findOne({
+        where: { id: transactionId },
+        include: [
+          {
+            model: order,
+            as: "order",
+            include: [
+              {
+                model: masterCustomer,
+                as: "customer",
+                attributes: ["id", "name", "phoneNumber"],
+              },
+            ],
+          },
+          { model: transactionShipping, as: "shipping" },
+          {
+            model: transactionItem,
+            as: "items",
+            where: { itemType: "product" },
+            required: false,
+          },
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id", "name", "phone", "address"],
+          },
+        ],
+      });
+
+      if (!trx) throw new Error("Transaction not found");
+      if (!locationIds.includes(trx.locationId)) {
+        throw new Error("Unauthorized: You don't have access to this transaction");
+      }
+      if (!trx.shipping) {
+        throw new Error("No shipping data found for this transaction");
+      }
+      if (!trx.shipping.trackingNumber) {
+        throw new Error("Tracking number not available yet. Please ship the order first.");
+      }
+
+      const plain = trx.get({ plain: true });
+
+      // 3. Generate barcode images (PNG buffer)
+      const bwipjs = require("bwip-js");
+
+      // Large barcode for tracking number
+      const mainBarcodeBuffer = await bwipjs.toBuffer({
+        bcid: "code128",
+        text: plain.shipping.trackingNumber,
+        scale: 3,
+        height: 15,
+        includetext: false,
+      });
+
+      // Smaller barcode for reference number
+      const refBarcodeBuffer = await bwipjs.toBuffer({
+        bcid: "code128",
+        text: plain.transactionNumber,
+        scale: 2,
+        height: 10,
+        includetext: false,
+      });
+
+      // 4. Generate PDF — A6-ish size (standard shipping label)
+      const pageW = 396; // ~140mm
+      const pageH = 560; // ~197mm
+      const M = 15; // margin
+      const innerW = pageW - M * 2;
+
+      const doc = new PDFDocument({
+        size: [pageW, pageH],
+        margins: { top: M, bottom: M, left: M, right: M },
+      });
+
+      const chunks = [];
+      doc.on("data", (chunk) => chunks.push(chunk));
+      const pdfPromise = new Promise((resolve) => {
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+      });
+
+      // Helper: draw a horizontal line
+      const hLine = (y) => {
+        doc.moveTo(M, y).lineTo(pageW - M, y).lineWidth(0.5).stroke("#000");
+      };
+      // Helper: draw a vertical line
+      const vLine = (x, y1, y2) => {
+        doc.moveTo(x, y1).lineTo(x, y2).lineWidth(0.5).stroke("#000");
+      };
+      // Helper: draw a box
+      const drawBox = (x, y, w, h) => {
+        doc.rect(x, y, w, h).lineWidth(0.5).stroke("#000");
+      };
+
+      let curY = M;
+
+      // ============================================================
+      // ROW 1: HEADER — Courier Name (left) + MySkinId (right)
+      // ============================================================
+      drawBox(M, curY, innerW, 45);
+      const courierName = (plain.shipping.courierCode || "COURIER").toUpperCase();
+      doc.fontSize(16).font("Helvetica-Bold").text(courierName, M + 10, curY + 8, {
+        width: innerW / 2 - 10,
+      });
+      doc.fontSize(7).font("Helvetica").text("Express Delivery", M + 10, curY + 28, {
+        width: innerW / 2 - 10,
+      });
+      // Right side — MySkinId branding
+      doc.fontSize(18).font("Helvetica-Bold").text("MySkinId", M + innerW / 2, curY + 6, {
+        width: innerW / 2 - 10,
+        align: "right",
+      });
+      doc.fontSize(7).font("Helvetica").text("myskinid.com", M + innerW / 2, curY + 28, {
+        width: innerW / 2 - 10,
+        align: "right",
+      });
+      curY += 45;
+
+      // ============================================================
+      // ROW 2: LARGE BARCODE + Nomor Resi
+      // ============================================================
+      drawBox(M, curY, innerW, 75);
+      doc.image(mainBarcodeBuffer, M + 40, curY + 5, {
+        fit: [innerW - 80, 45],
+      });
+      doc.fontSize(10).font("Helvetica-Bold").text(
+        `Nomor Resi - ${plain.shipping.trackingNumber}`,
+        M + 10, curY + 53,
+        { width: innerW - 20, align: "center" }
+      );
+      curY += 75;
+
+      // ============================================================
+      // ROW 3: Ongkos Kirim + Jenis Layanan
+      // ============================================================
+      const shippingCost = parseFloat(plain.shipping.shippingCost || 0);
+      const formattedCost = shippingCost.toLocaleString("id-ID");
+      drawBox(M, curY, innerW, 35);
+      doc.fontSize(8).font("Helvetica-Bold").text(
+        `Ongkos Kirim: Rp. ${formattedCost}`,
+        M + 10, curY + 6,
+        { width: innerW - 20, align: "center" }
+      );
+      doc.fontSize(8).font("Helvetica").text(
+        `Jenis Layanan - ${plain.shipping.courierService || "-"}`,
+        M + 10, curY + 19,
+        { width: innerW - 20, align: "center" }
+      );
+      curY += 35;
+
+      // ============================================================
+      // ROW 4: Reference Number (left) | Qty + Weight (right)
+      // ============================================================
+      const row4H = 70;
+      const colMid = M + innerW / 2;
+      drawBox(M, curY, innerW, row4H);
+      vLine(colMid, curY, curY + row4H);
+
+      // Left: Reference Number + small barcode
+      doc.fontSize(7).font("Helvetica-Bold").text("Reference Number", M + 5, curY + 5, { width: innerW / 2 - 10 });
+      doc.image(refBarcodeBuffer, M + 5, curY + 17, { fit: [innerW / 2 - 15, 28] });
+      doc.fontSize(7).font("Helvetica").text(plain.transactionNumber, M + 5, curY + 48, { width: innerW / 2 - 10 });
+
+      // Right: Quantity + Weight
+      const totalQty = (plain.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
+      const weightKg = ((plain.shipping.totalWeight || 0) / 1000).toFixed(1);
+      doc.fontSize(7).font("Helvetica-Bold").text("Quantity:", colMid + 5, curY + 8);
+      doc.font("Helvetica").text(`${totalQty} Pcs`, colMid + 55, curY + 8);
+      doc.font("Helvetica-Bold").text("Weight:", colMid + 5, curY + 25);
+      doc.font("Helvetica").text(`${weightKg} Kg`, colMid + 55, curY + 25);
+      doc.font("Helvetica-Bold").text("Order:", colMid + 5, curY + 42);
+      doc.font("Helvetica").text(plain.order?.orderNumber || "-", colMid + 55, curY + 42);
+      curY += row4H;
+
+      // ============================================================
+      // ROW 5: Alamat Penerima (left) | Alamat Pengirim (right)
+      // ============================================================
+      const row5H = 85;
+      drawBox(M, curY, innerW, row5H);
+      vLine(colMid, curY, curY + row5H);
+
+      // Left: Alamat Penerima
+      doc.fontSize(7).font("Helvetica-Bold").text("Alamat Penerima:", M + 5, curY + 5, { width: innerW / 2 - 10 });
+      doc.font("Helvetica").fontSize(7);
+      doc.text(plain.shipping.receiverName || plain.order?.customer?.name || "-", M + 5, curY + 18, { width: innerW / 2 - 10 });
+      doc.text(plain.shipping.receiverPhone || "-", { width: innerW / 2 - 10 });
+      doc.text(plain.shipping.address || "-", { width: innerW / 2 - 10 });
+
+      // Right: Alamat Pengirim
+      doc.fontSize(7).font("Helvetica-Bold").text("Alamat Pengirim:", colMid + 5, curY + 5, { width: innerW / 2 - 10 });
+      doc.font("Helvetica").fontSize(7);
+      doc.text(plain.location?.name || "-", colMid + 5, curY + 18, { width: innerW / 2 - 10 });
+      doc.text(plain.location?.phone || "-", { width: innerW / 2 - 10 });
+      doc.text(plain.location?.address || "-", { width: innerW / 2 - 10 });
+      curY += row5H;
+
+      // ============================================================
+      // ROW 6: Jenis Barang
+      // ============================================================
+      const items = plain.items || [];
+      const itemLines = items.length > 0
+        ? items.map(item => `${item.quantity}x ${item.itemName}`).join("\n")
+        : "Produk belanja";
+      const row6H = 15 + Math.max(20, items.length * 11);
+      drawBox(M, curY, innerW, row6H);
+      doc.fontSize(7).font("Helvetica-Bold").text("Jenis Barang :", M + 5, curY + 5, { width: 70 });
+      doc.font("Helvetica").fontSize(7).text(itemLines, M + 80, curY + 5, { width: innerW - 90 });
+      curY += row6H;
+
+      // ============================================================
+      // ROW 7: Catatan (if any)
+      // ============================================================
+      drawBox(M, curY, innerW, 22);
+      doc.fontSize(7).font("Helvetica-Bold").text("Catatan :", M + 5, curY + 5, { width: 70 });
+      doc.font("Helvetica").fontSize(7).text(
+        `Tanggal Order: ${new Date(plain.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })}`,
+        M + 80, curY + 5,
+        { width: innerW - 90 }
+      );
+      curY += 22;
+
+      // ============================================================
+      // FOOTER
+      // ============================================================
+      drawBox(M, curY, innerW, 30);
+      doc.fontSize(8).font("Helvetica-Bold").text(
+        "Pengiriman melalui platform MySkinId",
+        M + 10, curY + 5,
+        { width: innerW - 20, align: "center" }
+      );
+      doc.fontSize(7).font("Helvetica").text(
+        "myskinid.com",
+        M + 10, curY + 17,
+        { width: innerW - 20, align: "center" }
+      );
+
+      doc.end();
+
+      const pdfBuffer = await pdfPromise;
+
+      return {
+        status: true,
+        message: "Shipping label generated successfully",
+        data: {
+          pdf: pdfBuffer,
+          filename: `label-${plain.transactionNumber}.pdf`,
+        },
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
   async updateTransactionToDelivered(transactionId, adminId) {
     try {
       // 1. Get Admin's Locations
@@ -4721,6 +4983,7 @@ module.exports = {
           trackingNumber: plainTrx.shipping?.trackingNumber,
         },
         items: (plainTrx.items || [])
+          .filter((item) => item.itemType === "product")
           .map((item) => ({
             id: item.id,
             itemName: item.itemName,

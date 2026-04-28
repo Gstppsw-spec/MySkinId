@@ -64,6 +64,11 @@ router.get(
   allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
   transactionOrder.exportTransactions,
 );
+router.get(
+  "/outlet/transaction/:transactionId/shipping-label",
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN"),
+  transactionOrder.getShippingLabel,
+);
 
 // Customer Transaction Views
 router.get(

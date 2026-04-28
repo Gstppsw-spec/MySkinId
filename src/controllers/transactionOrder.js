@@ -281,6 +281,23 @@ module.exports = {
     }
   },
 
+  async getShippingLabel(req, res) {
+    try {
+      const adminId = req.user.id;
+      const { transactionId } = req.params;
+
+      const result = await transactionOrder.getShippingLabel(transactionId, adminId);
+
+      if (!result.status) return response.error(res, result.message);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${result.data.filename}"`);
+      return res.send(result.data.pdf);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async getCustomerTransactionHistory(req, res) {
     try {
       const customerId = req.user.id;
