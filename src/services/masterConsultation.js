@@ -455,7 +455,7 @@ module.exports = {
             model: masterUser,
             as: "doctor",
             attributes: ["id", "username", "name", "avatar"],
-            include: [{ model: masterRole, as: "role", attributes: ["roleName", "roleCode"] }]
+            include: [{ model: masterRole, as: "role", attributes: ["name", "roleCode"] }]
           },
           {
             model: masterCustomer,
@@ -470,7 +470,7 @@ module.exports = {
           senderProfile = {
             name: roomWithProfiles.doctor.username || roomWithProfiles.doctor.name,
             image: roomWithProfiles.doctor.avatar,
-            role: roomWithProfiles.doctor.role?.roleName,
+            role: roomWithProfiles.doctor.role?.name,
             roleCode: roomWithProfiles.doctor.role?.roleCode
           };
         } else if (senderRole === "customer" && roomWithProfiles.customer) {
@@ -594,7 +594,7 @@ module.exports = {
                 model: masterUser,
                 as: "doctor",
                 attributes: ["id", "username", "name", "avatar"],
-                include: [{ model: masterRole, as: "role", attributes: ["roleName", "roleCode"] }]
+                include: [{ model: masterRole, as: "role", attributes: ["name", "roleCode"] }]
               },
               {
                 model: masterCustomer,
@@ -616,7 +616,7 @@ module.exports = {
           senderProfile = {
             name: plain.room.doctor.username || plain.room.doctor.name,
             image: plain.room.doctor.avatar,
-            role: plain.room.doctor.role?.roleName,
+            role: plain.room.doctor.role?.name,
             roleCode: plain.room.doctor.role?.roleCode
           };
         } else if (plain.senderRole === "customer" && plain.room?.customer) {
