@@ -12,6 +12,7 @@ module.exports = {
    * Auto-creates balance record if it doesn't exist.
    */
   async getBalance(companyId) {
+    if (!companyId) return { status: false, message: "companyId is required" };
     try {
       let balanceRecord = await CompanyAdsBalance.findOne({
         where: { companyId }
@@ -34,6 +35,7 @@ module.exports = {
    * Spend balance for an ad purchase
    */
   async spendBalance(companyId, amount, referenceId, description, externalTransaction = null) {
+    if (!companyId) throw new Error("companyId is required for balance deduction");
     const t = externalTransaction || (await sequelize.transaction());
     try {
       const balanceRecord = await CompanyAdsBalance.findOne({
@@ -114,6 +116,7 @@ module.exports = {
    * Get balance history list
    */
   async getHistory(companyId, pagination = {}) {
+    if (!companyId) return { status: true, message: "No history found", data: [] };
     try {
       const { limit, offset } = pagination;
       const balanceRecord = await CompanyAdsBalance.findOne({

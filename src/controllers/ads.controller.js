@@ -155,18 +155,16 @@ module.exports = {
   async adminTopup(req, res) {
     try {
       const { companyId, companyIds, amount, description } = req.body;
-
+      
       if (!amount || parseFloat(amount) <= 0) {
         return response.error(res, "amount is required and must be greater than 0");
       }
 
       // Support multi-company: companyIds (array) takes priority, fallback to single companyId
-      let targetIds = [];
-      if (companyIds && Array.isArray(companyIds) && companyIds.length > 0) {
-        targetIds = companyIds.filter(id => id != null && id !== "");
-      } else if (companyId) {
-        targetIds = [companyId];
-      }
+      const targetIds = [
+        ...(Array.isArray(companyIds) ? companyIds : []),
+        ...(companyId ? [companyId] : [])
+      ].filter((id, index, self) => id != null && id !== "" && self.indexOf(id) === index);
 
       if (targetIds.length === 0) {
         return response.error(res, "companyId or companyIds is required");
@@ -178,7 +176,11 @@ module.exports = {
       for (const cId of targetIds) {
         const result = await balanceService.addBalance(cId, amount, "TOPUP", null, description);
         if (result.status) {
-          results.push({ companyId: cId, balance: result.data.balance, status: "success" });
+          results.push({ 
+            companyId: cId, 
+            balance: result.data ? result.data.balance : 0, 
+            status: "success" 
+          });
         } else {
           errors.push({ companyId: cId, message: result.message, status: "failed" });
         }
