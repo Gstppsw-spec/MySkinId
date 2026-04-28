@@ -155,12 +155,39 @@ module.exports = {
   // --- SUPER ADMIN ---
   async adminTopup(req, res) {
     try {
-      const { companyId, amount, description } = req.body;
+      const { companyId, companyIds, amount, description } = req.body;
       const balanceService = require("../services/balance.service");
-      const result = await balanceService.addBalance(companyId, amount, "TOPUP", null, description);
-      
-      if (!result.status) return response.error(res, result.message);
-      return response.success(res, "Balance updated successfully", result.data);
+
+      if (!amount || parseFloat(amount) <= 0) {
+        return response.error(res, "amount is required and must be greater than 0");
+      }
+
+      // Support multi-company: companyIds (array) takes priority, fallback to single companyId
+      let targetIds = [];
+      if (companyIds && Array.isArray(companyIds) && companyIds.length > 0) {
+        targetIds = companyIds;
+      } else if (companyId) {
+        targetIds = [companyId];
+      } else {
+        return response.error(res, "companyId or companyIds is required");
+      }
+
+      const results = [];
+      const errors = [];
+
+      for (const cId of targetIds) {
+        const result = await balanceService.addBalance(cId, amount, "TOPUP", null, description);
+        if (result.status) {
+          results.push({ companyId: cId, balance: result.data.balance, status: "success" });
+        } else {
+          errors.push({ companyId: cId, message: result.message, status: "failed" });
+        }
+      }
+
+      return response.success(res, `Balance updated for ${results.length} company(s)${errors.length > 0 ? `, ${errors.length} failed` : ""}`, {
+        success: results,
+        failed: errors,
+      });
     } catch (error) {
       return response.serverError(res, error);
     }
