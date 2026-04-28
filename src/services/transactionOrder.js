@@ -2949,11 +2949,12 @@ module.exports = {
       drawBox(M, curY, innerW, 75);
       doc.image(mainBarcodeBuffer, M + 40, curY + 5, {
         fit: [innerW - 80, 45],
+        align: "center",
       });
       doc.fontSize(10).font("Helvetica-Bold").text(
         `Nomor Resi - ${plain.shipping.trackingNumber}`,
-        M + 10, curY + 53,
-        { width: innerW - 20, align: "center" }
+        M, curY + 53,
+        { width: innerW, align: "center" }
       );
       curY += 75;
 
@@ -2965,13 +2966,13 @@ module.exports = {
       drawBox(M, curY, innerW, 35);
       doc.fontSize(8).font("Helvetica-Bold").text(
         `Ongkos Kirim: Rp. ${formattedCost}`,
-        M + 10, curY + 6,
-        { width: innerW - 20, align: "center" }
+        M, curY + 6,
+        { width: innerW, align: "center" }
       );
       doc.fontSize(8).font("Helvetica").text(
         `Jenis Layanan - ${plain.shipping.courierService || "-"}`,
-        M + 10, curY + 19,
-        { width: innerW - 20, align: "center" }
+        M, curY + 19,
+        { width: innerW, align: "center" }
       );
       curY += 35;
 
@@ -3050,15 +3051,15 @@ module.exports = {
       // FOOTER
       // ============================================================
       drawBox(M, curY, innerW, 30);
-      doc.fontSize(8).font("Helvetica-Bold").text(
+      doc.fontSize(7).font("Helvetica-Bold").text(
         "Pengiriman melalui platform MySkinId",
-        M + 10, curY + 5,
-        { width: innerW - 20, align: "center" }
+        M, curY + 6,
+        { width: innerW, align: "center" }
       );
       doc.fontSize(7).font("Helvetica").text(
         "myskinid.com",
-        M + 10, curY + 17,
-        { width: innerW - 20, align: "center" }
+        M, curY + 17,
+        { width: innerW, align: "center" }
       );
 
       doc.end();
