@@ -711,6 +711,7 @@ module.exports = {
       let user = await masterUser.findByPk(id, {
         attributes: [
           "id",
+          "username",
           "name",
           "email",
           "phone",
