@@ -51,14 +51,48 @@ module.exports = {
     }
   },
 
+  async updateRequest(req, res) {
+    try {
+      const { id } = req.params;
+      const { title, adsType, description } = req.body;
+
+      const referenceImages = await uploadFilesToDrive(req.files);
+
+      const data = {
+        title,
+        adsType,
+        description,
+      };
+
+      if (referenceImages.length > 0) {
+        data.referenceImages = referenceImages;
+      }
+
+      const result = await adsDesignService.updateRequest(id, data);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async deleteRequest(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await adsDesignService.deleteRequest(id);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async getMyRequests(req, res) {
     try {
       const { locationId, page, pageSize, search } = req.query;
-      if (!locationId) {
-        return response.error(res, "locationId is required");
-      }
+      const userId = req.user.id;
 
-      const result = await adsDesignService.getMyRequests(locationId, { page, pageSize, search });
+      const result = await adsDesignService.getMyRequests(userId, { locationId, page, pageSize, search });
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
@@ -115,8 +149,8 @@ module.exports = {
   // --- ADMIN ---
   async getAllRequests(req, res) {
     try {
-      const { page, pageSize, search, status } = req.query;
-      const result = await adsDesignService.getAllRequests({ page, pageSize, search, status });
+      const { page, pageSize, search, status, locationId } = req.query;
+      const result = await adsDesignService.getAllRequests({ page, pageSize, search, status, locationId });
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {

@@ -14,6 +14,21 @@ router.post(
   adsDesignController.createRequest
 );
 
+router.put(
+  "/:id",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN"),
+  uploadDriveImage,
+  adsDesignController.updateRequest
+);
+
+router.delete(
+  "/:id",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN"),
+  adsDesignController.deleteRequest
+);
+
 router.get(
   "/",
   verifyToken,
