@@ -103,6 +103,11 @@ module.exports = {
     try {
       const { id } = req.params;
       const result = await authService.getUserById(req.user, id);
+      
+      if (!result) {
+        return response.error(res, "Gagal mengambil data user: Service tidak memberikan respon.");
+      }
+
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }

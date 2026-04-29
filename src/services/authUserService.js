@@ -850,6 +850,15 @@ module.exports = {
           data: user,
         };
       }
+
+      // -----------------------------------------------------
+      // ✅ Fallback: return user as is if no locations/companies
+      // -----------------------------------------------------
+      return {
+        status: true,
+        message: "Success",
+        data: user,
+      };
     } catch (error) {
       console.error("Get User By Id Error:", error);
       return {
