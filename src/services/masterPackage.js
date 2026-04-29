@@ -296,6 +296,7 @@ module.exports = {
           return lightPlain.locations.map(loc => {
             return {
               ...lightPlain,
+              locations: [loc],
               biteshipId: loc.biteshipAreaId || null,
               isFlashSale,
               flashSale: flashSaleInfo,
@@ -311,6 +312,7 @@ module.exports = {
 
         return [{
           ...lightPlain,
+          locations: [],
           biteshipId: null,
           isFlashSale,
           flashSale: flashSaleInfo,

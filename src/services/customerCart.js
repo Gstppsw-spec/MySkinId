@@ -94,6 +94,20 @@ module.exports = {
               },
             ],
           },
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id", "name", "address", "cityId", "districtId", "postalCode", "biteshipAreaId"],
+            include: [
+              {
+                model: masterLocationImage,
+                as: "images",
+                attributes: ["imageUrl"],
+                limit: 1,
+                separate: true,
+              },
+            ],
+          },
         ],
       });
 
@@ -135,12 +149,14 @@ module.exports = {
             name: cart.product.name,
             desc: cart.product.description,
             price: cart.product.price,
+            isActive: cart.product.isActive,
+            isVerified: cart.product.isVerified,
             flashPrice: isPromoActive ? cart.flashSaleItem.flashPrice : null,
             finalPrice: finalPrice,
             isPromoActive: isPromoActive,
             discountpercent: cart.product.discountPercent,
             images: cart.product.images ? sortPrimaryFirst(cart.product.images) : [],
-            location: cart.product.locations?.[0] || null,
+            location: cart.location || cart.product.locations?.[0] || null,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
             isOnPayment: cart.isOnPayment,
@@ -157,11 +173,13 @@ module.exports = {
             name: cart.package.name,
             desc: cart.package.description,
             price: cart.package.price,
+            isActive: cart.package.isActive,
+            isVerified: cart.package.isVerified,
             flashPrice: isPromoActive ? cart.flashSaleItem.flashPrice : null,
             finalPrice: finalPrice,
             isPromoActive: isPromoActive,
             discpercent: cart.package.discountPercent,
-            location: cart.package.locations?.[0] || null,
+            location: cart.location || cart.package.locations?.[0] || null,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
             isOnPayment: cart.isOnPayment,
@@ -177,12 +195,14 @@ module.exports = {
             name: cart.service.name,
             desc: cart.service.description,
             price: cart.service.price,
+            isActive: cart.service.isActive,
+            isVerified: cart.service.isVerified,
             flashPrice: isPromoActive ? cart.flashSaleItem.flashPrice : null,
             finalPrice: finalPrice,
             isPromoActive: isPromoActive,
             discountpercent: cart.service.discountPercent,
             duration: cart.service.duration,
-            location: cart.service.locations?.[0] || null,
+            location: cart.location || cart.service.locations?.[0] || null,
             isSelected: cart.isSelected,
             isDirect: cart.isDirect,
             isOnPayment: cart.isOnPayment,
@@ -201,7 +221,7 @@ module.exports = {
 
   async createCustomerCart(data, customerId) {
     try {
-      const { refferenceId, refferenceType, flashSaleItemId } = data;
+      const { refferenceId, refferenceType, flashSaleItemId, locationId } = data;
 
       if (!refferenceId || !customerId || !refferenceType)
         return { status: false, message: "Data belum lengkap" };
@@ -221,7 +241,13 @@ module.exports = {
       }
 
       let cart = await customerCart.findOne({
-        where: { refferenceId, customerId, refferenceType, flashSaleItemId: flashSaleItemId || null },
+        where: { 
+          refferenceId, 
+          customerId, 
+          refferenceType, 
+          flashSaleItemId: flashSaleItemId || null,
+          locationId: locationId || null
+        },
       });
 
       if (cart) {
@@ -241,6 +267,7 @@ module.exports = {
         refferenceType,
         qty: 1,
         flashSaleItemId: flashSaleItemId || null,
+        locationId: locationId || null,
       });
 
       return {
@@ -290,13 +317,17 @@ module.exports = {
     }
   },
 
-  async addQtyCustomerCart(refferenceId, customerId) {
+  async addQtyCustomerCart(refferenceId, customerId, locationId) {
     try {
       if (!refferenceId || !customerId)
         return { status: false, message: "Data belum lengkap" };
 
       let cart = await customerCart.findOne({
-        where: { refferenceId, customerId },
+        where: { 
+          refferenceId, 
+          customerId,
+          ...(locationId !== undefined ? { locationId: locationId || null } : {})
+        },
       });
 
       if (!cart) {
@@ -312,13 +343,17 @@ module.exports = {
     }
   },
 
-  async reduceQtyCustomerCart(refferenceId, customerId) {
+  async reduceQtyCustomerCart(refferenceId, customerId, locationId) {
     try {
       if (!refferenceId || !customerId)
         return { status: false, message: "Data belum lengkap" };
 
       const cart = await customerCart.findOne({
-        where: { refferenceId, customerId },
+        where: { 
+          refferenceId, 
+          customerId,
+          ...(locationId !== undefined ? { locationId: locationId || null } : {})
+        },
       });
 
       if (!cart) {

@@ -220,6 +220,7 @@ module.exports = {
           return plain.locations.map(loc => {
             return {
               ...plain,
+              locations: [loc],
               isFavorite: customerId
                 ? plain.favorites && plain.favorites.length > 0
                 : false,
@@ -232,6 +233,7 @@ module.exports = {
 
         return [{
           ...plain,
+          locations: [],
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,

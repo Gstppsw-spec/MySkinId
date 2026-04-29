@@ -35,6 +35,12 @@ module.exports = (sequelize, DataTypes) => {
         as: "flashSaleItem",
         constraints: false,
       });
+
+      customerCart.belongsTo(models.masterLocation, {
+        foreignKey: "locationId",
+        as: "location",
+        constraints: false,
+      });
     }
   }
 
@@ -84,6 +90,10 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: false,
       },
       flashSaleItemId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      locationId: {
         type: DataTypes.UUID,
         allowNull: true,
       },

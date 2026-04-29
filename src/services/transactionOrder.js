@@ -426,30 +426,39 @@ module.exports = {
           throw new Error("Item not found");
         }
 
-        // Resolve locationId: get first active location from pivot table
-        const pivotModel =
-          type === "product"
-            ? relationshipProductLocation
-            : type === "service"
-              ? relationshipServiceLocation
-              : relationshipPackageLocation;
-        const fkField =
-          type === "product"
-            ? "productId"
-            : type === "service"
-              ? "serviceId"
-              : "packageId";
-        const firstPivot = await pivotModel.findOne({
-          where: { [fkField]: actualItem.id, isActive: true },
-          include: [{ model: masterLocation, as: "location", attributes: ["id", "companyId"] }],
-        });
-        if (!firstPivot || !firstPivot.location) {
-          throw new Error(
-            `${actualItem.name} tidak tersedia di lokasi manapun`,
-          );
+        let locationId = item.locationId;
+        let companyId = null;
+
+        if (locationId) {
+          const loc = await masterLocation.findByPk(locationId, { attributes: ["id", "companyId"] });
+          if (!loc) throw new Error(`Location ${locationId} not found`);
+          companyId = loc.companyId;
+        } else {
+          // Resolve locationId: get first active location from pivot table (fallback for old carts)
+          const pivotModel =
+            type === "product"
+              ? relationshipProductLocation
+              : type === "service"
+                ? relationshipServiceLocation
+                : relationshipPackageLocation;
+          const fkField =
+            type === "product"
+              ? "productId"
+              : type === "service"
+                ? "serviceId"
+                : "packageId";
+          const firstPivot = await pivotModel.findOne({
+            where: { [fkField]: actualItem.id, isActive: true },
+            include: [{ model: masterLocation, as: "location", attributes: ["id", "companyId"] }],
+          });
+          if (!firstPivot || !firstPivot.location) {
+            throw new Error(
+              `${actualItem.name} tidak tersedia di lokasi manapun`,
+            );
+          }
+          locationId = firstPivot.locationId;
+          companyId = firstPivot.location.companyId;
         }
-        const locationId = firstPivot.locationId;
-        const companyId = firstPivot.location.companyId;
         if (!itemsByLocation[locationId]) {
           itemsByLocation[locationId] = [];
         }

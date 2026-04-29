@@ -56,9 +56,9 @@ module.exports = {
 
   async addQtyCustomerCart(req, res) {
     const userId = req.user.id;
-    const { refferenceId } = req.body;
+    const { refferenceId, locationId } = req.body;
     try {
-      const result = await customerCart.addQtyCustomerCart(refferenceId, userId);
+      const result = await customerCart.addQtyCustomerCart(refferenceId, userId, locationId);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
@@ -69,9 +69,9 @@ module.exports = {
 
   async reduceQtyCustomerCart(req, res) {
     const userId = req.user.id;
-    const { refferenceId } = req.body;
+    const { refferenceId, locationId } = req.body;
     try {
-      const result = await customerCart.reduceQtyCustomerCart(refferenceId, userId);
+      const result = await customerCart.reduceQtyCustomerCart(refferenceId, userId, locationId);
       if (!result.status)
         return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
