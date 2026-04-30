@@ -155,10 +155,6 @@ module.exports = {
       const userId = req.user.id;
       const { paymentMethodCode } = req.body;
 
-      if (!paymentMethodCode) {
-        return response.error(res, "paymentMethodCode is required");
-      }
-
       const result = await adsDesignService.approveDesign(id, userId, paymentMethodCode);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
