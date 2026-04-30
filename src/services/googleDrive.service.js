@@ -36,11 +36,53 @@ class GoogleDriveService {
   }
 
   /**
-   * Upload a file to Google Drive
+   * Get or create a folder in Google Drive
+   * @param {string} name - Folder name
+   * @param {string} parentId - Parent folder ID
+   * @returns {Promise<string>} Folder ID
+   */
+  async getOrCreateFolder(name, parentId) {
+    try {
+      // Search for existing folder
+      const query = `name = '${name}' and '${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+      const list = await this.drive.files.list({
+        q: query,
+        fields: "files(id, name)",
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      });
+
+      if (list.data.files && list.data.files.length > 0) {
+        return list.data.files[0].id;
+      }
+
+      // Create new folder if not found
+      const folderMetadata = {
+        name: name,
+        mimeType: "application/vnd.google-apps.folder",
+        parents: [parentId],
+      };
+
+      const folder = await this.drive.files.create({
+        requestBody: folderMetadata,
+        fields: "id",
+        supportsAllDrives: true,
+      });
+
+      return folder.data.id;
+    } catch (error) {
+      console.error("[GoogleDriveService] Error in getOrCreateFolder:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upload a file to Google Drive with optional subfolders
    * @param {Object} file - The file object from Multer
+   * @param {Array} subfolders - Array of folder names to create/use as path
    * @returns {Promise<string>} The public webViewLink of the uploaded file
    */
-  async uploadFile(file) {
+  async uploadFile(file, subfolders = []) {
     if (!this.drive) {
       throw new Error("Google Drive API is not initialized");
     }
@@ -50,9 +92,18 @@ class GoogleDriveService {
     }
 
     try {
+      let currentParentId = this.folderId;
+
+      // Navigate/Create subfolder structure
+      for (const folderName of subfolders) {
+        if (folderName) {
+          currentParentId = await this.getOrCreateFolder(folderName, currentParentId);
+        }
+      }
+
       const fileMetadata = {
         name: `${Date.now()}-${file.originalname}`,
-        parents: [this.folderId],
+        parents: [currentParentId],
       };
 
       const media = {
@@ -60,30 +111,13 @@ class GoogleDriveService {
         body: fs.createReadStream(file.path),
       };
 
-      console.log("[GoogleDriveService] Sending request to Google Drive API...");
+      console.log(`[GoogleDriveService] Uploading ${file.originalname} to folder ID: ${currentParentId}`);
       const response = await this.drive.files.create({
         requestBody: fileMetadata,
         media: media,
         fields: "id, webViewLink",
-        supportsAllDrives: true, // Required for Shared Drives
+        supportsAllDrives: true,
       });
-      console.log("[GoogleDriveService] Google Drive API response received:", response.data.id);
-
-      const fileId = response.data.id;
-
-      // Unnecessary since the folder should have 'Anyone with link can view' permission,
-      // but just in case, we can also explicitly set the file permission.
-      // await this.drive.permissions.create({
-      //   fileId: fileId,
-      //   requestBody: {
-      //     role: 'reader',
-      //     type: 'anyone',
-      //   },
-      // });
-
-      // Return the Google Drive link
-      // Alternatively, we can construct the direct download link if needed:
-      // return `https://drive.google.com/uc?id=${fileId}`;
       
       return response.data.webViewLink;
     } catch (error) {

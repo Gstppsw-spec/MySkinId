@@ -2,8 +2,9 @@ const adsDesignService = require("../services/adsDesign.service");
 const googleDriveService = require("../services/googleDrive.service");
 const response = require("../helpers/response");
 const fs = require("fs");
+const { masterLocation, masterCompany, AdsDesignRequest } = require("../models");
 
-const uploadFilesToDrive = async (files) => {
+const uploadFilesToDrive = async (files, subfolders = []) => {
   const uploadedUrls = [];
   if (!files) return uploadedUrls;
 
@@ -12,7 +13,7 @@ const uploadFilesToDrive = async (files) => {
 
   for (const file of fileList) {
     try {
-      const url = await googleDriveService.uploadFile(file);
+      const url = await googleDriveService.uploadFile(file, subfolders);
       uploadedUrls.push(url);
     } catch (error) {
       console.error("[AdsDesign Controller] Google Drive upload failed:", error);
@@ -26,6 +27,18 @@ const uploadFilesToDrive = async (files) => {
   return uploadedUrls;
 };
 
+const getFolderStructure = async (locationId, folderType) => {
+  try {
+    const location = await masterLocation.findByPk(locationId, {
+      include: [{ model: masterCompany, as: "company" }]
+    });
+    const companyName = location?.company?.name || "Unknown Company";
+    return [companyName, folderType];
+  } catch (error) {
+    return ["Unknown Company", folderType];
+  }
+};
+
 module.exports = {
   // --- MITRA ---
   async createRequest(req, res) {
@@ -37,7 +50,8 @@ module.exports = {
         return response.error(res, "locationId is required");
       }
 
-      const referenceImages = await uploadFilesToDrive(req.files);
+      const folderStructure = await getFolderStructure(locationId, "reference-images");
+      const referenceImages = await uploadFilesToDrive(req.files, folderStructure);
 
       const data = {
         title,
@@ -59,7 +73,11 @@ module.exports = {
       const { id } = req.params;
       const { title, adsType, description } = req.body;
 
-      const referenceImages = await uploadFilesToDrive(req.files);
+      const request = await AdsDesignRequest.findByPk(id);
+      if (!request) return response.error(res, "Request not found");
+
+      const folderStructure = await getFolderStructure(request.locationId, "reference-images");
+      const referenceImages = await uploadFilesToDrive(req.files, folderStructure);
 
       const data = {
         title,
@@ -181,7 +199,11 @@ module.exports = {
         return response.error(res, "price is required");
       }
 
-      const resultImages = await uploadFilesToDrive(req.files);
+      const request = await AdsDesignRequest.findByPk(id);
+      if (!request) return response.error(res, "Request not found");
+
+      const folderStructure = await getFolderStructure(request.locationId, "result-images");
+      const resultImages = await uploadFilesToDrive(req.files, folderStructure);
       if (resultImages.length === 0) {
         return response.error(res, "At least one result image is required");
       }
