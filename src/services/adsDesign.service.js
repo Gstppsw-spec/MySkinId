@@ -169,18 +169,30 @@ module.exports = {
             as: "location",
             attributes: ["id", "name"],
           },
+          {
+            model: order,
+            as: "order",
+            attributes: ["id", "paymentStatus", "totalAmount"],
+          },
         ],
         order: [["createdAt", "DESC"]],
         limit,
         offset,
       });
 
-      const response = getPagingData(result, page, pageSize);
+      const processedRows = result.rows.map(r => {
+        const plain = r.get({ plain: true });
+        plain.isPaid = plain.order?.paymentStatus === "PAID";
+        return plain;
+      });
 
       return {
         status: true,
         message: "Success fetching requests",
-        data: response,
+        data: {
+          ...getPagingData(result, page, pageSize),
+          rows: processedRows
+        },
       };
     } catch (error) {
       return { status: false, message: error.message };
@@ -197,6 +209,11 @@ module.exports = {
             as: "location",
             attributes: ["id", "name", "companyId"],
           },
+          {
+            model: order,
+            as: "order",
+            attributes: ["id", "paymentStatus", "totalAmount"],
+          },
         ],
       });
 
@@ -204,7 +221,10 @@ module.exports = {
         return { status: false, message: "Design request not found" };
       }
 
-      return { status: true, message: "Success", data: request };
+      const plainData = request.get({ plain: true });
+      plainData.isPaid = plainData.order?.paymentStatus === "PAID";
+
+      return { status: true, message: "Success", data: plainData };
     } catch (error) {
       return { status: false, message: error.message };
     }
@@ -238,18 +258,30 @@ module.exports = {
             as: "location",
             attributes: ["id", "name", "companyId"],
           },
+          {
+            model: order,
+            as: "order",
+            attributes: ["id", "paymentStatus", "totalAmount"],
+          },
         ],
         order: [["createdAt", "DESC"]],
         limit,
         offset,
       });
 
-      const response = getPagingData(result, page, pageSize);
+      const processedRows = result.rows.map(r => {
+        const plain = r.get({ plain: true });
+        plain.isPaid = plain.order?.paymentStatus === "PAID";
+        return plain;
+      });
 
       return {
         status: true,
         message: "Success fetching all requests",
-        data: response,
+        data: {
+          ...getPagingData(result, page, pageSize),
+          rows: processedRows
+        },
       };
     } catch (error) {
       return { status: false, message: error.message };
@@ -281,11 +313,17 @@ module.exports = {
         return { status: false, message: "Request must be in PROCESSING status to submit result" };
       }
 
-      await request.update({
+      const updateData = {
         resultImages,
-        price: parseFloat(price) || 0,
         status: "WAITING_APPROVAL",
-      });
+      };
+
+      // 🔹 Lock price if an order already exists (already approved/paid)
+      if (!request.orderId) {
+        updateData.price = price;
+      }
+
+      await request.update(updateData);
 
       return { status: true, message: "Design result submitted", data: request };
     } catch (error) {
@@ -324,7 +362,10 @@ module.exports = {
     try {
       const request = await AdsDesignRequest.findOne({
         where: { id },
-        include: [{ model: masterLocation, as: "location" }],
+        include: [
+          { model: masterLocation, as: "location" },
+          { model: order, as: "order" }
+        ],
         transaction: t,
         lock: true,
       });
@@ -334,8 +375,19 @@ module.exports = {
         throw new Error("Can only approve design when in WAITING_APPROVAL status");
       }
 
-      if (!paymentMethodCode) {
+      if (!paymentMethodCode && (!request.order || request.order.paymentStatus !== "PAID")) {
         throw new Error("Payment method code is required");
+      }
+
+      // 🔹 CHECK IF ALREADY PAID
+      if (request.order && request.order.paymentStatus === "PAID") {
+        await request.update({ status: "COMPLETED" }, { transaction: t });
+        await t.commit();
+        return { 
+          status: true, 
+          message: "Design approved (Already paid)", 
+          data: { request, order: request.order } 
+        };
       }
 
       const amount = parseFloat(request.price) || 0;
