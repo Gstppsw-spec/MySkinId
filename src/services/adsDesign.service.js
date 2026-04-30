@@ -1,20 +1,86 @@
-const { AdsDesignRequest, masterLocation, masterCompany, order, orderPayment, sequelize, Sequelize } = require("../models");
+const { 
+  AdsDesignRequest, 
+  masterLocation, 
+  masterCompany, 
+  order, 
+  orderPayment, 
+  masterUser,
+  masterRole,
+  relationshipUserCompany,
+  relationshipUserLocation,
+  sequelize, 
+  Sequelize 
+} = require("../models");
 const transactionOrder = require("./transactionOrder");
 const balanceService = require("./balance.service");
 const { getPagination, getPagingData } = require("../utils/pagination");
 const { nanoid } = require("nanoid");
+
+/**
+ * Helper to get all company IDs an admin has access to.
+ */
+async function _getAdminCompanyIds(adminId) {
+  const user = await masterUser.findByPk(adminId, {
+    include: [{ model: masterRole, as: "role" }],
+  });
+
+  if (!user) return [];
+
+  const roleCode = user.role?.roleCode;
+
+  // Super Admin -> ALL companies
+  if (roleCode === "SUPER_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
+    const allCompanies = await masterCompany.findAll({
+      attributes: ["id"],
+      raw: true,
+    });
+    return allCompanies.map((c) => c.id);
+  }
+
+  const companyIdSet = new Set();
+
+  // 1. Direct company assignment
+  const userCompanies = await relationshipUserCompany.findAll({
+    where: { userId: adminId, isactive: true },
+    attributes: ["companyId"],
+    raw: true,
+  });
+  userCompanies.forEach((uc) => companyIdSet.add(uc.companyId));
+
+  // 2. Company from assigned locations
+  const userLocations = await relationshipUserLocation.findAll({
+    where: { userId: adminId, isactive: true },
+    include: [{
+      model: masterLocation,
+      as: "location",
+      attributes: ["companyId"]
+    }],
+  });
+  userLocations.forEach((ul) => {
+    if (ul.location && ul.location.companyId) {
+      companyIdSet.add(ul.location.companyId);
+    }
+  });
+
+  return Array.from(companyIdSet);
+}
 
 module.exports = {
   async createRequest(locationId, data) {
     try {
       const { title, adsType, description, referenceImages } = data;
 
+      // Get companyId from location
+      const location = await masterLocation.findByPk(locationId);
+      if (!location) return { status: false, message: "Location not found" };
+
       const newRequest = await AdsDesignRequest.create({
         locationId,
+        companyId: location.companyId,
         title,
         adsType,
         description,
-        referenceImages, // already array, handled by model setter
+        referenceImages,
         status: "REQUESTED",
       });
 
@@ -69,35 +135,19 @@ module.exports = {
     try {
       const { limit, offset } = getPagination(page, pageSize);
       
-      // Get all location IDs this user has access to
-      const allowedLocationIds = await transactionOrder._getAdminLocationIds(userId);
+      // Get all company IDs this user has access to
+      const allowedCompanyIds = await _getAdminCompanyIds(userId);
       
-      let finalLocationIds = allowedLocationIds;
-
-      // If user specifically filtered by locationId(s)
-      if (locationId) {
-        const requestedIds = Array.isArray(locationId) ? locationId : [locationId];
-        
-        // Filter requested IDs to only those that are allowed
-        finalLocationIds = requestedIds.filter(id => allowedLocationIds.includes(id));
-        
-        if (finalLocationIds.length === 0 && requestedIds.length > 0) {
-          return { status: false, message: "You don't have access to the requested location(s)" };
-        }
-      }
-
-      if (finalLocationIds.length === 0) {
-        return {
-          status: true,
-          message: "No locations found for user",
-          data: getPagingData({ count: 0, rows: [] }, page, pageSize),
-        };
-      }
-
       const where = { 
-        locationId: { [Sequelize.Op.in]: finalLocationIds }, 
+        companyId: { [Sequelize.Op.in]: allowedCompanyIds }, 
         isActive: true 
       };
+
+      // If user specifically filters by locationId(s), we still respect that but within their company
+      if (locationId) {
+        const requestedIds = Array.isArray(locationId) ? locationId : [locationId];
+        where.locationId = { [Sequelize.Op.in]: requestedIds };
+      }
 
       if (search) {
         where.title = { [Sequelize.Op.like]: `%${search}%` };

@@ -23,6 +23,11 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "packageId",
         as: "package",
       });
+      
+      flashSaleItem.belongsTo(models.masterService, {
+        foreignKey: "serviceId",
+        as: "service",
+      });
     }
   }
 
@@ -42,7 +47,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       itemType: {
-        type: DataTypes.ENUM("PRODUCT", "PACKAGE"),
+        type: DataTypes.ENUM("PRODUCT", "PACKAGE", "SERVICE"),
         allowNull: false,
         defaultValue: "PRODUCT",
       },
@@ -51,6 +56,10 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       packageId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      serviceId: {
         type: DataTypes.UUID,
         allowNull: true,
       },

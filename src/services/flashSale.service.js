@@ -5,10 +5,12 @@ const {
   masterProduct,
   masterProductImage,
   masterPackage,
+  masterService,
   masterLocation,
   masterLocationImage,
   relationshipProductLocation,
   relationshipPackageLocation,
+  relationshipServiceLocation,
   relationshipUserCompany,
   sequelize,
 } = require("../models");
@@ -64,6 +66,11 @@ const itemIncludes = [
   {
     model: masterPackage,
     as: "package",
+    attributes: ["id", "name", "price", "discountPercent"],
+  },
+  {
+    model: masterService,
+    as: "service",
     attributes: ["id", "name", "price", "discountPercent"],
   },
 ];
@@ -242,9 +249,9 @@ module.exports = {
 
       const results = [];
       for (const item of items) {
-        const { itemType, productId, packageId, flashPrice, quota } = item;
+        const { itemType, productId, packageId, serviceId, flashPrice, quota } = item;
 
-        if (!itemType || !["PRODUCT", "PACKAGE"].includes(itemType)) throw new Error("itemType must be PRODUCT or PACKAGE");
+        if (!itemType || !["PRODUCT", "PACKAGE", "SERVICE"].includes(itemType)) throw new Error("itemType must be PRODUCT, PACKAGE, or SERVICE");
         
         // Ownership Validation
         if (roleCode !== "SUPER_ADMIN") {
@@ -307,6 +314,34 @@ module.exports = {
                 throw new Error(`Package ${packageId} does not belong to outlet ${locationId} or is not active`);
               }
             }
+          } else if (itemType === "SERVICE") {
+            if (!serviceId) throw new Error("serviceId is required for SERVICE type");
+            
+            const isLinked = await relationshipServiceLocation.findOne({
+              where: { serviceId, locationId, isActive: true },
+              transaction: t
+            });
+            
+            if (!isLinked) {
+              if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
+                const belongsToCompany = await relationshipServiceLocation.findOne({
+                  where: { serviceId, isActive: true },
+                  include: [{
+                    model: masterLocation,
+                    as: "location",
+                    where: { companyId: targetCompanyId },
+                    attributes: ["id"]
+                  }],
+                  transaction: t
+                });
+
+                if (!belongsToCompany) {
+                  throw new Error(`Service ${serviceId} does not belong to your company's outlets`);
+                }
+              } else {
+                throw new Error(`Service ${serviceId} does not belong to outlet ${locationId} or is not active`);
+              }
+            }
           }
         }
 
@@ -331,6 +366,7 @@ module.exports = {
             itemType,
             productId: itemType === "PRODUCT" ? productId : null,
             packageId: itemType === "PACKAGE" ? packageId : null,
+            serviceId: itemType === "SERVICE" ? serviceId : null,
           },
           transaction: t
         });
@@ -345,6 +381,7 @@ module.exports = {
           itemType,
           productId: itemType === "PRODUCT" ? productId : null,
           packageId: itemType === "PACKAGE" ? packageId : null,
+          serviceId: itemType === "SERVICE" ? serviceId : null,
           flashPrice: flashPrice || 0,
           quota: quota || 0,
           sold: 0

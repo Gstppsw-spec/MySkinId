@@ -12,6 +12,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "orderId",
         as: "order",
       });
+      AdsDesignRequest.belongsTo(models.masterCompany, {
+        foreignKey: "companyId",
+        as: "company",
+      });
     }
   }
 
@@ -22,12 +26,16 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
-      locationId: {
-        type: DataTypes.UUID,
-        allowNull: false,
-      },
       title: {
         type: DataTypes.STRING,
+        allowNull: false,
+      },
+      companyId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      locationId: {
+        type: DataTypes.UUID,
         allowNull: false,
       },
       adsType: {
