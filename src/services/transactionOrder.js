@@ -123,7 +123,7 @@ module.exports = {
       if (paymentType === "VIRTUAL_ACCOUNT") {
         // Fixed Virtual Account
         const expirationDate = new Date();
-        expirationDate.setHours(expirationDate.getHours() + 1); // 1 hour expiry
+        expirationDate.setHours(expirationDate.getHours() + 24); // 24 hour expiry
 
         const response = await axios.post(
           "https://api.xendit.co/callback_virtual_accounts",
@@ -183,7 +183,7 @@ module.exports = {
                     },
               },
             },
-            expires_at: new Date(Date.now() + 3600000).toISOString(),
+            expires_at: new Date(Date.now() + 24 * 3600000).toISOString(),
           },
           {
             headers: {
@@ -233,7 +233,7 @@ module.exports = {
             type: "DYNAMIC",
             callback_url: `${process.env.BACKEND_URL || "https://api.myskin.blog"}/api/v2/transaction/order/callback/xendit`,
             amount: amount,
-            expires_at: new Date(Date.now() + 3600000).toISOString(),
+            expires_at: new Date(Date.now() + 24 * 3600000).toISOString(),
           },
           { headers: { Authorization: `Basic ${authHeader}` } },
         );
@@ -261,7 +261,7 @@ module.exports = {
             amount: amount,
             payer_email: customer ? customer.email : "customer@myskinid.com",
             description: `Payment for Order ${orderNumber}`,
-            invoice_duration: 3600,
+            invoice_duration: 86400,
             currency: "IDR",
             payment_methods: [paymentMethodCode],
           },
@@ -2582,6 +2582,20 @@ module.exports = {
               // Handle Ads activation
               const adsService = require("./ads.service");
               await adsService.activatePurchase(orderData.id);
+
+              // 🔹 Handle Ads Design Request status update
+              try {
+                const { AdsDesignRequest } = require("../models");
+                const designRequest = await AdsDesignRequest.findOne({ 
+                  where: { orderId: orderData.id } 
+                });
+                if (designRequest) {
+                  await designRequest.update({ status: "COMPLETED" }, { transaction: t });
+                  console.log(`[XenditCallback] AdsDesignRequest ${designRequest.id} marked as COMPLETED`);
+                }
+              } catch (designErr) {
+                console.error("[XenditCallback] AdsDesignRequest sync error:", designErr.message);
+              }
 
               // Handle AD_BALANCE_TOPUP
               if (item.itemType === "AD_BALANCE_TOPUP") {
@@ -5285,7 +5299,11 @@ module.exports = {
           paymentStatus: p.paymentStatus,
           amount: p.amount,
           checkoutUrl: p.checkoutUrl,
-          instructions: p.instructions ? p.instructions.split("\n") : [],
+          instructions: p.instructions 
+            ? (typeof p.instructions === "string" && p.instructions.startsWith("[") 
+                ? JSON.parse(p.instructions) 
+                : p.instructions.split("\n"))
+            : [],
         })),
         transactions: (plainOrder.transactions || []).map((trx) => ({
           id: trx.id,

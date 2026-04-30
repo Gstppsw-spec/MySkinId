@@ -4,6 +4,8 @@ const {
   masterCompany, 
   order, 
   orderPayment, 
+  transaction,
+  transactionItem,
   masterUser,
   masterRole,
   relationshipUserCompany,
@@ -339,6 +341,29 @@ module.exports = {
       await request.update({
         orderId: newOrder.id,
         status: "PENDING_PAYMENT",
+      }, { transaction: t });
+
+      // Create transaction and transactionItem for accounting/tracking
+      const newTransaction = await transaction.create({
+        orderId: newOrder.id,
+        transactionNumber: `TRX-DES-${nanoid(10).toUpperCase()}`,
+        locationId: request.locationId,
+        subTotal: amount,
+        shippingFee: 0,
+        grandTotal: amount,
+        orderStatus: "CREATED",
+      }, { transaction: t });
+
+      await transactionItem.create({
+        transactionId: newTransaction.id,
+        itemType: "ADS_DESIGN",
+        itemId: request.id,
+        itemName: `Ads Design Service: ${request.title}`,
+        quantity: 1,
+        unitPrice: amount,
+        totalPrice: amount,
+        isShippingRequired: false,
+        locationId: request.locationId,
       }, { transaction: t });
 
       // Handle payment

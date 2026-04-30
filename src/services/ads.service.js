@@ -676,6 +676,8 @@ module.exports = {
         let type = "PLACEMENT";
         if (t.items && t.items.some(it => it.itemType === "AD_BALANCE_TOPUP")) {
           type = "TOPUP";
+        } else if (t.items && t.items.some(it => it.itemType === "ADS_DESIGN")) {
+          type = "DESIGN";
         }
 
         return {
@@ -692,7 +694,11 @@ module.exports = {
           payment: latestPayment ? {
             paymentMethod: latestPayment.paymentMethod,
             checkoutUrl: latestPayment.checkoutUrl,
-            instructions: latestPayment.instructions ? latestPayment.instructions.split("\n") : []
+            instructions: latestPayment.instructions 
+              ? (typeof latestPayment.instructions === "string" && latestPayment.instructions.startsWith("[") 
+                  ? JSON.parse(latestPayment.instructions) 
+                  : latestPayment.instructions.split("\n"))
+              : []
           } : null,
           details: purchase ? {
             adsType: purchase.adsType,
@@ -700,7 +706,7 @@ module.exports = {
             startDate: purchase.startDate,
             endDate: purchase.endDate,
             data: purchase.data
-          } : (type === "TOPUP" ? { name: "Balance Top-up" } : null)
+          } : (type === "TOPUP" ? { name: "Balance Top-up" } : (type === "DESIGN" ? { name: "Ads Design Service" } : null))
         };
       });
 
