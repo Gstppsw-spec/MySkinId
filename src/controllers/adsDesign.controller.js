@@ -5,16 +5,19 @@ const fs = require("fs");
 
 const uploadFilesToDrive = async (files) => {
   const uploadedUrls = [];
-  if (!files || files.length === 0) return uploadedUrls;
+  if (!files) return uploadedUrls;
 
-  for (const file of files) {
+  const fileList = Array.isArray(files) ? files : Object.values(files).flat();
+  if (fileList.length === 0) return uploadedUrls;
+
+  for (const file of fileList) {
     try {
       const url = await googleDriveService.uploadFile(file);
       uploadedUrls.push(url);
     } catch (error) {
-      console.error("Failed to upload file to drive:", error);
+      console.error("[AdsDesign Controller] Google Drive upload failed:", error);
+      throw error;
     } finally {
-      // Clean up temp file
       if (fs.existsSync(file.path)) {
         fs.unlinkSync(file.path);
       }

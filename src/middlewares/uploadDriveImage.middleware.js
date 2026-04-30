@@ -23,11 +23,12 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB limit for drive uploads
-}).array("images", 10); // Allow up to 10 images
+}).any();
 
 const uploadDriveImage = (req, res, next) => {
   upload(req, res, function (err) {
     if (err instanceof multer.MulterError) {
+
       if (err.code === "LIMIT_FILE_SIZE") {
         return res.status(400).json({
           status: false,

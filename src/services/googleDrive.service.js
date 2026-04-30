@@ -29,9 +29,9 @@ class GoogleDriveService {
       });
 
       this.drive = google.drive({ version: "v3", auth });
-      console.log("Google Drive API initialized successfully");
+      console.log("[GoogleDriveService] Drive API initialized successfully");
     } catch (error) {
-      console.error("Failed to initialize Google Drive API:", error);
+      console.error("[GoogleDriveService] Failed to initialize Drive API:", error);
     }
   }
 
@@ -60,11 +60,14 @@ class GoogleDriveService {
         body: fs.createReadStream(file.path),
       };
 
+      console.log("[GoogleDriveService] Sending request to Google Drive API...");
       const response = await this.drive.files.create({
         requestBody: fileMetadata,
         media: media,
         fields: "id, webViewLink",
+        supportsAllDrives: true, // Required for Shared Drives
       });
+      console.log("[GoogleDriveService] Google Drive API response received:", response.data.id);
 
       const fileId = response.data.id;
 

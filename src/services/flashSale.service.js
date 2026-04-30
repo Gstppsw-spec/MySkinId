@@ -50,6 +50,14 @@ const itemIncludes = [
     model: masterLocation,
     as: "location",
     attributes: ["id", "name"],
+    include: [
+      {
+        model: masterLocationImage,
+        as: "images",
+        attributes: ["id", "imageUrl"],
+        limit: 1,
+      },
+    ],
   },
   {
     model: masterProduct,
@@ -164,7 +172,20 @@ module.exports = {
 
       if (!data) return { status: false, message: "Flash sale not found" };
 
-      return { status: true, message: "Success", data };
+      // Map images for PACKAGE and SERVICE
+      const plain = data.get({ plain: true });
+      if (plain.items) {
+        plain.items = plain.items.map(item => {
+          if (item.itemType === "PACKAGE" && item.package && item.location?.images) {
+            item.package.images = item.location.images;
+          } else if (item.itemType === "SERVICE" && item.service && item.location?.images) {
+            item.service.images = item.location.images;
+          }
+          return item;
+        });
+      }
+
+      return { status: true, message: "Success", data: plain };
     } catch (error) {
       return { status: false, message: error.message };
     }
@@ -411,12 +432,22 @@ module.exports = {
         include: itemIncludes,
       });
 
+      const result = items.map(item => {
+        const plain = item.get({ plain: true });
+        if (plain.itemType === "PACKAGE" && plain.package && plain.location?.images) {
+          plain.package.images = plain.location.images;
+        } else if (plain.itemType === "SERVICE" && plain.service && plain.location?.images) {
+          plain.service.images = plain.location.images;
+        }
+        return plain;
+      });
+
       return {
         status: true,
         message: "Success",
         data: {
           flashSale: fs,
-          items,
+          items: result,
         },
       };
     } catch (error) {
@@ -459,7 +490,22 @@ module.exports = {
         order: [["endDate", "ASC"]],
       });
 
-      return { status: true, message: "Success", data };
+      const result = data.map(fs => {
+        const plain = fs.get({ plain: true });
+        if (plain.items) {
+          plain.items = plain.items.map(item => {
+            if (item.itemType === "PACKAGE" && item.package && item.location?.images) {
+              item.package.images = item.location.images;
+            } else if (item.itemType === "SERVICE" && item.service && item.location?.images) {
+              item.service.images = item.location.images;
+            }
+            return item;
+          });
+        }
+        return plain;
+      });
+
+      return { status: true, message: "Success", data: result };
     } catch (error) {
       return { status: false, message: error.message };
     }
