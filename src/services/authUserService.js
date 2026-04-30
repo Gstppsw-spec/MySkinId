@@ -138,7 +138,7 @@ module.exports = {
 
   async createUser(userObj, data, file = null) {
     try {
-      let { name, username, email, password, locationId, roleName, companyId, profile } = data;
+      let { name, username, email, password, phone, locationId, roleName, companyId, profile } = data;
 
       // Handle profile object if exists (could be JSON string if using form-data)
       let profileData = profile;
@@ -254,6 +254,7 @@ module.exports = {
         name: finalName,
         username: finalUsername,
         email,
+        phone,
         roleId: role.id,
         password: hashPassword,
         avatar: avatar,
@@ -283,6 +284,7 @@ module.exports = {
             id: user.id,
             name: user.name,
             email: user.email,
+            phone: user.phone,
             roleCode: role.roleCode,
           },
         },

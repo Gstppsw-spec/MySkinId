@@ -1704,7 +1704,7 @@ module.exports = {
 
       const start = new Date(startDate);
       const end = new Date(endDate);
-      if (end <= start) throw new Error("End date must be after start date");
+      if (end < start) throw new Error("End date must be at or after start date");
 
       // Calculate days
       const diffTime = Math.abs(end - start);
