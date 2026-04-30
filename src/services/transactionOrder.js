@@ -1642,18 +1642,39 @@ module.exports = {
         adsData,
         referenceType,
         referenceId,
+        adsDesignId,
       } = data;
+
+      // --- MANDATORY ADS DESIGN VALIDATION ---
+      if (!adsDesignId) {
+        throw new Error("You must use an approved Ads Design to purchase an ad.");
+      }
+
+      const {
+        masterProduct,
+        masterPackage,
+        masterService,
+        masterLocation: locModel,
+        AdsDesignRequest,
+      } = require("../models");
+
+      const designRequest = await AdsDesignRequest.findByPk(adsDesignId);
+      if (!designRequest) throw new Error("Ads Design Request not found.");
+      if (designRequest.status !== "COMPLETED") {
+        throw new Error("This design has not been completed or approved by Admin yet.");
+      }
+
+      // Force adsData to use design results exclusively
+      const finalAdsData = {
+        title: designRequest.title,
+        images: designRequest.resultImages,
+        imageUrl: designRequest.resultImages?.[0],
+      };
+      data.adsData = finalAdsData;
 
       // --- POLYMORPHIC REFERENCE VALIDATION ---
       if (referenceType && referenceId) {
-        const {
-          masterProduct,
-          masterPackage,
-          masterService,
-          masterLocation: locModel,
-        } = require("../models");
         let exists = false;
-
         if (referenceType === "PRODUCT")
           exists = await masterProduct.findByPk(referenceId);
         else if (referenceType === "PACKAGE")
@@ -1757,7 +1778,7 @@ module.exports = {
               configId: adsConfigId,
               startDate: start,
               endDate: end,
-              data: adsData,
+              data: data.adsData,
               status: "PAID",
               isActive: true,
               referenceType: referenceType || "OUTLET",
@@ -1835,7 +1856,7 @@ module.exports = {
           configId: adsConfigId,
           startDate: start,
           endDate: end,
-          data: adsData,
+          data: data.adsData,
           status: "PENDING",
           isActive: false,
           referenceType: referenceType || "OUTLET",
