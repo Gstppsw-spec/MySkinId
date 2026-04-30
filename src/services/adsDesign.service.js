@@ -133,7 +133,7 @@ module.exports = {
     }
   },
 
-  async getMyRequests(userId, { locationId, page = 1, pageSize = 10, search = "" }) {
+  async getMyRequests(userId, { locationId, page = 1, pageSize = 10, search = "", adsType, status }) {
     try {
       const { limit, offset } = getPagination(page, pageSize);
       
@@ -153,6 +153,12 @@ module.exports = {
 
       if (search) {
         where.title = { [Sequelize.Op.like]: `%${search}%` };
+      }
+      if (adsType) {
+        where.adsType = adsType;
+      }
+      if (status) {
+        where.status = status;
       }
 
       const result = await AdsDesignRequest.findAndCountAll({
@@ -205,7 +211,7 @@ module.exports = {
   },
 
   // For Admin
-  async getAllRequests({ page = 1, pageSize = 10, search = "", status = "", locationId }) {
+  async getAllRequests({ page = 1, pageSize = 10, search = "", status = "", locationId, adsType }) {
     try {
       const { limit, offset } = getPagination(page, pageSize);
       const where = { isActive: true };
@@ -219,6 +225,9 @@ module.exports = {
       if (locationId) {
         const locationIds = Array.isArray(locationId) ? locationId : [locationId];
         where.locationId = { [Sequelize.Op.in]: locationIds };
+      }
+      if (adsType) {
+        where.adsType = adsType;
       }
 
       const result = await AdsDesignRequest.findAndCountAll({
@@ -289,8 +298,9 @@ module.exports = {
       const request = await AdsDesignRequest.findByPk(id);
       if (!request) return { status: false, message: "Request not found" };
 
-      if (request.status !== "WAITING_APPROVAL") {
-        return { status: false, message: "Can only request revision when waiting for approval" };
+      const allowedStatuses = ["WAITING_APPROVAL", "PENDING_PAYMENT", "COMPLETED"];
+      if (!allowedStatuses.includes(request.status)) {
+        return { status: false, message: "Can only request revision when waiting for approval or after payment" };
       }
 
       if (request.revisionCount >= 3) {
