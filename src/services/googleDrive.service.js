@@ -69,6 +69,16 @@ class GoogleDriveService {
         supportsAllDrives: true,
       });
 
+      // Set permission to 'Anyone with link can view'
+      await this.drive.permissions.create({
+        fileId: folder.data.id,
+        requestBody: {
+          role: "reader",
+          type: "anyone",
+        },
+        supportsAllDrives: true,
+      });
+
       return folder.data.id;
     } catch (error) {
       console.error("[GoogleDriveService] Error in getOrCreateFolder:", error);
@@ -116,6 +126,16 @@ class GoogleDriveService {
         requestBody: fileMetadata,
         media: media,
         fields: "id, webViewLink",
+        supportsAllDrives: true,
+      });
+
+      // Set permission to 'Anyone with link can view'
+      await this.drive.permissions.create({
+        fileId: response.data.id,
+        requestBody: {
+          role: "reader",
+          type: "anyone",
+        },
         supportsAllDrives: true,
       });
       
