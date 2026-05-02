@@ -11,6 +11,9 @@ router.get("/available", optionalAuth, voucherController.getAvailable);
 // Check applicable vouchers for a specific item + location
 router.get("/check", optionalAuth, voucherController.getForItem);
 
+// Get voucher detail (applicable outlets & items)
+router.get("/detail/:id", optionalAuth, voucherController.getCustomerDetail);
+
 // Claim a voucher (save to customer's collection)
 router.post("/claim", verifyToken, voucherController.claim);
 

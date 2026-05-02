@@ -206,5 +206,22 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  /* ═══════════════════════════════════════════════════
+     CUSTOMER: Get Voucher Detail
+     Shows applicable outlets & items for a voucher
+     ═══════════════════════════════════════════════════ */
+  async getCustomerDetail(req, res) {
+    try {
+      const { id } = req.params;
+      const customerId = req.user?.id || req.customer?.id || null;
+
+      const result = await voucherService.getCustomerVoucherDetail(id, customerId);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };
 

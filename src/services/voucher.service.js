@@ -51,6 +51,27 @@ async function syncVoucherStatuses() {
   );
 }
 
+/**
+ * Resolve item name & price from itemType + itemId (used for participation items).
+ */
+async function resolveItemDetail(itemType, itemId) {
+  try {
+    let model;
+    if (itemType === "PRODUCT") model = masterProduct;
+    else if (itemType === "PACKAGE") model = masterPackage;
+    else if (itemType === "SERVICE") model = masterService;
+    else return null;
+
+    const item = await model.findByPk(itemId, {
+      attributes: ["id", "name", "price"],
+      raw: true,
+    });
+    return item;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   syncVoucherStatuses,
 
@@ -1266,6 +1287,225 @@ module.exports = {
       });
 
       return { status: true, message: "Success", data, totalCount: count };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /* ═══════════════════════════════════════════════════
+     GET VOUCHER DETAIL FOR CUSTOMER
+     Returns voucher info with applicable outlets & items.
+     Handles both direct company vouchers and campaign vouchers.
+     ═══════════════════════════════════════════════════ */
+  async getCustomerVoucherDetail(voucherId, customerId) {
+    try {
+      await syncVoucherStatuses();
+
+      const voucher = await Voucher.findByPk(voucherId, {
+        attributes: [
+          "id", "code", "title", "description",
+          "discountType", "discountValue", "minPurchase", "maxDiscount",
+          "startDate", "endDate", "status",
+          "companyId", "createdByType",
+        ],
+        include: [
+          {
+            model: VoucherItem,
+            as: "items",
+            include: [
+              { model: masterProduct, as: "product", attributes: ["id", "name", "price"] },
+              { model: masterPackage, as: "package", attributes: ["id", "name", "price"] },
+              { model: masterService, as: "service", attributes: ["id", "name", "price"] },
+            ],
+          },
+          {
+            model: VoucherLocation,
+            as: "locations",
+            include: [{ model: masterLocation, as: "location", attributes: ["id", "name", "address", "companyId"] }],
+          },
+          { model: masterCompany, as: "company", attributes: ["id", "name"] },
+          {
+            model: VoucherParticipation,
+            as: "participations",
+            where: { status: "ACTIVE" },
+            required: false,
+            include: [
+              { model: masterCompany, as: "company", attributes: ["id", "name"] },
+              {
+                model: VoucherParticipationItem,
+                as: "items",
+              },
+              {
+                model: VoucherParticipationLocation,
+                as: "locations",
+                include: [{ model: masterLocation, as: "location", attributes: ["id", "name", "address", "companyId"] }],
+              },
+            ],
+          },
+        ],
+      });
+
+      if (!voucher) return { status: false, message: "Voucher not found" };
+
+      const plain = voucher.toJSON();
+
+      // --- Build applicable outlets list ---
+      let applicableOutlets = [];
+      // --- Build applicable items list ---
+      let applicableItems = [];
+
+      if (plain.createdByType === "SUPER_ADMIN" && plain.companyId === null) {
+        // CAMPAIGN VOUCHER — aggregate from participations
+        for (const participation of (plain.participations || [])) {
+          const companyName = participation.company?.name || "Unknown";
+
+          // Outlets
+          if (participation.isAllLocations) {
+            // Fetch all locations of this participating company
+            const companyLocs = await masterLocation.findAll({
+              where: { companyId: participation.companyId },
+              attributes: ["id", "name", "address"],
+              raw: true,
+            });
+            companyLocs.forEach(loc => {
+              applicableOutlets.push({
+                id: loc.id,
+                name: loc.name,
+                address: loc.address,
+                companyName,
+              });
+            });
+          } else {
+            (participation.locations || []).forEach(pl => {
+              if (pl.location) {
+                applicableOutlets.push({
+                  id: pl.location.id,
+                  name: pl.location.name,
+                  address: pl.location.address,
+                  companyName,
+                });
+              }
+            });
+          }
+
+          // Items
+          if (participation.isAllItems) {
+            applicableItems.push({
+              companyName,
+              type: "ALL",
+              description: `Semua item dari ${companyName}`,
+            });
+          } else {
+            for (const pi of (participation.items || [])) {
+              const itemDetail = await resolveItemDetail(pi.itemType, pi.itemId);
+              applicableItems.push({
+                companyName,
+                itemType: pi.itemType,
+                itemId: pi.itemId,
+                name: itemDetail?.name || null,
+                price: itemDetail?.price || null,
+              });
+            }
+          }
+        }
+      } else {
+        // DIRECT COMPANY VOUCHER
+        const companyName = plain.company?.name || null;
+
+        // Outlets
+        if (plain.locations && plain.locations.length > 0) {
+          plain.locations.forEach(vl => {
+            if (vl.location) {
+              applicableOutlets.push({
+                id: vl.location.id,
+                name: vl.location.name,
+                address: vl.location.address,
+                companyName,
+              });
+            }
+          });
+        } else if (plain.companyId) {
+          // No location restriction → all outlets of the company
+          const companyLocs = await masterLocation.findAll({
+            where: { companyId: plain.companyId },
+            attributes: ["id", "name", "address"],
+            raw: true,
+          });
+          companyLocs.forEach(loc => {
+            applicableOutlets.push({
+              id: loc.id,
+              name: loc.name,
+              address: loc.address,
+              companyName,
+            });
+          });
+        }
+
+        // Items
+        if (plain.items && plain.items.length > 0) {
+          plain.items.forEach(vi => {
+            const resolved = vi.product || vi.package || vi.service;
+            applicableItems.push({
+              itemType: vi.itemType,
+              itemId: vi.itemId,
+              name: resolved?.name || null,
+              price: resolved?.price || null,
+              companyName,
+            });
+          });
+        } else {
+          applicableItems.push({
+            type: "ALL",
+            description: companyName
+              ? `Semua item dari ${companyName}`
+              : "Semua item",
+            companyName,
+          });
+        }
+      }
+
+      // --- Check customer claim status ---
+      let isClaimed = false;
+      let claimStatus = null;
+      if (customerId) {
+        const claim = await CustomerClaimedVoucher.findOne({
+          where: { customerId, voucherId },
+        });
+        if (claim) {
+          isClaimed = true;
+          claimStatus = claim.status;
+        }
+      }
+
+      // --- Check per-user usage ---
+      let userUsageCount = 0;
+      if (customerId) {
+        userUsageCount = await VoucherUsage.count({
+          where: { voucherId, customerId },
+        });
+      }
+
+      const result = {
+        id: plain.id,
+        code: plain.code,
+        title: plain.title,
+        description: plain.description,
+        discountType: plain.discountType,
+        discountValue: plain.discountValue,
+        minPurchase: plain.minPurchase,
+        maxDiscount: plain.maxDiscount,
+        startDate: plain.startDate,
+        endDate: plain.endDate,
+        status: plain.status,
+        company: plain.company,
+        isClaimed,
+        claimStatus,
+        userUsageCount,
+        applicableOutlets,
+        applicableItems,
+      };
+
+      return { status: true, message: "Success", data: result };
     } catch (error) {
       return { status: false, message: error.message };
     }

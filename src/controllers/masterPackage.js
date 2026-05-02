@@ -72,10 +72,10 @@ module.exports = {
   async getById(req, res) {
     try {
       const { id } = req.params;
-      const { customerId, lat, lng } = req.query;
+      const { customerId, latt, long } = req.query;
 
-      const userLat = lat ? parseFloat(lat) : undefined;
-      const userLng = lng ? parseFloat(lng) : undefined;
+      const userLat = latt ? parseFloat(latt) : undefined;
+      const userLng = long ? parseFloat(long) : undefined;
 
       const result = await packageService.getById(
         id,
