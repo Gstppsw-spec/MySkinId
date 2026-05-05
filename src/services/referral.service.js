@@ -107,7 +107,7 @@ module.exports = {
         });
       }
 
-      const baseUrl = process.env.WEB_URL || "https://webmyskin.id";
+      const baseUrl = process.env.WEB_URL || "https://myskin.blog";
       const referralLink = `${baseUrl}?ref=${customer.referralCode}`;
 
       return {
