@@ -47,6 +47,7 @@ const pushNotificationService = require("./pushNotification.service");
 const NotificationService = require("./notification.service");
 const xenditPlatformService = require("./xenditPlatform.service");
 const voucherService = require("./voucher.service");
+const referralService = require("./referral.service");
 
 const SERVICE_FEE = 4500;
 
@@ -2526,6 +2527,14 @@ module.exports = {
             }
           }
 
+          // === REFERRAL POINT CREDIT ===
+          try {
+            await referralService.creditReferralPoints(orderData.id, t);
+          } catch (refErr) {
+            console.error("[Referral] Error crediting points:", refErr.message);
+            // Non-blocking: don't fail payment callback due to referral error
+          }
+
           // Activate vouchers linked to this order's transactions
           const transactionIds = orderData.transactions.map((trx) => trx.id);
           if (transactionIds.length > 0) {
@@ -2590,8 +2599,8 @@ module.exports = {
                   where: { orderId: orderData.id } 
                 });
                 if (designRequest) {
-                  await designRequest.update({ status: "COMPLETED" }, { transaction: t });
-                  console.log(`[XenditCallback] AdsDesignRequest ${designRequest.id} marked as COMPLETED`);
+                  await designRequest.update({ status: "PAID" }, { transaction: t });
+                  console.log(`[XenditCallback] AdsDesignRequest ${designRequest.id} marked as PAID`);
                 }
               } catch (designErr) {
                 console.error("[XenditCallback] AdsDesignRequest sync error:", designErr.message);

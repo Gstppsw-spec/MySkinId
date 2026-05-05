@@ -14,6 +14,20 @@ router.post(
   adsDesignController.createRequest
 );
 
+router.get(
+  "/price",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN"),
+  adsDesignController.getPrice
+);
+
+router.post(
+  "/:id/pay",
+  verifyToken,
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN"),
+  adsDesignController.payDesignRequest
+);
+
 router.put(
   "/:id",
   verifyToken,
@@ -85,6 +99,13 @@ router.post(
   allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   uploadDriveImage,
   adsDesignController.submitDesignResult
+);
+
+router.put(
+  "/admin/price",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  adsDesignController.setPrice
 );
 
 module.exports = router;

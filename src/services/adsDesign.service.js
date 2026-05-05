@@ -1,5 +1,6 @@
 const { 
   AdsDesignRequest, 
+  AdsConfig,
   masterLocation, 
   masterCompany, 
   order, 
@@ -68,6 +69,169 @@ async function _getAdminCompanyIds(adminId) {
 }
 
 module.exports = {
+  // --- Price Management ---
+  async getDesignPrice() {
+    try {
+      const config = await AdsConfig.findOne({ where: { type: "DESIGN_SERVICE" } });
+      return { 
+        status: true, 
+        message: "Success", 
+        data: { 
+          price: config ? parseFloat(config.pricePerDay) : 0 
+        } 
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async setDesignPrice(price) {
+    try {
+      let config = await AdsConfig.findOne({ where: { type: "DESIGN_SERVICE" } });
+      if (config) {
+        await config.update({ pricePerDay: price });
+      } else {
+        config = await AdsConfig.create({
+          type: "DESIGN_SERVICE",
+          pricePerDay: price,
+          isActive: true
+        });
+      }
+      return { status: true, message: "Design price updated successfully", data: config };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async payDesignRequest(id, userId, paymentMethodCode) {
+    const t = await sequelize.transaction();
+    try {
+      const request = await AdsDesignRequest.findOne({
+        where: { id, isActive: true },
+        include: [{ model: masterLocation, as: "location" }],
+        transaction: t,
+        lock: true,
+      });
+
+      if (!request) throw new Error("Request not found");
+      if (request.status !== "REQUESTED") {
+        throw new Error("Can only pay for requests in REQUESTED status");
+      }
+
+      if (!paymentMethodCode) throw new Error("Payment method code is required");
+
+      const priceResult = await this.getDesignPrice();
+      const amount = priceResult.data.price;
+
+      // Create order
+      const newOrder = await order.create({
+        orderNumber: `DES-${nanoid(10).toUpperCase()}`,
+        customerId: userId,
+        totalAmount: amount,
+        paymentStatus: "UNPAID",
+      }, { transaction: t });
+
+      await request.update({
+        orderId: newOrder.id,
+        status: "PENDING_PAYMENT",
+        price: amount, // Save the price at the moment of payment
+      }, { transaction: t });
+
+      // Create transaction and transactionItem
+      const newTransaction = await transaction.create({
+        orderId: newOrder.id,
+        transactionNumber: `TRX-DES-${nanoid(10).toUpperCase()}`,
+        locationId: request.locationId,
+        subTotal: amount,
+        shippingFee: 0,
+        grandTotal: amount,
+        orderStatus: "CREATED",
+      }, { transaction: t });
+
+      await transactionItem.create({
+        transactionId: newTransaction.id,
+        itemType: "ADS_DESIGN",
+        itemId: request.id,
+        itemName: `Ads Design Service: ${request.title}`,
+        quantity: 1,
+        unitPrice: amount,
+        totalPrice: amount,
+        isShippingRequired: false,
+        locationId: request.locationId,
+      }, { transaction: t });
+
+      // Handle payment
+      let paymentInstructions = null;
+      if (amount <= 0) {
+        await newOrder.update({ paymentStatus: "PAID" }, { transaction: t });
+        await request.update({ status: "PAID" }, { transaction: t });
+        
+        await orderPayment.create({
+          orderId: newOrder.id,
+          paymentMethod: "FREE",
+          amount: 0,
+          paymentStatus: "COMPLETED",
+          referenceNumber: request.id,
+        }, { transaction: t });
+      } else if (paymentMethodCode === "SALDO_ADS") {
+        const companyId = request.location?.companyId;
+        if (!companyId) throw new Error("Location does not have a company associated");
+
+        const balanceResult = await balanceService.spendBalance(
+          companyId,
+          amount,
+          request.id,
+          `Payment for Ads Design Asset: ${request.title}`,
+          t
+        );
+
+        if (!balanceResult.status) throw new Error(balanceResult.message);
+
+        await newOrder.update({ paymentStatus: "PAID" }, { transaction: t });
+        await request.update({ status: "PAID" }, { transaction: t });
+
+        await orderPayment.create({
+          orderId: newOrder.id,
+          paymentMethod: "SALDO_ADS",
+          amount: amount,
+          paymentStatus: "COMPLETED",
+          referenceNumber: request.id,
+        }, { transaction: t });
+      } else {
+        const xenditPayment = await transactionOrder._createXenditPayment(
+          newOrder.orderNumber,
+          amount,
+          null, 
+          paymentMethodCode
+        );
+        paymentInstructions = xenditPayment;
+
+        await orderPayment.create({
+          orderId: newOrder.id,
+          paymentMethod: paymentMethodCode,
+          amount: amount,
+          paymentStatus: "PENDING",
+          referenceNumber: xenditPayment.id,
+          checkoutUrl: xenditPayment.checkoutUrl || xenditPayment.invoiceUrl,
+        }, { transaction: t });
+      }
+
+      await t.commit();
+      return { 
+        status: true, 
+        message: "Payment initiated", 
+        data: {
+          request,
+          order: newOrder,
+          payment: paymentInstructions
+        }
+      };
+    } catch (error) {
+      if (t) await t.rollback();
+      return { status: false, message: error.message };
+    }
+  },
+
   async createRequest(locationId, data) {
     try {
       const { title, adsType, description, referenceImages } = data;
@@ -293,8 +457,8 @@ module.exports = {
       const request = await AdsDesignRequest.findByPk(id);
       if (!request) return { status: false, message: "Request not found" };
 
-      if (request.status !== "REQUESTED" && request.status !== "REVISION_REQUESTED") {
-        return { status: false, message: "Cannot process request in current status" };
+      if (request.status !== "PAID" && request.status !== "REVISION_REQUESTED") {
+        return { status: false, message: "Cannot process request. Payment must be confirmed (PAID status) or in REVISION_REQUESTED." };
       }
 
       await request.update({ status: "PROCESSING" });
@@ -304,7 +468,7 @@ module.exports = {
     }
   },
 
-  async submitDesignResult(id, resultImages, price) {
+  async submitDesignResult(id, resultImages) {
     try {
       const request = await AdsDesignRequest.findByPk(id);
       if (!request) return { status: false, message: "Request not found" };
@@ -317,11 +481,6 @@ module.exports = {
         resultImages,
         status: "WAITING_APPROVAL",
       };
-
-      // 🔹 Lock price if an order already exists (already approved/paid)
-      if (!request.orderId) {
-        updateData.price = price;
-      }
 
       await request.update(updateData);
 
@@ -357,152 +516,26 @@ module.exports = {
     }
   },
 
-  async approveDesign(id, userId, paymentMethodCode) {
-    const t = await sequelize.transaction();
+  async approveDesign(id) {
     try {
-      const request = await AdsDesignRequest.findOne({
-        where: { id },
-        include: [
-          { model: masterLocation, as: "location" },
-          { model: order, as: "order" }
-        ],
-        transaction: t,
-        lock: true,
+      const request = await AdsDesignRequest.findByPk(id, {
+        include: [{ model: order, as: "order" }]
       });
 
-      if (!request) throw new Error("Request not found");
+      if (!request) return { status: false, message: "Request not found" };
       if (request.status !== "WAITING_APPROVAL") {
-        throw new Error("Can only approve design when in WAITING_APPROVAL status");
+        return { status: false, message: "Can only approve design when in WAITING_APPROVAL status" };
       }
 
-      if (!paymentMethodCode && (!request.order || request.order.paymentStatus !== "PAID")) {
-        throw new Error("Payment method code is required");
-      }
+      // Since payment is now upfront, we just move to COMPLETED
+      await request.update({ status: "COMPLETED" });
 
-      // 🔹 CHECK IF ALREADY PAID
-      if (request.order && request.order.paymentStatus === "PAID") {
-        await request.update({ status: "COMPLETED" }, { transaction: t });
-        await t.commit();
-        return { 
-          status: true, 
-          message: "Design approved (Already paid)", 
-          data: { request, order: request.order } 
-        };
-      }
-
-      const amount = parseFloat(request.price) || 0;
-      
-      // Create order first
-      const newOrder = await order.create({
-        orderNumber: `DES-${nanoid(10).toUpperCase()}`,
-        customerId: userId, // User acting as customer
-        totalAmount: amount,
-        paymentStatus: "UNPAID",
-      }, { transaction: t });
-
-      await request.update({
-        orderId: newOrder.id,
-        status: "PENDING_PAYMENT",
-      }, { transaction: t });
-
-      // Create transaction and transactionItem for accounting/tracking
-      const newTransaction = await transaction.create({
-        orderId: newOrder.id,
-        transactionNumber: `TRX-DES-${nanoid(10).toUpperCase()}`,
-        locationId: request.locationId,
-        subTotal: amount,
-        shippingFee: 0,
-        grandTotal: amount,
-        orderStatus: "CREATED",
-      }, { transaction: t });
-
-      await transactionItem.create({
-        transactionId: newTransaction.id,
-        itemType: "ADS_DESIGN",
-        itemId: request.id,
-        itemName: `Ads Design Service: ${request.title}`,
-        quantity: 1,
-        unitPrice: amount,
-        totalPrice: amount,
-        isShippingRequired: false,
-        locationId: request.locationId,
-      }, { transaction: t });
-
-      // Handle payment
-      let paymentInstructions = null;
-      if (amount <= 0) {
-        // Free design
-        await newOrder.update({ paymentStatus: "PAID" }, { transaction: t });
-        await request.update({ status: "COMPLETED" }, { transaction: t });
-        
-        await orderPayment.create({
-          orderId: newOrder.id,
-          paymentMethod: "FREE",
-          amount: 0,
-          paymentStatus: "COMPLETED",
-          referenceNumber: request.id,
-        }, { transaction: t });
-      } else if (paymentMethodCode === "SALDO_ADS") {
-        // Deduct from Company Ads Balance
-        const companyId = request.location?.companyId;
-        if (!companyId) throw new Error("Location does not have a company associated");
-
-        const balanceResult = await balanceService.spendBalance(
-          companyId,
-          amount,
-          request.id,
-          `Payment for Ads Design Asset: ${request.title}`,
-          t
-        );
-
-        if (!balanceResult.status) {
-          throw new Error(balanceResult.message);
-        }
-
-        await newOrder.update({ paymentStatus: "PAID" }, { transaction: t });
-        await request.update({ status: "COMPLETED" }, { transaction: t });
-
-        // Record the payment method in orderPayment
-        await orderPayment.create({
-          orderId: newOrder.id,
-          paymentMethod: "SALDO_ADS",
-          amount: amount,
-          paymentStatus: "COMPLETED",
-          referenceNumber: request.id,
-        }, { transaction: t });
-      } else {
-        // Xendit payment
-        const xenditPayment = await transactionOrder._createXenditPayment(
-          newOrder.orderNumber,
-          amount,
-          null, 
-          paymentMethodCode
-        );
-        paymentInstructions = xenditPayment;
-
-        // Record the pending payment in orderPayment
-        await orderPayment.create({
-          orderId: newOrder.id,
-          paymentMethod: paymentMethodCode,
-          amount: amount,
-          paymentStatus: "PENDING",
-          referenceNumber: xenditPayment.id,
-          checkoutUrl: xenditPayment.checkoutUrl || xenditPayment.invoiceUrl,
-        }, { transaction: t });
-      }
-
-      await t.commit();
       return { 
         status: true, 
-        message: amount <= 0 || paymentMethodCode === "SALDO_ADS" ? "Design approved and paid successfully" : "Design approved, awaiting payment", 
-        data: {
-          request,
-          order: newOrder,
-          payment: paymentInstructions
-        }
+        message: "Design approved successfully", 
+        data: request 
       };
     } catch (error) {
-      if (t) await t.rollback();
       return { status: false, message: error.message };
     }
   },

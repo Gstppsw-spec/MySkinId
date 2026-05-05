@@ -39,6 +39,7 @@ const adsDesignRoute = require("./routes/adsDesign.route");
 const pushTokenRoute = require("./routes/master/pushToken.route");
 const notificationRoute = require("./routes/notification.route");
 const voucherRoute = require("./routes/voucher.route");
+const referralRoute = require("./routes/referral.route");
 
 // Cron jobs
 const initGoogleRatingCron = require("./cron/googleRatingCron");
@@ -114,6 +115,7 @@ app.use("/api/v2/push-token", pushTokenRoute);
 app.use("/api/v2/notification", notificationRoute);
 app.use("/api/v2/notifications", notificationRoute);
 app.use("/api/v2/voucher", voucherRoute);
+app.use("/api/v2/referral", referralRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);

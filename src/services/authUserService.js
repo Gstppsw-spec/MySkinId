@@ -375,7 +375,7 @@ module.exports = {
     }
   },
 
-  async getAllUser(userObj, pagination = {}, name = null, roleCode = null) {
+  async getAllUser(userObj, pagination = {}, name = null, roleCode = null, filters = {}) {
     try {
       const { limit, offset } = pagination;
       const where = { isactive: true };
@@ -401,18 +401,101 @@ module.exports = {
           "PATIENT",
         );
       } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
-        // Company Admin only see staff: Outlet Admin & Outlet Doctor
-        // No allowedRoles.push("COMPANY_ADMIN") to hide other admins
-        const locIds = userObj.locationIds || [];
-        const staff = await relationshipUserLocation.findAll({
-          where: { locationId: { [Op.in]: locIds }, isactive: true },
+        // Company Admin only see staff: Outlet Admin & Outlet Doctor + Company Admin
+        allowedRoles.push("COMPANY_ADMIN");
+
+        const userCompany = await relationshipUserCompany.findOne({
+          where: { userId: userObj.id, isactive: true },
+          attributes: ["companyId"],
+          raw: true,
+        });
+
+        if (userCompany) {
+          const companyId = userCompany.companyId;
+
+          // 1. Get users directly linked to this company (including themselves and other admins)
+          const companyStaff = await relationshipUserCompany.findAll({
+            where: { companyId, isactive: true },
+            attributes: ["userId"],
+            raw: true,
+          });
+
+          // 2. Get users linked to locations of this company
+          const locationStaff = await relationshipUserLocation.findAll({
+            include: [
+              {
+                model: masterLocation,
+                as: "location",
+                where: { companyId, isactive: true },
+                required: true,
+              },
+            ],
+            attributes: ["userId"],
+            raw: true,
+          });
+
+          const allowedUserIds = Array.from(
+            new Set([
+              ...companyStaff.map((s) => s.userId),
+              ...locationStaff.map((s) => s.userId),
+            ])
+          );
+
+          where.id = { [Op.in]: allowedUserIds };
+        } else {
+          where.id = userObj.id; // Fallback: only see themselves
+        }
+      }
+
+      // Filter by Company IDs
+      if (filters.companyIds && filters.companyIds.length > 0) {
+        const userCompanies = await relationshipUserCompany.findAll({
+          where: { companyId: { [Op.in]: filters.companyIds }, isactive: true },
           attributes: ["userId"],
           raw: true,
         });
-        const allowedUserIds = staff.map((s) => s.userId);
-        allowedUserIds.push(userObj.id); // allow their own account
+        
+        const userLocs = await relationshipUserLocation.findAll({
+          include: [{
+            model: masterLocation,
+            as: "location",
+            where: { companyId: { [Op.in]: filters.companyIds } },
+            required: true
+          }],
+          attributes: ["userId"],
+          raw: true,
+        });
 
-        where.id = { [Op.in]: allowedUserIds };
+        const companyUserIds = Array.from(new Set([
+          ...userCompanies.map(uc => uc.userId),
+          ...userLocs.map(ul => ul.userId)
+        ]));
+
+        if (where.id) {
+          where.id = { [Op.and]: [where.id, { [Op.in]: companyUserIds }] };
+        } else {
+          where.id = { [Op.in]: companyUserIds };
+        }
+      }
+
+      // Filter by Location IDs
+      if (filters.locationIds && filters.locationIds.length > 0) {
+        const userLocs = await relationshipUserLocation.findAll({
+          where: { locationId: { [Op.in]: filters.locationIds }, isactive: true },
+          attributes: ["userId"],
+          raw: true,
+        });
+        const locationUserIds = userLocs.map(ul => ul.userId);
+
+        if (where.id) {
+          if (where.id[Op.and]) {
+            where.id[Op.and].push({ [Op.in]: locationUserIds });
+          } else {
+            where.id = { [Op.and]: [where.id, { [Op.in]: locationUserIds }] };
+          }
+        } else {
+          where.id = { [Op.in]: locationUserIds };
+        }
       }
 
       const { count, rows } = await masterUser.findAndCountAll({

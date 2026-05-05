@@ -59,10 +59,15 @@ module.exports = {
 
   async getAllUser(req, res) {
     try {
-      const { page, pageSize, name, role } = req.query;
+      const { page, pageSize, name, role, companyIds, locationIds } = req.query;
       const pagination = getPagination(page, pageSize);
 
-      const result = await authService.getAllUser(req.user, pagination, name, role);
+      const filters = {
+        companyIds: companyIds ? (Array.isArray(companyIds) ? companyIds : companyIds.split(",")) : [],
+        locationIds: locationIds ? (Array.isArray(locationIds) ? locationIds : locationIds.split(",")) : [],
+      };
+
+      const result = await authService.getAllUser(req.user, pagination, name, role, filters);
       if (!result.status) {
         return response.error(res, result.message, result.data);
       }

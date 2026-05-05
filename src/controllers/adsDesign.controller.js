@@ -149,13 +149,24 @@ module.exports = {
     }
   },
 
-  async approveDesign(req, res) {
+  async payDesignRequest(req, res) {
     try {
       const { id } = req.params;
       const userId = req.user.id;
       const { paymentMethodCode } = req.body;
 
-      const result = await adsDesignService.approveDesign(id, userId, paymentMethodCode);
+      const result = await adsDesignService.payDesignRequest(id, userId, paymentMethodCode);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async approveDesign(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await adsDesignService.approveDesign(id);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
@@ -189,11 +200,6 @@ module.exports = {
   async submitDesignResult(req, res) {
     try {
       const { id } = req.params;
-      const { price } = req.body;
-
-      if (price === undefined || price === null) {
-        return response.error(res, "price is required");
-      }
 
       const request = await AdsDesignRequest.findByPk(id);
       if (!request) return response.error(res, "Request not found");
@@ -204,7 +210,31 @@ module.exports = {
         return response.error(res, "At least one result image is required");
       }
 
-      const result = await adsDesignService.submitDesignResult(id, resultImages, price);
+      const result = await adsDesignService.submitDesignResult(id, resultImages);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getPrice(req, res) {
+    try {
+      const result = await adsDesignService.getDesignPrice();
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async setPrice(req, res) {
+    try {
+      const { price } = req.body;
+      if (price === undefined || price === null) {
+        return response.error(res, "price is required");
+      }
+      const result = await adsDesignService.setDesignPrice(price);
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {

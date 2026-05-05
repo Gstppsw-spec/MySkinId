@@ -94,10 +94,11 @@ module.exports = (sequelize, DataTypes) => {
       status: {
         type: DataTypes.ENUM(
           "REQUESTED",
+          "PENDING_PAYMENT",
+          "PAID",
           "PROCESSING",
           "WAITING_APPROVAL",
           "REVISION_REQUESTED",
-          "PENDING_PAYMENT",
           "COMPLETED",
           "CANCELLED"
         ),
