@@ -187,6 +187,23 @@ class referralController {
       return response.serverError(res, err);
     }
   }
+
+  /**
+   * POST /api/v2/referral/admin/adjust-balance
+   * Admin: Manually adjust customer referral balance (ADD or SUBTRACT)
+   * Body: { customerId, amount, type: "ADD" | "SUBTRACT", reason?: string }
+   */
+  async adminAdjustBalance(req, res) {
+    try {
+      const adminId = req.user.id;
+      const result = await referralService.adjustCustomerBalance(adminId, req.body);
+      return result.status
+        ? response.success(res, result.message, result.data)
+        : response.error(res, result.message);
+    } catch (err) {
+      return response.serverError(res, err);
+    }
+  }
 }
 
 module.exports = new referralController();

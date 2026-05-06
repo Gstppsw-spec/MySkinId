@@ -4,6 +4,7 @@ const {
   referralPoints,
   referralBalance,
   referralWithdrawal,
+  ReferralAdjustment,
   order,
   transaction,
   sequelize,
@@ -777,6 +778,101 @@ module.exports = {
         totalCount: count,
       };
     } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+  
+  /**
+   * Admin: Adjust customer referral balance manually.
+   */
+  async adjustCustomerBalance(adminId, { customerId, amount, type, reason }) {
+    const t = await sequelize.transaction();
+    try {
+      if (!customerId || !amount || !type) {
+        return { status: false, message: "Data tidak lengkap. Butuh customerId, amount, dan type (ADD/SUBTRACT)." };
+      }
+
+      const adjAmount = parseFloat(amount);
+      if (adjAmount <= 0) {
+        return { status: false, message: "Amount harus lebih besar dari 0" };
+      }
+
+      const customer = await masterCustomer.findByPk(customerId);
+      if (!customer) {
+        return { status: false, message: "Customer tidak ditemukan" };
+      }
+
+      let balance = await referralBalance.findOne({
+        where: { customerId },
+        transaction: t,
+        lock: true,
+      });
+
+      if (!balance) {
+        balance = await referralBalance.create(
+          {
+            customerId,
+            balance: 0,
+            totalEarned: 0,
+            totalWithdrawn: 0,
+          },
+          { transaction: t }
+        );
+      }
+
+      const currentBalance = parseFloat(balance.balance);
+      const currentTotalEarned = parseFloat(balance.totalEarned);
+      let newBalance = currentBalance;
+      let newTotalEarned = currentTotalEarned;
+
+      if (type === "ADD") {
+        newBalance += adjAmount;
+        newTotalEarned += adjAmount;
+      } else if (type === "SUBTRACT") {
+        if (currentBalance < adjAmount) {
+          throw new Error(`Saldo tidak mencukupi untuk dikurangi. Saldo saat ini: ${currentBalance}`);
+        }
+        newBalance -= adjAmount;
+      } else {
+        throw new Error("Type tidak valid. Gunakan ADD atau SUBTRACT.");
+      }
+
+      // Update balance
+      await balance.update(
+        {
+          balance: newBalance,
+          totalEarned: newTotalEarned,
+        },
+        { transaction: t }
+      );
+
+      // Log adjustment
+      const adjustment = await ReferralAdjustment.create(
+        {
+          customerId,
+          amount: adjAmount,
+          type,
+          reason,
+          adjustedBy: adminId,
+        },
+        { transaction: t }
+      );
+
+      await t.commit();
+
+      return {
+        status: true,
+        message: "Saldo referral berhasil disesuaikan",
+        data: {
+          id: adjustment.id,
+          newBalance,
+          type,
+          amount: adjAmount,
+        },
+      };
+    } catch (error) {
+      if (t) await t.rollback();
+      console.error("[Referral] adjustCustomerBalance error:", error.message);
       return { status: false, message: error.message };
     }
   },
