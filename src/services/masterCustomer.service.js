@@ -1,4 +1,5 @@
 const { masterCustomer, sequelize } = require("../models");
+const referralService = require("./referral.service");
 
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -22,6 +23,7 @@ class masterCustomerService {
         loginMethod,
         countryCode,
         otpType,
+        referralCode,
       } = data;
 
       console.log(data);
@@ -82,6 +84,11 @@ class masterCustomerService {
           );
           console.log(sendOtpEmail);
 
+          // Apply referral if code provided
+          if (referralCode) {
+            await referralService.applyReferral(existEmailInActive.id, referralCode);
+          }
+
           return {
             status: true,
             message: "Customer re-activated successfully",
@@ -126,6 +133,11 @@ class masterCustomerService {
 
           console.log(sendOtpWhatsapp);
 
+          // Apply referral if code provided
+          if (referralCode) {
+            await referralService.applyReferral(existPhoneInActive.id, referralCode);
+          }
+
           return {
             status: true,
             message: "Customer re-activated successfully",
@@ -162,6 +174,11 @@ class masterCustomerService {
         otpType,
       });
 
+      // Apply referral if code provided
+      if (referralCode) {
+        await referralService.applyReferral(customer.id, referralCode);
+      }
+
       if (loginMethod === "email") {
         const sendOtpEmail = await masterCustomerService.sendEmailOtp(
           email,
@@ -184,6 +201,7 @@ class masterCustomerService {
         message: "Customer registered successfully",
         data: {
           customerId: customer.id,
+          referralApplied: !!referralCode,
         },
       };
     } catch (error) {
@@ -717,6 +735,11 @@ class masterCustomerService {
           emailVerified: true,
           profileImageUrl: profileImageUrl,
         });
+
+        // Apply referral if code provided
+        if (profile.referralCode) {
+          await referralService.applyReferral(customer.id, profile.referralCode);
+        }
       }
 
       const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
@@ -784,6 +807,11 @@ class masterCustomerService {
           isActive: true, // Auto-active for Apple sign-in
           emailVerified: !!email,
         });
+
+        // Apply referral if code provided
+        if (profile.referralCode) {
+          await referralService.applyReferral(customer.id, profile.referralCode);
+        }
       }
 
       const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {

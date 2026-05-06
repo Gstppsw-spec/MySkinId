@@ -47,6 +47,7 @@ const pushNotificationService = require("./pushNotification.service");
 const NotificationService = require("./notification.service");
 const xenditPlatformService = require("./xenditPlatform.service");
 const voucherService = require("./voucher.service");
+const referralService = require("./referral.service");
 
 const SERVICE_FEE = 4500;
 
@@ -283,11 +284,11 @@ module.exports = {
       }
     } catch (error) {
       const detail = error.response
-        ? JSON.stringify(error.response.data)
+        ? error.response.data?.message || JSON.stringify(error.response.data)
         : error.message;
       console.error("Xendit Native API Error:", detail);
       throw new Error(
-        `Failed to create Native Payment for ${paymentMethodCode}: ${detail}`,
+        error.response?.data?.message || `Failed to create Native Payment for ${paymentMethodCode}: ${detail}`,
       );
     }
   },
@@ -509,7 +510,6 @@ module.exports = {
         const totalWeight = unitWeight * item.qty;
 
         itemsByLocation[locationId].push({
-          id: item.id, // Cart Item ID
           itemType: type,
           itemId: actualItem.id,
           itemName: actualItem.name,
@@ -858,8 +858,8 @@ module.exports = {
               receiverPhone: calcInfo.finalReceiverPhone,
               address: calcInfo.finalAddress,
               originCityId: calcInfo.location
-                ? calcInfo.location.districtId || calcInfo.location.cityId || 0
-                : 0,
+                ? calcInfo.location.districtId || calcInfo.location.cityId || null
+                : null,
               destinationCityId: calcInfo.destinationId,
               totalWeight: items.reduce(
                 (sum, i) => sum + (i.totalWeight || 0),
@@ -1083,7 +1083,6 @@ module.exports = {
         const totalWeight = unitWeight * item.qty;
 
         itemsByLocation[locationId].push({
-          id: item.id, // Provided ID (Product ID in direct checkout)
           itemType: item.type,
           itemId: actualItem.id,
           itemName: actualItem.name,
@@ -2526,6 +2525,14 @@ module.exports = {
             }
           }
 
+          // === REFERRAL POINT CREDIT ===
+          try {
+            await referralService.creditReferralPoints(orderData.id, t);
+          } catch (refErr) {
+            console.error("[Referral] Error crediting points:", refErr.message);
+            // Non-blocking: don't fail payment callback due to referral error
+          }
+
           // Activate vouchers linked to this order's transactions
           const transactionIds = orderData.transactions.map((trx) => trx.id);
           if (transactionIds.length > 0) {
@@ -2590,8 +2597,8 @@ module.exports = {
                   where: { orderId: orderData.id } 
                 });
                 if (designRequest) {
-                  await designRequest.update({ status: "COMPLETED" }, { transaction: t });
-                  console.log(`[XenditCallback] AdsDesignRequest ${designRequest.id} marked as COMPLETED`);
+                  await designRequest.update({ status: "PAID" }, { transaction: t });
+                  console.log(`[XenditCallback] AdsDesignRequest ${designRequest.id} marked as PAID`);
                 }
               } catch (designErr) {
                 console.error("[XenditCallback] AdsDesignRequest sync error:", designErr.message);

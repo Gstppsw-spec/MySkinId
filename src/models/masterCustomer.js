@@ -99,6 +99,17 @@ module.exports = (sequelize, DataTypes) => {
         },
       },
 
+      // ===== REFERRAL =====
+      referralCode: {
+        type: DataTypes.STRING(20),
+        unique: true,
+        allowNull: true,
+      },
+      referredBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+
       // ===== STATUS =====
       isActive: {
         type: DataTypes.BOOLEAN,
@@ -119,6 +130,22 @@ module.exports = (sequelize, DataTypes) => {
     masterCustomer.hasMany(models.customerAddress, {
       foreignKey: "customerId",
       as: "addresses"
+    });
+    masterCustomer.belongsTo(models.masterCustomer, {
+      foreignKey: "referredBy",
+      as: "referrer",
+    });
+    masterCustomer.hasMany(models.masterCustomer, {
+      foreignKey: "referredBy",
+      as: "referrals",
+    });
+    masterCustomer.hasOne(models.referralBalance, {
+      foreignKey: "customerId",
+      as: "referralBalance",
+    });
+    masterCustomer.hasMany(models.referralPoints, {
+      foreignKey: "referrerId",
+      as: "referralEarnings",
     });
   };
 

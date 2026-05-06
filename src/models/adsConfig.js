@@ -19,7 +19,7 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
       },
       type: {
-        type: DataTypes.ENUM("BANNER", "CAROUSEL", "POPUP", "TOPDEALS", "PREMIUM_BADGE", "PREMIUM_SEARCH", "PREMIUM_HOME"),
+        type: DataTypes.ENUM("BANNER", "CAROUSEL", "POPUP", "TOPDEALS", "PREMIUM_BADGE", "PREMIUM_SEARCH", "PREMIUM_HOME", "DESIGN_SERVICE"),
         allowNull: false,
       },
       position: {

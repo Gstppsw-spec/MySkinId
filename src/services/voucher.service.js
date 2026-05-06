@@ -143,8 +143,16 @@ module.exports = {
         finalMitraShare = 100;
       } else if (roleCode === "SUPER_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
         // Super admin can set cost-sharing
-        finalMyskinShare = parseFloat(myskinSharePercent || 0);
-        finalMitraShare = parseFloat(mitraSharePercent || 100);
+        if (myskinSharePercent !== undefined && mitraSharePercent === undefined) {
+          finalMyskinShare = parseFloat(myskinSharePercent);
+          finalMitraShare = 100 - finalMyskinShare;
+        } else if (mitraSharePercent !== undefined && myskinSharePercent === undefined) {
+          finalMitraShare = parseFloat(mitraSharePercent);
+          finalMyskinShare = 100 - finalMitraShare;
+        } else {
+          finalMyskinShare = parseFloat(myskinSharePercent ?? 0);
+          finalMitraShare = parseFloat(mitraSharePercent ?? 100);
+        }
 
         if (finalMyskinShare + finalMitraShare !== 100) {
           throw new Error(
@@ -320,10 +328,24 @@ module.exports = {
 
       // Only super admin can update cost-sharing
       if (roleCode === "SUPER_ADMIN" || roleCode === "OPERATIONAL_ADMIN") {
-        if (myskinSharePercent !== undefined)
-          voucher.myskinSharePercent = myskinSharePercent;
-        if (mitraSharePercent !== undefined)
-          voucher.mitraSharePercent = mitraSharePercent;
+        let newMyskinShare = myskinSharePercent !== undefined ? parseFloat(myskinSharePercent) : null;
+        let newMitraShare = mitraSharePercent !== undefined ? parseFloat(mitraSharePercent) : null;
+
+        if (newMyskinShare !== null && newMitraShare === null) {
+          newMitraShare = 100 - newMyskinShare;
+        } else if (newMitraShare !== null && newMyskinShare === null) {
+          newMyskinShare = 100 - newMitraShare;
+        } else if (newMyskinShare === null && newMitraShare === null) {
+          newMyskinShare = voucher.myskinSharePercent;
+          newMitraShare = voucher.mitraSharePercent;
+        }
+
+        if (newMyskinShare + newMitraShare !== 100) {
+          throw new Error("myskinSharePercent + mitraSharePercent must equal 100%");
+        }
+
+        voucher.myskinSharePercent = newMyskinShare;
+        voucher.mitraSharePercent = newMitraShare;
       }
 
       await voucher.save({ transaction: t });
@@ -1118,6 +1140,11 @@ module.exports = {
         } 
         else {
           // --- 5. DIRECT MERCHANT VOUCHER LOGIC ---
+          // Ownership Check: If voucher belongs to a company, the target location must belong to that same company
+          if (voucher.companyId && targetCompanyId && String(voucher.companyId).toLowerCase() !== String(targetCompanyId).toLowerCase()) {
+            continue;
+          }
+
           // Check Location Restriction
           if (locationId && voucher.locations && voucher.locations.length > 0) {
             const allowedLocIds = voucher.locations.map((vl) => vl.locationId);
