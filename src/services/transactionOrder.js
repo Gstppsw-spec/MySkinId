@@ -284,11 +284,11 @@ module.exports = {
       }
     } catch (error) {
       const detail = error.response
-        ? JSON.stringify(error.response.data)
+        ? error.response.data?.message || JSON.stringify(error.response.data)
         : error.message;
       console.error("Xendit Native API Error:", detail);
       throw new Error(
-        `Failed to create Native Payment for ${paymentMethodCode}: ${detail}`,
+        error.response?.data?.message || `Failed to create Native Payment for ${paymentMethodCode}: ${detail}`,
       );
     }
   },
@@ -510,7 +510,6 @@ module.exports = {
         const totalWeight = unitWeight * item.qty;
 
         itemsByLocation[locationId].push({
-          id: item.id, // Cart Item ID
           itemType: type,
           itemId: actualItem.id,
           itemName: actualItem.name,
@@ -859,8 +858,8 @@ module.exports = {
               receiverPhone: calcInfo.finalReceiverPhone,
               address: calcInfo.finalAddress,
               originCityId: calcInfo.location
-                ? calcInfo.location.districtId || calcInfo.location.cityId || 0
-                : 0,
+                ? calcInfo.location.districtId || calcInfo.location.cityId || null
+                : null,
               destinationCityId: calcInfo.destinationId,
               totalWeight: items.reduce(
                 (sum, i) => sum + (i.totalWeight || 0),
@@ -1084,7 +1083,6 @@ module.exports = {
         const totalWeight = unitWeight * item.qty;
 
         itemsByLocation[locationId].push({
-          id: item.id, // Provided ID (Product ID in direct checkout)
           itemType: item.type,
           itemId: actualItem.id,
           itemName: actualItem.name,

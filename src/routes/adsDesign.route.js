@@ -17,7 +17,7 @@ router.post(
 router.get(
   "/price",
   verifyToken,
-  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN"),
+  allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN", "SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   adsDesignController.getPrice
 );
 

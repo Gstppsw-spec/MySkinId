@@ -297,7 +297,7 @@ module.exports = {
     }
   },
 
-  async getMyRequests(userId, { locationId, page = 1, pageSize = 10, search = "", adsType, status }) {
+  async getMyRequests(userId, { locationId, companyIds, page = 1, pageSize = 10, search = "", adsType, status }) {
     try {
       const { limit, offset } = getPagination(page, pageSize);
       
@@ -311,8 +311,8 @@ module.exports = {
 
       // If user specifically filters by locationId(s), we still respect that but within their company
       if (locationId) {
-        const requestedIds = Array.isArray(locationId) ? locationId : [locationId];
-        where.locationId = { [Sequelize.Op.in]: requestedIds };
+        const ids = Array.isArray(locationId) ? locationId : (typeof locationId === "string" ? locationId.split(",") : [locationId]);
+        where.locationId = { [Sequelize.Op.in]: ids.map(id => id.trim()) };
       }
 
       if (search) {
@@ -320,6 +320,10 @@ module.exports = {
       }
       if (adsType) {
         where.adsType = adsType;
+      }
+      if (companyIds) {
+        const ids = Array.isArray(companyIds) ? companyIds : (typeof companyIds === "string" ? companyIds.split(",") : [companyIds]);
+        where.companyId = { [Sequelize.Op.in]: ids.map(id => id.trim()) };
       }
       if (status) {
         where.status = status;
@@ -395,7 +399,7 @@ module.exports = {
   },
 
   // For Admin
-  async getAllRequests({ page = 1, pageSize = 10, search = "", status = "", locationId, adsType }) {
+  async getAllRequests({ page = 1, pageSize = 10, search = "", status = "", locationId, companyIds, adsType }) {
     try {
       const { limit, offset } = getPagination(page, pageSize);
       const where = { isActive: true };
@@ -407,16 +411,25 @@ module.exports = {
         where.status = status;
       }
       if (locationId) {
-        const locationIds = Array.isArray(locationId) ? locationId : [locationId];
-        where.locationId = { [Sequelize.Op.in]: locationIds };
+        const ids = Array.isArray(locationId) ? locationId : (typeof locationId === "string" ? locationId.split(",") : [locationId]);
+        where.locationId = { [Sequelize.Op.in]: ids.map(id => id.trim()) };
       }
       if (adsType) {
         where.adsType = adsType;
+      }
+      if (companyIds) {
+        const ids = Array.isArray(companyIds) ? companyIds : (typeof companyIds === "string" ? companyIds.split(",") : [companyIds]);
+        where.companyId = { [Sequelize.Op.in]: ids.map(id => id.trim()) };
       }
 
       const result = await AdsDesignRequest.findAndCountAll({
         where,
         include: [
+          {
+            model: masterCompany,
+            as: "company",
+            attributes: ["id", "name"],
+          },
           {
             model: masterLocation,
             as: "location",

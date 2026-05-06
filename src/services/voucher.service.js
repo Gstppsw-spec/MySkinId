@@ -1140,6 +1140,11 @@ module.exports = {
         } 
         else {
           // --- 5. DIRECT MERCHANT VOUCHER LOGIC ---
+          // Ownership Check: If voucher belongs to a company, the target location must belong to that same company
+          if (voucher.companyId && targetCompanyId && String(voucher.companyId).toLowerCase() !== String(targetCompanyId).toLowerCase()) {
+            continue;
+          }
+
           // Check Location Restriction
           if (locationId && voucher.locations && voucher.locations.length > 0) {
             const allowedLocIds = voucher.locations.map((vl) => vl.locationId);

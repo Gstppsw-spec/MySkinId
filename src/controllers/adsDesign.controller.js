@@ -110,10 +110,10 @@ module.exports = {
 
   async getMyRequests(req, res) {
     try {
-      const { locationId, page, pageSize, search, adsType, status } = req.query;
+      const { locationId, companyIds, page, pageSize, search, adsType, status } = req.query;
       const userId = req.user.id;
 
-      const result = await adsDesignService.getMyRequests(userId, { locationId, page, pageSize, search, adsType, status });
+      const result = await adsDesignService.getMyRequests(userId, { locationId, companyIds, page, pageSize, search, adsType, status });
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
@@ -177,8 +177,8 @@ module.exports = {
   // --- ADMIN ---
   async getAllRequests(req, res) {
     try {
-      const { page, pageSize, search, status, locationId, adsType } = req.query;
-      const result = await adsDesignService.getAllRequests({ page, pageSize, search, status, locationId, adsType });
+      const { page, pageSize, search, status, locationId, companyIds, adsType } = req.query;
+      const result = await adsDesignService.getAllRequests({ page, pageSize, search, status, locationId, companyIds, adsType });
       if (!result.status) return response.error(res, result.message);
       return response.success(res, result.message, result.data);
     } catch (error) {
