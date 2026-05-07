@@ -28,6 +28,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: 0,
       },
+      monthlyFreeQuota: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+      },
       isActive: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

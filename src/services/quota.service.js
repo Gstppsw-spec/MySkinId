@@ -32,6 +32,9 @@ module.exports = {
         });
       }
 
+      const configResult = await this.getQuotaConfig();
+      const monthlyFreeQuota = configResult.status ? configResult.data.monthlyFreeQuota : 1;
+
       const now = new Date();
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
@@ -51,9 +54,9 @@ module.exports = {
         status: true,
         message: "Quota fetched successfully",
         data: {
-          freeQuotaAvailable: hasFreeQuota ? 1 : 0,
+          freeQuotaAvailable: hasFreeQuota ? monthlyFreeQuota : 0,
           purchasedBalance: quotaRecord.purchasedBalance,
-          totalQuota: (hasFreeQuota ? 1 : 0) + quotaRecord.purchasedBalance,
+          totalQuota: (hasFreeQuota ? monthlyFreeQuota : 0) + quotaRecord.purchasedBalance,
           lastFreeQuotaUsedAt: quotaRecord.lastFreeQuotaUsedAt
         }
       };
@@ -86,6 +89,9 @@ module.exports = {
           lastFreeQuotaUsedAt: null
         }, { transaction });
       }
+
+      const configResult = await this.getQuotaConfig();
+      const monthlyFreeQuota = configResult.status ? configResult.data.monthlyFreeQuota : 1;
 
       const now = new Date();
       const currentMonth = now.getMonth();
@@ -139,6 +145,7 @@ module.exports = {
           quotaPrice: 50000, // Default price 50k
           buyThreshold: 0,
           bonusQuota: 0,
+          monthlyFreeQuota: 1,
           isActive: true
         });
       }
@@ -155,7 +162,7 @@ module.exports = {
   async updateQuotaConfig(payload = {}) {
     try {
       console.log("[QuotaService] Update payload received:", payload);
-      const { quotaPrice, buyThreshold, bonusQuota } = payload || {};
+      const { quotaPrice, buyThreshold, bonusQuota, monthlyFreeQuota } = payload || {};
       
       // Deactivate old configs
       await ConsultationQuotaConfig.update(
@@ -167,10 +174,160 @@ module.exports = {
         quotaPrice,
         buyThreshold: buyThreshold || 0,
         bonusQuota: bonusQuota || 0,
+        monthlyFreeQuota: monthlyFreeQuota !== undefined ? monthlyFreeQuota : 1,
         isActive: true
       });
 
       return { status: true, message: "Config updated successfully", data: newConfig };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Get all user quotas (Admin only)
+   */
+  async getAllUserQuotas(filters = {}) {
+    try {
+      const { page = 1, pageSize = 10, search } = filters;
+      const offset = (page - 1) * pageSize;
+
+      const where = {};
+      if (search) {
+        where[Op.or] = [
+          { name: { [Op.like]: `%${search}%` } },
+          { username: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } }
+        ];
+      }
+
+      const { count, rows } = await masterCustomer.findAndCountAll({
+        where,
+        attributes: ["id", "name", "username", "email", "profileImageUrl"],
+        include: [
+          {
+            model: ConsultationQuota,
+            as: "consultationQuota",
+            required: false
+          }
+        ],
+        limit: pageSize,
+        offset,
+        order: [["name", "ASC"]]
+      });
+
+      const configResult = await this.getQuotaConfig();
+      const monthlyFreeQuota = configResult.status ? configResult.data.monthlyFreeQuota : 1;
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      const enrichedRows = rows.map(customer => {
+        const quota = customer.consultationQuota;
+        let hasFreeQuota = true;
+        if (quota && quota.lastFreeQuotaUsedAt) {
+          const lastUsed = new Date(quota.lastFreeQuotaUsedAt);
+          if (
+            lastUsed.getMonth() === currentMonth &&
+            lastUsed.getFullYear() === currentYear
+          ) {
+            hasFreeQuota = false;
+          }
+        }
+
+        return {
+          id: customer.id,
+          name: customer.name,
+          username: customer.username,
+          email: customer.email,
+          profileImageUrl: customer.profileImageUrl,
+          purchasedBalance: quota ? quota.purchasedBalance : 0,
+          freeQuotaAvailable: hasFreeQuota ? monthlyFreeQuota : 0,
+          totalQuota: (hasFreeQuota ? monthlyFreeQuota : 0) + (quota ? quota.purchasedBalance : 0),
+          lastFreeQuotaUsedAt: quota ? quota.lastFreeQuotaUsedAt : null
+        };
+      });
+
+      return {
+        status: true,
+        message: "All user quotas fetched successfully",
+        data: {
+          totalItems: count,
+          rows: enrichedRows
+        }
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Manually update user quota balance (Admin only)
+   */
+  async updateUserQuotaBalance(customerId, purchasedBalance) {
+    try {
+      if (purchasedBalance === undefined || isNaN(purchasedBalance)) {
+        return { status: false, message: "Purchased balance must be a number" };
+      }
+
+      let quotaRecord = await ConsultationQuota.findOne({
+        where: { customerId }
+      });
+
+      if (!quotaRecord) {
+        quotaRecord = await ConsultationQuota.create({
+          customerId,
+          purchasedBalance: parseInt(purchasedBalance),
+          lastFreeQuotaUsedAt: null
+        });
+      } else {
+        await quotaRecord.update({ purchasedBalance: parseInt(purchasedBalance) });
+      }
+
+      return { 
+        status: true, 
+        message: "User quota updated successfully", 
+        data: quotaRecord 
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Bulk update user quota balance (Admin only)
+   */
+  async bulkUpdateUserQuotaBalance(customerIds, purchasedBalance) {
+    try {
+      if (!Array.isArray(customerIds) || customerIds.length === 0) {
+        return { status: false, message: "customerIds must be a non-empty array" };
+      }
+      if (purchasedBalance === undefined || isNaN(purchasedBalance)) {
+        return { status: false, message: "Purchased balance must be a number" };
+      }
+
+      const balance = parseInt(purchasedBalance);
+      const results = [];
+
+      for (const customerId of customerIds) {
+        let quotaRecord = await ConsultationQuota.findOne({ where: { customerId } });
+        if (!quotaRecord) {
+          quotaRecord = await ConsultationQuota.create({
+            customerId,
+            purchasedBalance: balance,
+            lastFreeQuotaUsedAt: null
+          });
+        } else {
+          await quotaRecord.update({ purchasedBalance: balance });
+        }
+        results.push(quotaRecord);
+      }
+
+      return { 
+        status: true, 
+        message: `Successfully updated quota for ${results.length} users`, 
+        data: results 
+      };
     } catch (error) {
       return { status: false, message: error.message };
     }

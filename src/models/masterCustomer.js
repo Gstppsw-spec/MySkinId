@@ -147,6 +147,10 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "referrerId",
       as: "referralEarnings",
     });
+    masterCustomer.hasOne(models.ConsultationQuota, {
+      foreignKey: "customerId",
+      as: "consultationQuota",
+    });
   };
 
   return masterCustomer;
