@@ -292,5 +292,44 @@ module.exports = {
     } catch (error) {
       return { status: false, message: error.message };
     }
+  },
+
+  /**
+   * Bulk update user quota balance (Admin only)
+   */
+  async bulkUpdateUserQuotaBalance(customerIds, purchasedBalance) {
+    try {
+      if (!Array.isArray(customerIds) || customerIds.length === 0) {
+        return { status: false, message: "customerIds must be a non-empty array" };
+      }
+      if (purchasedBalance === undefined || isNaN(purchasedBalance)) {
+        return { status: false, message: "Purchased balance must be a number" };
+      }
+
+      const balance = parseInt(purchasedBalance);
+      const results = [];
+
+      for (const customerId of customerIds) {
+        let quotaRecord = await ConsultationQuota.findOne({ where: { customerId } });
+        if (!quotaRecord) {
+          quotaRecord = await ConsultationQuota.create({
+            customerId,
+            purchasedBalance: balance,
+            lastFreeQuotaUsedAt: null
+          });
+        } else {
+          await quotaRecord.update({ purchasedBalance: balance });
+        }
+        results.push(quotaRecord);
+      }
+
+      return { 
+        status: true, 
+        message: `Successfully updated quota for ${results.length} users`, 
+        data: results 
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
   }
 };

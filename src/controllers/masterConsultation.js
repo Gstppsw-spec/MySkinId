@@ -320,4 +320,12 @@ module.exports = {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   },
+
+  async bulkUpdateUserQuotaBalance(req, res) {
+    const { customerIds, purchasedBalance } = req.body;
+    const result = await quotaService.bulkUpdateUserQuotaBalance(customerIds, purchasedBalance);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
 };
