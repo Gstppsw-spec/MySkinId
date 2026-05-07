@@ -541,7 +541,14 @@ module.exports = {
         distinct: true,
       });
 
-      return { status: true, message: "Success", data, totalCount: count };
+      // Enrich data with isGeneral flag
+      const enrichedData = data.map(v => {
+        const plain = v.toJSON();
+        plain.isGeneral = !plain.companyId && plain.createdByType === "SUPER_ADMIN" && parseFloat(plain.myskinSharePercent) === 100;
+        return plain;
+      });
+
+      return { status: true, message: "Success", data: enrichedData, totalCount: count };
     } catch (error) {
       return { status: false, message: error.message };
     }
@@ -726,105 +733,115 @@ module.exports = {
 
       // --- CAMPAIGN PARTICIPATION CHECK (for Super Admin Templates) ---
       if (voucher.companyId === null && voucher.createdByType === "SUPER_ADMIN") {
-        const companyItems = {};
-        cartItems.forEach((item) => {
-          if (!companyItems[item.companyId]) companyItems[item.companyId] = [];
-          companyItems[item.companyId].push(item);
-        });
+        const isGeneral = parseFloat(voucher.myskinSharePercent) === 100;
 
-        const participatingCompanies = await VoucherParticipation.findAll({
-          where: {
-            voucherId: voucher.id,
-            companyId: Object.keys(companyItems),
-            status: "ACTIVE",
-          },
-          include: [
-            { model: VoucherParticipationItem, as: "items" },
-            { model: VoucherParticipationLocation, as: "locations" }
-          ],
-        });
-
-        const participatingMap = {};
-        participatingCompanies.forEach((p) => {
-          participatingMap[p.companyId] = p;
-        });
-
-
-
-        // Determine which company to apply the voucher to
-        if (targetCompanyId) {
-          participation = participatingMap[targetCompanyId];
-          if (!participation) {
-            return { status: false, message: "The merchant of the selected item is not participating in this campaign" };
+        if (isGeneral) {
+          // General Voucher Logic: No explicit participation required
+          if (targetCompanyId) {
+            activeParticipationCompanyId = targetCompanyId;
+          } else if (cartItems.length > 0) {
+            activeParticipationCompanyId = cartItems[0].companyId;
           }
-          activeParticipationCompanyId = targetCompanyId;
         } else {
-          // Fallback: Pick the first participating merchant that matches location
-          for (const item of cartItems) {
-            const p = participatingMap[item.companyId];
-            if (p) {
-              const allowedLocationIds = p.locations.map(l => l.locationId);
-              if (p.isAllLocations || allowedLocationIds.includes(item.locationId)) {
-                activeParticipationCompanyId = item.companyId;
-                participation = p;
-                break;
+          // Normal Campaign: Requires explicit participation
+          const companyItems = {};
+          cartItems.forEach((item) => {
+            if (!companyItems[item.companyId]) companyItems[item.companyId] = [];
+            companyItems[item.companyId].push(item);
+          });
+
+          const participatingCompanies = await VoucherParticipation.findAll({
+            where: {
+              voucherId: voucher.id,
+              companyId: Object.keys(companyItems),
+              status: "ACTIVE",
+            },
+            include: [
+              { model: VoucherParticipationItem, as: "items" },
+              { model: VoucherParticipationLocation, as: "locations" }
+            ],
+          });
+
+          const participatingMap = {};
+          participatingCompanies.forEach((p) => {
+            participatingMap[p.companyId] = p;
+          });
+
+          if (targetCompanyId) {
+            participation = participatingMap[targetCompanyId];
+            if (!participation) {
+              return { status: false, message: "The merchant of the selected item is not participating in this campaign" };
+            }
+            activeParticipationCompanyId = targetCompanyId;
+          } else {
+            for (const item of cartItems) {
+              const p = participatingMap[item.companyId];
+              if (p) {
+                const allowedLocationIds = p.locations.map(l => l.locationId);
+                if (p.isAllLocations || allowedLocationIds.includes(item.locationId)) {
+                  activeParticipationCompanyId = item.companyId;
+                  participation = p;
+                  break;
+                }
               }
             }
           }
-        }
 
-        if (!activeParticipationCompanyId) {
-          const foundCompanyIds = Object.keys(companyItems).join(", ");
-          return {
-            status: false,
-            message: `Voucher error: No participation found for Voucher ID ${voucher.id} and Merchant IDs [${foundCompanyIds}]. Found ${participatingCompanies.length} participation records in DB for this voucher. Check if merchant IDs match exactly and locations are opted-in.`,
-          };
+          if (!activeParticipationCompanyId) {
+            const foundCompanyIds = Object.keys(companyItems).join(", ");
+            return {
+              status: false,
+              message: `Voucher error: No participation found for Voucher ID ${voucher.id}.`,
+            };
+          }
         }
+      }
 
+      // Final item filtering based on participation
+      if (activeParticipationCompanyId && participation) {
         const allowedLocationIds = participation.locations.map(l => l.locationId);
         eligibleItems = eligibleItems.filter((item) => {
-          // 1. Must match the merchant company
           if (item.companyId && activeParticipationCompanyId && String(item.companyId).toLowerCase() !== String(activeParticipationCompanyId).toLowerCase()) return false;
-
-          // 2. If targetItemId is provided, only include that specific item
           if (targetItemId) {
             const tid = String(targetItemId).toLowerCase();
             if (String(item.itemId).toLowerCase() !== tid && String(item.id).toLowerCase() !== tid) return false;
           }
-
-          // 3. Check location participation
           if (!participation.isAllLocations) {
             const lid = String(item.locationId).toLowerCase();
             const isAllowed = allowedLocationIds.some(id => String(id).toLowerCase() === lid);
             if (!isAllowed) return false;
           }
-
-          // Check items
           if (participation.isAllItems) return true;
           const itemKey = `${item.itemType.toUpperCase()}:${item.itemId}`;
           const participationItemMap = participation.items.map((pi) => `${pi.itemType.toUpperCase()}:${pi.itemId}`);
           return participationItemMap.includes(itemKey);
         });
-
-        if (eligibleItems.length === 0) {
-          return {
-            status: false,
-            message: "Items from the selected outlet are not eligible for this voucher",
-          };
+      } else if (activeParticipationCompanyId && !participation) {
+        eligibleItems = eligibleItems.filter((item) => item.companyId && String(item.companyId).toLowerCase() === String(activeParticipationCompanyId).toLowerCase());
+        if (targetItemId) {
+          const tid = String(targetItemId).toLowerCase();
+          eligibleItems = eligibleItems.filter(item => String(item.itemId).toLowerCase() === tid || String(item.id).toLowerCase() === tid);
         }
       }
 
+      if (eligibleItems.length === 0) {
+        return {
+          status: false,
+          message: "Items from the selected outlet are not eligible for this voucher",
+        };
+      }
+
       // Calculate potential discount
-          const eligibleSubtotal = eligibleItems.reduce(
+      const eligibleSubtotal = eligibleItems.reduce(
         (sum, item) => sum + parseFloat(item.totalPrice || 0),
         0
       );
 
-      // Check minimum purchase against eligible subtotal
+      // Check minimum purchase
       if (parseFloat(voucher.minPurchase || 0) > eligibleSubtotal) {
         return {
           status: false,
-          message: `This voucher requires a minimum purchase of ${parseFloat(voucher.minPurchase).toLocaleString("id-ID")}. Your eligible subtotal is ${eligibleSubtotal.toLocaleString("id-ID")}.`,
+          message: `This voucher requires a minimum purchase of ${parseFloat(voucher.minPurchase).toLocaleString("id-ID")}.`,
         };
       }
 
@@ -838,7 +855,6 @@ module.exports = {
         discountAmount = parseFloat(voucher.discountValue);
       }
 
-      // Discount cannot exceed subtotal
       if (discountAmount > eligibleSubtotal) {
         discountAmount = eligibleSubtotal;
       }
@@ -984,7 +1000,7 @@ module.exports = {
       const result = await balanceService.addBalance(
         targetCompanyId,
         parseFloat(usage.myskinSubsidy),
-        "TOPUP",
+        "VOUCHER_SUBSIDY",
         orderId,
         `Voucher subsidy from MySkin (voucher: ${voucher.code}, order: ${orderId})`
       );
@@ -1107,35 +1123,43 @@ module.exports = {
 
         // --- 4. CAMPAIGN (SUPER ADMIN) LOGIC ---
         if (!voucher.companyId && voucher.createdByType === "SUPER_ADMIN") {
-          // If no merchant detected, we can't verify campaign eligibility
-          if (!targetCompanyId) continue;
+          const isGeneral = parseFloat(voucher.myskinSharePercent) === 100;
+          
+          if (isGeneral) {
+            // General Voucher: Always eligible for any merchant
+            // No participation check needed
+          } else {
+            // Normal Campaign: Requires participation
+            // If no merchant detected, we can't verify campaign eligibility
+            if (!targetCompanyId) continue;
 
-          // Find if this specific merchant participates in this campaign
-          const participation = await VoucherParticipation.findOne({
-            where: {
-              voucherId: voucher.id,
-              companyId: targetCompanyId,
-              status: "ACTIVE"
-            },
-            include: [
-              { model: VoucherParticipationItem, as: "items" },
-              { model: VoucherParticipationLocation, as: "locations" }
-            ]
-          });
+            // Find if this specific merchant participates in this campaign
+            const participation = await VoucherParticipation.findOne({
+              where: {
+                voucherId: voucher.id,
+                companyId: targetCompanyId,
+                status: "ACTIVE"
+              },
+              include: [
+                { model: VoucherParticipationItem, as: "items" },
+                { model: VoucherParticipationLocation, as: "locations" }
+              ]
+            });
 
-          if (!participation) continue;
+            if (!participation) continue;
 
-          // Check Location Restriction in Participation
-          if (locationId && !participation.isAllLocations) {
-            const allowedLocIds = participation.locations.map(l => l.locationId);
-            if (!allowedLocIds.includes(locationId)) continue;
-          }
+            // Check Location Restriction in Participation
+            if (locationId && !participation.isAllLocations) {
+              const allowedLocIds = participation.locations.map(l => l.locationId);
+              if (!allowedLocIds.includes(locationId)) continue;
+            }
 
-          // Check Item Restriction in Participation
-          if (itemType && itemId && !participation.isAllItems) {
-            const itemKey = `${itemType.toUpperCase()}:${itemId}`;
-            const allowedItemKeys = participation.items.map(pi => `${pi.itemType.toUpperCase()}:${pi.itemId}`);
-            if (!allowedItemKeys.includes(itemKey)) continue;
+            // Check Item Restriction in Participation
+            if (itemType && itemId && !participation.isAllItems) {
+              const itemKey = `${itemType.toUpperCase()}:${itemId}`;
+              const allowedItemKeys = participation.items.map(pi => `${pi.itemType.toUpperCase()}:${pi.itemId}`);
+              if (!allowedItemKeys.includes(itemKey)) continue;
+            }
           }
         } 
         else {
@@ -1333,7 +1357,7 @@ module.exports = {
           "id", "code", "title", "description",
           "discountType", "discountValue", "minPurchase", "maxDiscount",
           "startDate", "endDate", "status",
-          "companyId", "createdByType",
+          "companyId", "createdByType", "myskinSharePercent",
         ],
         include: [
           {
@@ -1348,7 +1372,14 @@ module.exports = {
           {
             model: VoucherLocation,
             as: "locations",
-            include: [{ model: masterLocation, as: "location", attributes: ["id", "name", "address", "companyId"] }],
+            include: [
+              { 
+                model: masterLocation, 
+                as: "location", 
+                attributes: ["id", "name", "address", "companyId"],
+                include: [{ model: masterCompany, as: "company", attributes: ["name"] }]
+              }
+            ],
           },
           { model: masterCompany, as: "company", attributes: ["id", "name"] },
           {
@@ -1382,56 +1413,98 @@ module.exports = {
       let applicableItems = [];
 
       if (plain.createdByType === "SUPER_ADMIN" && plain.companyId === null) {
-        // CAMPAIGN VOUCHER — aggregate from participations
-        for (const participation of (plain.participations || [])) {
-          const companyName = participation.company?.name || "Unknown";
+        const isGeneral = parseFloat(plain.myskinSharePercent) === 100;
 
-          // Outlets
-          if (participation.isAllLocations) {
-            // Fetch all locations of this participating company
-            const companyLocs = await masterLocation.findAll({
-              where: { companyId: participation.companyId },
-              attributes: ["id", "name", "address"],
-              raw: true,
-            });
-            companyLocs.forEach(loc => {
-              applicableOutlets.push({
-                id: loc.id,
-                name: loc.name,
-                address: loc.address,
-                companyName,
-              });
-            });
-          } else {
-            (participation.locations || []).forEach(pl => {
-              if (pl.location) {
+        if (isGeneral) {
+          // GENERAL VOUCHER - Applies to all (or restricted by voucher items/locations)
+          if (plain.locations && plain.locations.length > 0) {
+            plain.locations.forEach(vl => {
+              if (vl.location) {
                 applicableOutlets.push({
-                  id: pl.location.id,
-                  name: pl.location.name,
-                  address: pl.location.address,
-                  companyName,
+                  id: vl.location.id,
+                  name: vl.location.name,
+                  address: vl.location.address,
+                  companyName: vl.location.company?.name || "Multiple Merchants",
                 });
               }
             });
+          } else {
+            applicableOutlets.push({
+              id: "ALL",
+              name: "Semua Outlet",
+              description: "Voucher ini berlaku di semua outlet MySkinId.",
+            });
           }
 
-          // Items
-          if (participation.isAllItems) {
-            applicableItems.push({
-              companyName,
-              type: "ALL",
-              description: `Semua item dari ${companyName}`,
+          if (plain.items && plain.items.length > 0) {
+            plain.items.forEach(vi => {
+              const resolved = vi.product || vi.package || vi.service;
+              applicableItems.push({
+                itemType: vi.itemType,
+                itemId: vi.itemId,
+                name: resolved?.name || null,
+                price: resolved?.price || null,
+                companyName: "Multiple Merchants",
+              });
             });
           } else {
-            for (const pi of (participation.items || [])) {
-              const itemDetail = await resolveItemDetail(pi.itemType, pi.itemId);
+            applicableItems.push({
+              type: "ALL",
+              description: "Semua item di MySkinId.",
+            });
+          }
+        } else {
+          // CAMPAIGN VOUCHER — aggregate from participations
+          for (const participation of (plain.participations || [])) {
+            const companyName = participation.company?.name || "Unknown";
+
+            // Outlets
+            if (participation.isAllLocations) {
+              // Fetch all locations of this participating company
+              const companyLocs = await masterLocation.findAll({
+                where: { companyId: participation.companyId },
+                attributes: ["id", "name", "address"],
+                raw: true,
+              });
+              companyLocs.forEach(loc => {
+                applicableOutlets.push({
+                  id: loc.id,
+                  name: loc.name,
+                  address: loc.address,
+                  companyName,
+                });
+              });
+            } else {
+              (participation.locations || []).forEach(pl => {
+                if (pl.location) {
+                  applicableOutlets.push({
+                    id: pl.location.id,
+                    name: pl.location.name,
+                    address: pl.location.address,
+                    companyName,
+                  });
+                }
+              });
+            }
+
+            // Items
+            if (participation.isAllItems) {
               applicableItems.push({
                 companyName,
-                itemType: pi.itemType,
-                itemId: pi.itemId,
-                name: itemDetail?.name || null,
-                price: itemDetail?.price || null,
+                type: "ALL",
+                description: `Semua item dari ${companyName}`,
               });
+            } else {
+              for (const pi of (participation.items || [])) {
+                const itemDetail = await resolveItemDetail(pi.itemType, pi.itemId);
+                applicableItems.push({
+                  companyName,
+                  itemType: pi.itemType,
+                  itemId: pi.itemId,
+                  name: itemDetail?.name || null,
+                  price: itemDetail?.price || null,
+                });
+              }
             }
           }
         }

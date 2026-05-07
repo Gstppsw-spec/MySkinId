@@ -2,9 +2,11 @@ const { Op } = require("sequelize");
 const { 
   CompanyAdsBalance, 
   CompanyAdsBalanceHistory, 
+  CompanyWithdrawal,
   masterCompany,
   sequelize 
 } = require("../models");
+const payoutService = require("./payout.service");
 
 module.exports = {
   /**
@@ -44,12 +46,16 @@ module.exports = {
         lock: true
       });
 
-      if (!balanceRecord || parseFloat(balanceRecord.balance) < parseFloat(amount)) {
-        throw new Error("Insufficient balance");
-      }
+      // Deduct from nonWithdrawableBalance first (for "Free" balance prioritization)
+      const currentNonWithdrawable = parseFloat(balanceRecord.nonWithdrawableBalance || 0);
+      const spendFromFree = Math.min(currentNonWithdrawable, parseFloat(amount));
+      const newNonWithdrawable = currentNonWithdrawable - spendFromFree;
 
       const newBalance = parseFloat(balanceRecord.balance) - parseFloat(amount);
-      await balanceRecord.update({ balance: newBalance }, { transaction: t });
+      await balanceRecord.update({ 
+        balance: newBalance,
+        nonWithdrawableBalance: newNonWithdrawable
+      }, { transaction: t });
 
       await CompanyAdsBalanceHistory.create({
         balanceId: balanceRecord.id,
@@ -92,6 +98,12 @@ module.exports = {
 
       const newBalance = parseFloat(balanceRecord.balance) + parseFloat(amount);
       const updateData = { balance: newBalance };
+
+      // INITIAL_GRANT is non-withdrawable
+      if (type === "INITIAL_GRANT") {
+        updateData.nonWithdrawableBalance = parseFloat(balanceRecord.nonWithdrawableBalance || 0) + parseFloat(amount);
+      }
+
       if (type === "TOPUP") updateData.lastTopupAt = new Date();
 
       await balanceRecord.update(updateData, { transaction: t });
@@ -203,6 +215,116 @@ module.exports = {
         } 
       };
     } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Get detailed balance info including withdrawable amount
+   */
+  async getCompanyBalanceInfo(companyId) {
+    try {
+      const res = await this.getBalance(companyId);
+      if (!res.status) return res;
+
+      const record = res.data;
+      const totalBalance = parseFloat(record.balance || 0);
+      const nonWithdrawable = parseFloat(record.nonWithdrawableBalance || 0);
+      const withdrawable = Math.max(0, totalBalance - nonWithdrawable);
+
+      return {
+        status: true,
+        message: "Balance info fetched",
+        data: {
+          totalBalance,
+          nonWithdrawableBalance: nonWithdrawable,
+          withdrawableBalance: withdrawable
+        }
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Withdraw balance for a company (Instant Payout)
+   */
+  async withdrawBalance(companyId, amount) {
+    if (!companyId || !amount || amount <= 0) {
+      return { status: false, message: "Invalid companyId or amount" };
+    }
+
+    const t = await sequelize.transaction();
+    try {
+      // 1. Get current balance & info
+      const balanceRes = await this.getCompanyBalanceInfo(companyId);
+      if (!balanceRes.status) throw new Error(balanceRes.message);
+
+      const { withdrawableBalance, totalBalance } = balanceRes.data;
+      if (withdrawableBalance < parseFloat(amount)) {
+        throw new Error(`Insufficient withdrawable balance. Max withdrawable: ${withdrawableBalance.toLocaleString("id-ID")}`);
+      }
+
+      // 2. Get company bank details
+      const company = await masterCompany.findByPk(companyId);
+      if (!company || !company.bankAccountNumber || !company.bankName) {
+        throw new Error("Company bank details are incomplete. Please update bank name and account number first.");
+      }
+
+      // 3. Create Withdrawal Record (PENDING)
+      const withdrawal = await CompanyWithdrawal.create({
+        companyId,
+        amount,
+        bankName: company.bankName,
+        bankAccountName: company.bankAccountName || company.name,
+        bankAccountNumber: company.bankAccountNumber,
+        status: "PENDING"
+      }, { transaction: t });
+
+      // 4. Deduct Balance
+      const balanceRecord = await CompanyAdsBalance.findOne({ where: { companyId }, transaction: t, lock: true });
+      const newBalance = parseFloat(balanceRecord.balance) - parseFloat(amount);
+      await balanceRecord.update({ balance: newBalance }, { transaction: t });
+
+      // 5. Create History
+      await CompanyAdsBalanceHistory.create({
+        balanceId: balanceRecord.id,
+        type: "WITHDRAWAL",
+        amount,
+        referenceId: withdrawal.id,
+        description: `Withdrawal to ${company.bankName} ${company.bankAccountNumber}`
+      }, { transaction: t });
+
+      await t.commit();
+
+      // 6. Trigger Xendit Payout (Asynchronous/Immediate as per requirement)
+      const xenditRes = await payoutService.createDisbursement({
+        amount,
+        bankCode: company.bankName, // Assuming bankName matches Xendit codes, or needs mapping
+        accountHolderName: company.bankAccountName || company.name,
+        accountNumber: company.bankAccountNumber,
+        externalId: withdrawal.id,
+        description: `Withdrawal from MySkinId - ${company.name}`
+      });
+
+      if (xenditRes.status) {
+        await withdrawal.update({
+          status: "SUCCESS",
+          xenditId: xenditRes.data.id
+        });
+        return { status: true, message: "Withdrawal successful and processed", data: withdrawal };
+      } else {
+        // If Xendit fails, we should technically revert or mark as FAILED for admin review
+        // But since it's "instant", we'll mark as FAILED and maybe suggest user to retry or contact support
+        await withdrawal.update({
+          status: "FAILED",
+          errorMessage: xenditRes.message
+        });
+        return { status: false, message: `Withdrawal requested but transfer failed: ${xenditRes.message}. Please contact support.`, data: withdrawal };
+      }
+
+    } catch (error) {
+      if (t) await t.rollback();
       return { status: false, message: error.message };
     }
   }
