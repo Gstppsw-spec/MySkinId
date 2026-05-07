@@ -290,4 +290,34 @@ module.exports = {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   },
+
+  async getAllUserQuotas(req, res) {
+    const { page, pageSize, search } = req.query;
+    const result = await quotaService.getAllUserQuotas({
+      page: parseInt(page) || 1,
+      pageSize: parseInt(pageSize) || 10,
+      search
+    });
+
+    if (!result.status) {
+      return response.error(res, result.message, null);
+    }
+
+    const { totalItems, rows } = result.data;
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: rows,
+      pagination: formatPagination(totalItems, parseInt(page) || 1, parseInt(pageSize) || 10),
+    });
+  },
+
+  async updateUserQuotaBalance(req, res) {
+    const { customerId } = req.params;
+    const { purchasedBalance } = req.body;
+    const result = await quotaService.updateUserQuotaBalance(customerId, purchasedBalance);
+    return result.status
+      ? response.success(res, result.message, result.data)
+      : response.error(res, result.message, null);
+  },
 };

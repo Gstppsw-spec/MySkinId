@@ -77,5 +77,7 @@ router.get("/quota", consultation.getQuota);
 router.post("/quota/buy", consultation.buyQuota);
 router.get("/quota/config", consultation.getQuotaConfig);
 router.put("/quota/config", allowRoles("SUPER_ADMIN"), consultation.updateQuotaConfig);
+router.get("/quota/all", allowRoles("SUPER_ADMIN"), consultation.getAllUserQuotas);
+router.put("/quota/:customerId", allowRoles("SUPER_ADMIN"), consultation.updateUserQuotaBalance);
 
 module.exports = router;
