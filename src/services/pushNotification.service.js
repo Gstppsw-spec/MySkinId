@@ -128,11 +128,11 @@ class PushNotificationService {
       // Send via FCM Multicast (supports up to 500 tokens at once)
       const response = await admin.messaging().sendEachForMulticast({
         tokens: tokenStrings,
-        notification: {
+        data: {
+          ...dataPayload,
           title: notification.title,
           body: notification.body,
         },
-        data: dataPayload,
         android: {
           notification: {
             sound: "default",
