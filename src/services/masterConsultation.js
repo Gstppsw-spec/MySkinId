@@ -30,11 +30,12 @@ const path = require("path");
 const { nanoid } = require("nanoid");
 const socketInstance = require("../socket/socketInstance");
 const pushNotificationService = require("./pushNotification.service");
+const whatsappService = require("./whatsapp.service");
 
 module.exports = {
   async getRoomByUser(userId, filters = {}) {
     try {
-      const { page = 1, pageSize = 10, status, roleCode, locationIds } = filters;
+      const { page = 1, pageSize = 10, status, roleCode, locationIds, name } = filters;
       const offset = (page - 1) * pageSize;
 
       const where = {
@@ -60,13 +61,14 @@ module.exports = {
             separate: true,
             limit: 1,
             order: [["createdAt", "DESC"]],
-            attributes: ["message", "createdAt"],
+            attributes: ["message", "createdAt", "senderRole"],
           },
           {
             model: masterCustomer,
             as: "customer",
-            attributes: ["id", "name"],
-            required: false,
+            attributes: ["id", "name", "profileImageUrl"],
+            required: name ? true : false,
+            where: name ? { name: { [Op.like]: `%${name}%` } } : undefined,
           },
           {
             model: masterLocation,
@@ -96,7 +98,15 @@ module.exports = {
             ],
           },
         ],
-        order: [["createdAt", "DESC"]],
+        order: [
+          [
+            Sequelize.literal(`COALESCE(
+              (SELECT MAX(createdAt) FROM masterConsultationMessage WHERE roomId = masterRoomConsultation.id),
+              masterRoomConsultation.createdAt
+            )`),
+            'DESC'
+          ]
+        ],
         limit: pageSize,
         offset,
         distinct: true,
@@ -107,6 +117,16 @@ module.exports = {
       const enrichedRooms = await Promise.all(
         rows.map(async (room) => {
           const roomJson = room.toJSON();
+
+          // Count unread messages
+          const unreadCount = await masterConsultationMessage.count({
+            where: {
+              roomId: room.id,
+              isRead: false,
+              senderRole: room.customerId === userId ? 'doctor' : 'customer'
+            }
+          });
+          roomJson.unreadCount = unreadCount;
 
           // Check if questionnaire is completed (only count required questions)
           const requiredQuestions = await masterQuestionnaire.findAll({
@@ -445,6 +465,57 @@ module.exports = {
 
         messageContent = imageRecords.map((img) => img.imageUrl);
         newMessage.message = JSON.stringify(messageContent);
+
+        // Check if room just became ready to assign (reached 3 images)
+        if (senderRole === "customer") {
+          const totalImages = await masterConsultationImage.count({ where: { roomId } });
+          const previousCount = totalImages - files.length;
+
+          if (previousCount < 3 && totalImages >= 3) {
+            const room = await masterRoomConsultation.findByPk(roomId);
+            if (room && room.status === "pending" && !room.doctorId) {
+              // Find eligible doctors
+              const generalDoctors = await masterUser.findAll({
+                where: { isactive: true, isAvailableConsul: true },
+                include: [{
+                  model: masterRole,
+                  as: "role",
+                  where: { roleCode: "DOCTOR_GENERAL" }
+                }]
+              });
+
+              let outletDoctors = [];
+              if (room.locationId) {
+                outletDoctors = await masterUser.findAll({
+                  where: { isactive: true, isAvailableConsul: true },
+                  include: [
+                    {
+                      model: masterRole,
+                      as: "role",
+                      where: { roleCode: "OUTLET_DOCTOR" }
+                    },
+                    {
+                      model: relationshipUserLocation,
+                      as: "userLocations",
+                      where: { locationId: room.locationId, isactive: true }
+                    }
+                  ]
+                });
+              }
+
+              const allDoctors = [...generalDoctors, ...outletDoctors];
+              const uniqueDoctors = Array.from(new Map(allDoctors.map(d => [d.id, d])).values());
+
+              const waMessage = `Halo Dokter, ada pasien baru yang mengantri konsultasi dan sudah mengunggah foto. Silakan segera ambil (assign) konsultasi ini.\n\nRoom: ${room.roomCode}\nLink: https://myskin.blog/consultation-room?roomId=${room.id}`;
+
+              for (const doctor of uniqueDoctors) {
+                if (doctor.phone) {
+                  await whatsappService.sendMessage(doctor.phone, waMessage);
+                }
+              }
+            }
+          }
+        }
       }
 
       // Fetch sender profile for socket/response
@@ -534,6 +605,8 @@ module.exports = {
                   categoryName: room.consultationCategory?.name || "",
                   locationName: room.location?.name || "",
                   productName: room.product?.name || "",
+                  senderName: senderProfile?.name || "",
+                  senderImage: senderProfile?.image || "",
                 },
               }
             );
@@ -662,7 +735,7 @@ module.exports = {
     }
   },
 
-  async getAllReadyToAssign(userId, role, page = 1, pageSize = 10) {
+  async getAllReadyToAssign(userId, role, page = 1, pageSize = 10, name) {
     try {
       // Check if the doctor is available for consultation
       const doctor = await masterUser.findByPk(userId);
@@ -747,6 +820,8 @@ module.exports = {
             model: masterCustomer,
             as: "customer",
             attributes: ["name"],
+            required: name ? true : false,
+            where: name ? { name: { [Op.like]: `%${name}%` } } : undefined,
           },
           {
             model: masterConsultationImage,

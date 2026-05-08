@@ -9,7 +9,7 @@ module.exports = {
     const user = req.user;
     const page = parseInt(req.query.page) || 1;
     const pageSize = parseInt(req.query.pageSize) || 10;
-    const { status } = req.query;
+    const { status, name } = req.query;
 
     const result = await consultation.getRoomByUser(user.id, {
       page,
@@ -17,6 +17,7 @@ module.exports = {
       status,
       roleCode: user.roleCode,
       locationIds: user.locationIds,
+      name,
     });
 
     if (!result.status) {
@@ -92,12 +93,14 @@ module.exports = {
       const user = req.user;
       const page = parseInt(req.query.page) || 1;
       const pageSize = parseInt(req.query.pageSize) || 10;
+      const { name } = req.query;
 
       const result = await consultation.getAllReadyToAssign(
         user.id,
         user.roleCode,
         page,
         pageSize,
+        name,
       );
 
       if (!result.status) {
