@@ -30,7 +30,7 @@ const path = require("path");
 const { nanoid } = require("nanoid");
 const socketInstance = require("../socket/socketInstance");
 const pushNotificationService = require("./pushNotification.service");
-const whatsappService = require("./whatsapp.service");
+const emailService = require("./email.service");
 
 module.exports = {
   async getRoomByUser(userId, filters = {}) {
@@ -506,11 +506,12 @@ module.exports = {
               const allDoctors = [...generalDoctors, ...outletDoctors];
               const uniqueDoctors = Array.from(new Map(allDoctors.map(d => [d.id, d])).values());
 
-              const waMessage = `Halo Dokter, ada pasien baru yang mengantri konsultasi dan sudah mengunggah foto. Silakan segera ambil (assign) konsultasi ini.\n\nRoom: ${room.roomCode}\nLink: https://myskin.blog/consultation-room?roomId=${room.id}`;
+              const emailSubject = "[MYSKIN.ID] Konsultasi Baru Menunggu Penugasan";
+              const emailText = `Halo Dokter,\n\nAda pasien baru yang mengantri konsultasi dan sudah mengunggah foto. Silakan segera ambil (assign) konsultasi ini.\n\nRoom: ${room.roomCode}\nLink: https://myskin.blog/consultation-room?roomId=${room.id}\n\nTerima kasih,\nTim MYSKIN.ID`;
 
               for (const doctor of uniqueDoctors) {
-                if (doctor.phone) {
-                  await whatsappService.sendMessage(doctor.phone, waMessage);
+                if (doctor.email) {
+                  await emailService.sendEmail(doctor.email, emailSubject, emailText);
                 }
               }
             }
