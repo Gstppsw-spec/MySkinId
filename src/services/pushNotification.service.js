@@ -10,7 +10,7 @@ class PushNotificationService {
    * @param {string} [params.userId] - User ID (for doctor/outlet app)
    * @param {string} [params.deviceId] - Optional device identifier
    */
-  async registerToken({ token, customerId, userId, deviceId }) {
+  async registerToken({ token, customerId, userId, deviceId, platform }) {
     try {
       if (!token) {
         return { status: false, message: "Token tidak boleh kosong" };
@@ -31,6 +31,7 @@ class PushNotificationService {
           customerId: customerId || existing.customerId,
           userId: userId || existing.userId,
           deviceId: deviceId || existing.deviceId,
+          platform: platform || existing.platform,
           isActive: true,
         });
         return {
@@ -45,6 +46,7 @@ class PushNotificationService {
         customerId,
         userId,
         deviceId,
+        platform: platform || "mobile",
         isActive: true,
       });
 
@@ -105,7 +107,7 @@ class PushNotificationService {
       // Get all active tokens for this recipient
       const tokensData = await pushToken.findAll({
         where: whereClause,
-        attributes: ["id", "token"],
+        attributes: ["id", "token", "platform"],
       });
 
       if (!tokensData.length) {
@@ -115,8 +117,6 @@ class PushNotificationService {
         return;
       }
 
-      const tokenStrings = tokensData.map((t) => t.token).filter(Boolean);
-
       // Convert data values to strings (FCM requirement)
       const dataPayload = {};
       if (notification.data) {
@@ -125,29 +125,48 @@ class PushNotificationService {
         }
       }
 
-      // Send via FCM Multicast (supports up to 500 tokens at once)
-      const response = await admin.messaging().sendEachForMulticast({
-        tokens: tokenStrings,
-        data: {
-          ...dataPayload,
-          title: notification.title,
-          body: notification.body,
-        },
-        android: {
-          notification: {
-            sound: "default",
-            priority: "high",
+      // Construct messages for each token based on platform
+      const messages = tokensData.map((t) => {
+        const baseMessage = {
+          token: t.token,
+          data: {
+            ...dataPayload,
+            title: notification.title,
+            body: notification.body,
           },
-        },
-        apns: {
-          payload: {
-            aps: {
+        };
+
+        // If not web, add notification payload for background handling
+        if (t.platform !== "web") {
+          baseMessage.notification = {
+            title: notification.title,
+            body: notification.body,
+          };
+          baseMessage.android = {
+            notification: {
               sound: "default",
-              badge: 1,
+              priority: "high",
             },
-          },
-        },
-      });
+          };
+          baseMessage.apns = {
+            payload: {
+              aps: {
+                sound: "default",
+                badge: 1,
+              },
+            },
+          };
+        }
+
+        return baseMessage;
+      }).filter(msg => msg.token);
+
+      if (messages.length === 0) {
+        return;
+      }
+
+      // Send via FCM sendEach
+      const response = await admin.messaging().sendEach(messages);
 
       console.log(
         `[PushNotif] Sent to ${recipientType}:${recipientId} — success: ${response.successCount}, failed: ${response.failureCount}`

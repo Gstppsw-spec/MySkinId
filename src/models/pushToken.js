@@ -40,6 +40,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
+      platform: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        defaultValue: "mobile",
+      },
       isActive: {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
