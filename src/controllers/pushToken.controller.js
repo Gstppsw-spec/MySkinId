@@ -13,7 +13,7 @@ module.exports = {
    */
   async registerToken(req, res) {
     try {
-      const { token, deviceId } = req.body;
+      const { token, deviceId, platform } = req.body;
 
       // Distinguish between customer and user (doctor/outlet)
       // Customer JWT: { id }   |   User JWT: { id, roleId, roleCode }
@@ -24,6 +24,7 @@ module.exports = {
         customerId: isUser ? null : req.user.id,
         userId: isUser ? req.user.id : null,
         deviceId,
+        platform,
       });
 
       return result.status
