@@ -2,14 +2,16 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    /*
-    await queryInterface.addColumn("companyAdsBalance", "nonWithdrawableBalance", {
-      type: Sequelize.DECIMAL(18, 2),
-      allowNull: false,
-      defaultValue: 0,
-      after: "balance",
-    });
-    */
+    // 1. Add nonWithdrawableBalance to companyAdsBalance if not exists
+    const tableInfo = await queryInterface.describeTable("companyAdsBalance");
+    if (!tableInfo.nonWithdrawableBalance) {
+      await queryInterface.addColumn("companyAdsBalance", "nonWithdrawableBalance", {
+        type: Sequelize.DECIMAL(18, 2),
+        allowNull: false,
+        defaultValue: 0,
+        after: "balance",
+      });
+    }
 
     // 2. Create CompanyWithdrawals table
     await queryInterface.createTable("companyWithdrawals", {
