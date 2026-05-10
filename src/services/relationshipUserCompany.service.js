@@ -133,12 +133,28 @@ class RelationshipUserCompanyService {
     if (!company) throw new Error("Company tidak ditemukan");
 
     if (company.isVerified) {
+      const allowedKeys = ["bankName", "bankAccountNumber", "bankAccountName", "isactive", "isActive"];
+      const payloadKeys = Object.keys(payload);
+      const hasDisallowedFields = payloadKeys.some(key => !allowedKeys.includes(key));
+
+      if (hasDisallowedFields) {
+        throw new Error("Data company sudah diverifikasi. Hanya data rekening dan status aktif yang dapat diubah.");
+      }
+
+      const updateData = {};
       const statusValue = payload.isactive !== undefined ? payload.isactive : payload.isActive;
-      if (statusValue !== undefined) {
-        await company.update({ isactive: statusValue });
+      if (statusValue !== undefined) updateData.isactive = statusValue;
+      
+      ["bankName", "bankAccountNumber", "bankAccountName"].forEach(key => {
+        if (payload[key] !== undefined) updateData[key] = payload[key];
+      });
+
+      if (Object.keys(updateData).length > 0) {
+        await company.update(updateData);
         return company;
       }
-      throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
+      
+      throw new Error("Tidak ada data yang valid untuk diperbarui.");
     }
 
     // Filter out association fields to avoid validation errors
@@ -234,12 +250,28 @@ class RelationshipUserCompanyService {
 
       // Jika sudah ada, check verifikasi lalu update datanya
       if (company.isVerified) {
+        const allowedKeys = ["bankName", "bankAccountNumber", "bankAccountName", "isactive", "isActive"];
+        const payloadKeys = Object.keys(payload);
+        const hasDisallowedFields = payloadKeys.some(key => !allowedKeys.includes(key));
+
+        if (hasDisallowedFields) {
+          throw new Error("Data company sudah diverifikasi. Hanya data rekening dan status aktif yang dapat diubah.");
+        }
+
+        const updateData = {};
         const statusValue = payload.isactive !== undefined ? payload.isactive : payload.isActive;
-        if (statusValue !== undefined) {
-          await company.update({ isactive: statusValue });
+        if (statusValue !== undefined) updateData.isactive = statusValue;
+        
+        ["bankName", "bankAccountNumber", "bankAccountName"].forEach(key => {
+          if (payload[key] !== undefined) updateData[key] = payload[key];
+        });
+
+        if (Object.keys(updateData).length > 0) {
+          await company.update(updateData);
           return company;
         }
-        throw new Error("Data company sudah diverifikasi dan tidak dapat diubah");
+        
+        throw new Error("Tidak ada data yang valid untuk diperbarui.");
       }
 
       // Pastikan isactive true jika kita mereaktivasi atau mengupdate data yang belum diverifikasi

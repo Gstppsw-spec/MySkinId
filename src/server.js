@@ -45,6 +45,7 @@ const balanceRoute = require("./routes/balance.route");
 // Cron jobs
 const initGoogleRatingCron = require("./cron/googleRatingCron");
 const initFlashSaleCron = require("./cron/flashSaleCron");
+const initSettlementCron = require("./cron/settlementCron");
 
 // Social media routes
 const postRoute = require("./routes/social/post.route");
@@ -130,6 +131,7 @@ const server = http.createServer(app);
 initSocket(server);
 initGoogleRatingCron();
 initFlashSaleCron();
+initSettlementCron();
 
 // const io = new Server(server, { cors: { origin: "*" } });
 

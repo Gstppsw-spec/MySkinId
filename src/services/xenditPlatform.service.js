@@ -76,7 +76,7 @@ module.exports = {
      * @param {string} [params.transactionItemId]
      * @param {string} params.orderId
      */
-    async transferToMerchant({ locationId, amount, transferType, transactionId, transactionItemId, orderId }) {
+    async transferToMerchant({ locationId, amount, transferType, transactionId, transactionItemId, orderId, executeImmediately = false }) {
         const platformUserId = process.env.XENDIT_PLATFORM_USER_ID;
 
         if (!platformUserId) {
@@ -127,7 +127,7 @@ module.exports = {
             return { status: false, message: "Transfer amount must be positive" };
         }
 
-        // Create transfer record as PENDING
+        // Create transfer record as PENDING_SETTLEMENT
         const transferRecord = await platformTransfer.create({
             transactionId,
             transactionItemId,
@@ -139,8 +139,17 @@ module.exports = {
             mdrFee: mdrShare,
             reference,
             transferType,
-            status: "PENDING",
+            status: "PENDING_SETTLEMENT",
         });
+
+        if (!executeImmediately) {
+            console.log(`[XenditPlatform] Transfer recorded as PENDING_SETTLEMENT for reference ${reference}`);
+            return {
+                status: true,
+                message: "Transfer recorded as PENDING_SETTLEMENT",
+                data: transferRecord.toJSON(),
+            };
+        }
 
         try {
             const response = await axios.post(
@@ -248,6 +257,64 @@ module.exports = {
             });
 
             return { status: false, message: `Retry failed: ${detail}` };
+        }
+    },
+
+    /**
+     * Execute a pending settlement transfer.
+     */
+    async executePendingTransfer(transferId) {
+        const transfer = await platformTransfer.findByPk(transferId);
+
+        if (!transfer) {
+            return { status: false, message: "Transfer record not found" };
+        }
+
+        if (transfer.status !== "PENDING_SETTLEMENT") {
+            return { status: false, message: "Transfer is not in PENDING_SETTLEMENT status" };
+        }
+
+        const platformUserId = process.env.XENDIT_PLATFORM_USER_ID;
+        if (!platformUserId) {
+            return { status: false, message: "Platform user ID not configured" };
+        }
+
+        try {
+            const response = await axios.post(
+                `${XENDIT_BASE_URL}/transfers`,
+                {
+                    reference: transfer.reference,
+                    amount: parseFloat(transfer.amount),
+                    source_user_id: platformUserId,
+                    destination_user_id: transfer.xenditAccountId,
+                },
+                {
+                    headers: {
+                        Authorization: `Basic ${_getAuthHeader()}`,
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
+
+            await transfer.update({
+                status: "SUCCESS",
+                xenditTransferId: response.data.transfer_id || response.data.id,
+                xenditResponse: response.data,
+            });
+
+            console.log(`[XenditPlatform] Pending Transfer SUCCESS: ${transfer.reference}`);
+            return { status: true, message: "Transfer successful", data: transfer.toJSON() };
+        } catch (error) {
+            const detail = error.response ? JSON.stringify(error.response.data) : error.message;
+            console.error(`[XenditPlatform] Pending Transfer FAILED: ${transfer.reference}:`, detail);
+
+            await transfer.update({
+                status: "FAILED",
+                errorMessage: detail,
+                xenditResponse: error.response ? error.response.data : null,
+            });
+
+            return { status: false, message: `Transfer failed: ${detail}` };
         }
     },
 

@@ -299,7 +299,7 @@ module.exports = {
 
       // 6. Trigger Xendit Payout (Asynchronous/Immediate as per requirement)
       const xenditRes = await payoutService.createDisbursement({
-        amount,
+        amount: parseFloat(amount) - 2500,
         bankCode: company.bankName, // Assuming bankName matches Xendit codes, or needs mapping
         accountHolderName: company.bankAccountName || company.name,
         accountNumber: company.bankAccountNumber,
