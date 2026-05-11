@@ -80,7 +80,7 @@ module.exports = {
 
   async login(email, password) {
     const user = await masterUser.findOne({
-      where: { email },
+      where: { email, isactive: true },
       include: [
         {
           model: masterRole,
@@ -1065,7 +1065,11 @@ module.exports = {
         };
       }
 
-      await user.update({ isactive: false });
+      const deletedEmail = `${user.email}_deleted_${Date.now()}`;
+      await user.update({ 
+        isactive: false,
+        email: deletedEmail
+      });
 
       return {
         status: true,
