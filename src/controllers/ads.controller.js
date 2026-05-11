@@ -174,7 +174,8 @@ module.exports = {
       const errors = [];
 
       for (const cId of targetIds) {
-        const result = await balanceService.addBalance(cId, amount, "TOPUP", null, description);
+        // Use INITIAL_GRANT for admin additions so they are non-withdrawable (as per free balance rule)
+        const result = await balanceService.addBalance(cId, amount, "INITIAL_GRANT", null, description);
         if (result.status) {
           results.push({ 
             companyId: cId, 
