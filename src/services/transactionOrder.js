@@ -4009,7 +4009,14 @@ module.exports = {
           {
             model: masterLocation,
             as: "location",
-            attributes: ["id", "name", "phone"],
+            attributes: ["id", "name", "phone", "companyId"],
+            include: [
+              {
+                model: require("../models").masterCompany,
+                as: "company",
+                attributes: ["createdAt"]
+              }
+            ]
           },
         ],
         limit: limit,
@@ -4049,9 +4056,14 @@ module.exports = {
         const voucherDiscountPortion = Math.round(proportion * totalVoucherDiscount);
         const mitraSubsidyPortion = Math.round(proportion * totalMitraSubsidy);
 
-        // Platform Fee (1% of subtotal before voucher if we want, or after? usually after item discount but before voucher)
-        // Let's stick to 1% of the subtotal (grandTotal) as defined in getFinancialReport
-        const platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+        // Platform Fee (4% for partners registered May 2026 onwards, 1% or env value for older)
+        const cutoffDate = new Date("2026-05-01T00:00:00Z");
+        const companyCreatedAt = plain.location?.company?.createdAt;
+        let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+        
+        if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
+            platformFeePercent = 4;
+        }
         const platformFee = Math.round((subtotal * platformFeePercent) / 100);
 
         // Net for Outlet: Subtotal - platformFee - mdrFee - (portion of voucher that outlet pays)
@@ -5124,7 +5136,14 @@ module.exports = {
           {
             model: masterLocation,
             as: "location",
-            attributes: ["id", "name", "phone"],
+            attributes: ["id", "name", "phone", "companyId"],
+            include: [
+              {
+                model: require("../models").masterCompany,
+                as: "company",
+                attributes: ["createdAt"]
+              }
+            ]
           },
         ],
       });
@@ -5177,8 +5196,14 @@ module.exports = {
           const mitraSubsidy = Math.round(proportion * totalMitraSubsidy);
           const myskinSubsidy = Math.round(proportion * totalMyskinSubsidy);
 
-          // Platform Fee (1%)
-          const platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+          // Platform Fee (4% for partners registered May 2026 onwards, 1% or env value for older)
+          const cutoffDate = new Date("2026-05-01T00:00:00Z");
+          const companyCreatedAt = plain.location?.company?.createdAt;
+          let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+          
+          if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
+              platformFeePercent = 4;
+          }
           const platformFee = Math.round((itemSubtotal * platformFeePercent) / 100);
 
           // Net for Item
@@ -5584,7 +5609,18 @@ module.exports = {
           },
           { model: transactionShipping, as: "shipping" },
           { model: platformTransfer, as: "transfers" },
-          { model: masterLocation, as: "location", attributes: ["name"] },
+          { 
+            model: masterLocation, 
+            as: "location", 
+            attributes: ["name", "id", "companyId"],
+            include: [
+              {
+                model: require("../models").masterCompany,
+                as: "company",
+                attributes: ["createdAt"]
+              }
+            ]
+          },
         ],
         order: [["createdAt", "DESC"]],
         limit,
@@ -5612,7 +5648,14 @@ module.exports = {
         if (trx.transfers && trx.transfers.length > 0) {
           platformFee = parseFloat(trx.transfers[0].platformFee || 0);
         } else {
-          const platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "0");
+          // Platform Fee (4% for partners registered May 2026 onwards, 1% or env value for older)
+          const cutoffDate = new Date("2026-05-01T00:00:00Z");
+          const companyCreatedAt = trx.location?.company?.createdAt;
+          let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "0");
+          
+          if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
+              platformFeePercent = 4;
+          }
           platformFee = Math.round((subtotal * platformFeePercent) / 100);
         }
 

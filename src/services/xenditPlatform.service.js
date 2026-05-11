@@ -84,8 +84,10 @@ module.exports = {
             return { status: false, message: "Platform user ID not configured" };
         }
 
-        // Get location and its xenditAccountId
-        const location = await masterLocation.findByPk(locationId);
+        // Get location and its company to check registration date
+        const location = await masterLocation.findByPk(locationId, {
+            include: [{ model: require("../models").masterCompany, as: "company" }]
+        });
         if (!location) {
             console.error(`[XenditPlatform] Location ${locationId} not found`);
             return { status: false, message: "Location not found" };
@@ -97,8 +99,15 @@ module.exports = {
         }
 
         const reference = `TRF-${nanoid(12).toUpperCase()}`;
-        // Calculate Fees
-        const platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "0");
+        // Calculate Fees (4% for partners registered May 2026 onwards, 1% or env value for older)
+        const cutoffDate = new Date("2026-05-01T00:00:00Z");
+        const companyCreatedAt = location.company?.createdAt;
+        let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+        
+        if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
+            platformFeePercent = 4;
+        }
+        
         const platformFee = Math.round((amount * platformFeePercent) / 100);
 
         // Fetch actual MDR fee from orderPayment to deduct proportionally
