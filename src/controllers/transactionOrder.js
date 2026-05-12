@@ -775,9 +775,7 @@ module.exports = {
           {
             model: Transaction,
             as: "transactions",
-            where: {
-              orderStatus: { [Op.in]: ["PAID", "DELIVERED", "COMPLETED"] },
-            },
+            // No orderStatus filter — allow backfilling any status as long as Order is PAID
             include: [
               {
                 model: TransactionItem,
