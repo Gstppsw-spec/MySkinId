@@ -816,6 +816,14 @@ module.exports = {
             });
 
             if (!existingTransfer && trx.location && trx.location.companyId) {
+              // If user provided specific transactionItemIds, filter by them
+              const { transactionItemIds } = req.body;
+              if (Array.isArray(transactionItemIds) && transactionItemIds.length > 0) {
+                if (!transactionItemIds.includes(item.id)) {
+                  continue; // Skip this item if not in the requested list
+                }
+              }
+
               const itemPrice = parseFloat(item.totalPrice);
               // Add shipping fee proportionally for product items
               const itemShippingFee = item.itemType === "product"
