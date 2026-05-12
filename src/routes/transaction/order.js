@@ -152,5 +152,16 @@ router.post(
   allowRoles("SUPER_ADMIN"),
   transactionOrder.manualSettleAll,
 );
+// Super Admin: Backfill old transactions (before new settlement system)
+router.get(
+  "/settlements/backfill",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.backfillOldTransactions,
+);
+router.post(
+  "/settlements/backfill",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.backfillOldTransactions,
+);
 
 module.exports = router;

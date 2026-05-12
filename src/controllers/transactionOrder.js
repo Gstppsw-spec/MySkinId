@@ -743,4 +743,148 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  /**
+   * Super Admin: Backfill mitra balance for old transactions.
+   * Finds all PAID/DELIVERED/COMPLETED transactions with product/service/package items
+   * that have NO platformTransfer record, and directly adds the balance to mitra.
+   * 
+   * GET ?dryRun=true  → Preview only (shows what would be processed)
+   * POST              → Actually execute the backfill
+   */
+  async backfillOldTransactions(req, res) {
+    try {
+      const { Op } = require("sequelize");
+      const {
+        order: Order,
+        transaction: Transaction,
+        transactionItem: TransactionItem,
+        platformTransfer,
+        masterLocation,
+      } = require("../models");
+      const balanceService = require("../services/balance.service");
+      const voucherService = require("../services/voucher.service");
+      const { CompanyAdsBalanceHistory } = require("../models");
+
+      const dryRun = req.method === "GET" || req.query.dryRun === "true";
+
+      // Find all orders that are PAID
+      const paidOrders = await Order.findAll({
+        where: { paymentStatus: "PAID" },
+        include: [
+          {
+            model: Transaction,
+            as: "transactions",
+            where: {
+              orderStatus: { [Op.in]: ["PAID", "DELIVERED", "COMPLETED"] },
+            },
+            include: [
+              {
+                model: TransactionItem,
+                as: "items",
+                where: {
+                  itemType: { [Op.in]: ["product", "service", "package"] },
+                },
+                required: true,
+              },
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id", "name", "companyId"],
+              },
+            ],
+          },
+        ],
+      });
+
+      const toProcess = [];
+
+      for (const ord of paidOrders) {
+        for (const trx of ord.transactions) {
+          for (const item of trx.items) {
+            // Check if a platformTransfer already exists for this item
+            const existingTransfer = await platformTransfer.findOne({
+              where: {
+                transactionId: trx.id,
+                transactionItemId: item.id,
+              },
+            });
+
+            if (!existingTransfer && trx.location && trx.location.companyId) {
+              // Calculate platform fee
+              const amount = parseFloat(item.totalPrice);
+              const company = await require("../models").masterCompany.findByPk(trx.location.companyId);
+              const cutoffDate = new Date("2026-05-01T00:00:00Z");
+              let feePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+              if (company && company.createdAt >= cutoffDate) feePercent = 4;
+              const platformFee = Math.round(amount * (feePercent / 100));
+              const netAmount = amount - platformFee;
+
+              toProcess.push({
+                orderId: ord.id,
+                orderNumber: ord.orderNumber,
+                transactionId: trx.id,
+                transactionItemId: item.id,
+                itemType: item.itemType,
+                itemName: item.itemName,
+                locationName: trx.location.name,
+                companyId: trx.location.companyId,
+                grossAmount: amount,
+                platformFee,
+                netAmount,
+                orderStatus: trx.orderStatus,
+              });
+            }
+          }
+        }
+      }
+
+      if (dryRun) {
+        return response.success(res, `Found ${toProcess.length} items to backfill (DRY RUN — no changes made)`, {
+          items: toProcess,
+          totalNetAmount: toProcess.reduce((s, i) => s + i.netAmount, 0),
+        });
+      }
+
+      // Execute backfill
+      const results = [];
+      const errors = [];
+      const processedOrders = new Set();
+
+      for (const item of toProcess) {
+        try {
+          await balanceService.addBalance(
+            item.companyId,
+            item.netAmount,
+            item.itemType === "product" ? "PRODUCT_SETTLEMENT" : "VOUCHER_SETTLEMENT",
+            item.orderId,
+            `Backfill settlement: ${item.itemName} (${item.orderNumber})`
+          );
+          results.push({ ...item, status: "settled" });
+
+          // Credit voucher subsidy once per order
+          if (!processedOrders.has(item.orderId)) {
+            processedOrders.add(item.orderId);
+            try {
+              const alreadyCredited = await CompanyAdsBalanceHistory.findOne({
+                where: { referenceId: item.orderId, type: "VOUCHER_SUBSIDY" }
+              });
+              if (!alreadyCredited) {
+                await voucherService.creditVoucherSubsidy(item.orderId);
+              }
+            } catch (e) { /* ignore */ }
+          }
+        } catch (err) {
+          errors.push({ ...item, error: err.message });
+        }
+      }
+
+      return response.success(res, `Backfill complete: ${results.length} settled, ${errors.length} failed`, {
+        settled: results,
+        failed: errors,
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };
