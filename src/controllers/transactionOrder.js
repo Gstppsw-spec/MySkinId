@@ -973,6 +973,14 @@ module.exports = {
           }
 
           for (const item of trx.items) {
+            // Check if a platformTransfer already exists for this item
+            const existingTransfer = await require("../models").platformTransfer.findOne({
+              where: {
+                transactionId: trx.id,
+                transactionItemId: item.id,
+              },
+            });
+
             const itemPrice = parseFloat(item.totalPrice);
             // Distribute shipping fee equally across product items
             const itemShippingFee = item.itemType === "product"
@@ -996,6 +1004,7 @@ module.exports = {
               grossAmount,
               orderStatus: trx.orderStatus,
               paymentStatus: ord.paymentStatus,
+              isSettled: !!existingTransfer, // True if already settled
               createdAt: item.createdAt,
             });
           }
