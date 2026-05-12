@@ -883,6 +883,9 @@ module.exports = {
         settled: results,
         failed: errors,
       });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   },
 
   /**
