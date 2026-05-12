@@ -220,7 +220,8 @@ module.exports = {
   },
 
   /**
-   * Get detailed balance info including withdrawable amount
+   * Get detailed balance info including withdrawable amount.
+   * Topups less than 3 days old are "on hold" and cannot be withdrawn.
    */
   async getCompanyBalanceInfo(companyId) {
     try {
@@ -230,7 +231,22 @@ module.exports = {
       const record = res.data;
       const totalBalance = parseFloat(record.balance || 0);
       const nonWithdrawable = parseFloat(record.nonWithdrawableBalance || 0);
-      const withdrawable = Math.max(0, totalBalance - nonWithdrawable);
+
+      // Calculate hold balance: sum of TOPUP amounts less than 3 days old
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+      const recentTopups = await CompanyAdsBalanceHistory.findAll({
+        where: {
+          balanceId: record.id,
+          type: "TOPUP",
+          createdAt: { [Op.gt]: threeDaysAgo }
+        }
+      });
+
+      const holdBalance = recentTopups.reduce((sum, h) => sum + parseFloat(h.amount || 0), 0);
+
+      const withdrawable = Math.max(0, totalBalance - nonWithdrawable - holdBalance);
 
       return {
         status: true,
@@ -238,6 +254,7 @@ module.exports = {
         data: {
           totalBalance,
           nonWithdrawableBalance: nonWithdrawable,
+          holdBalance,
           withdrawableBalance: withdrawable
         }
       };

@@ -136,5 +136,21 @@ router.post(
   allowRoles("SUPER_ADMIN"),
   transactionOrder.retryTransfer,
 );
+// Super Admin: Settlement Management
+router.get(
+  "/settlements/pending",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.getPendingSettlements,
+);
+router.post(
+  "/settlements/settle/:transferId",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.manualSettle,
+);
+router.post(
+  "/settlements/settle-all",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.manualSettleAll,
+);
 
 module.exports = router;

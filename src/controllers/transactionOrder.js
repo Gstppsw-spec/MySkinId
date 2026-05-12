@@ -608,4 +608,139 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  // --- SUPER ADMIN: Settlement Management ---
+  async getPendingSettlements(req, res) {
+    try {
+      const { status = "PENDING_SETTLEMENT", page = 1, pageSize = 50 } = req.query;
+      const { Op } = require("sequelize");
+      const { platformTransfer, masterLocation, transactionItem } = require("../models");
+
+      const where = {};
+      if (status === "ALL") {
+        // Show all
+      } else {
+        where.status = status;
+      }
+
+      const offset = (parseInt(page) - 1) * parseInt(pageSize);
+      const { count, rows } = await platformTransfer.findAndCountAll({
+        where,
+        include: [
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id", "name", "companyId"],
+          },
+          {
+            model: transactionItem,
+            as: "transactionItem",
+            attributes: ["id", "itemType", "itemName", "voucherCode", "totalPrice"],
+          },
+        ],
+        order: [["createdAt", "ASC"]],
+        limit: parseInt(pageSize),
+        offset,
+      });
+
+      return response.success(res, `Found ${count} transfers`, {
+        list: rows,
+        total: count,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async manualSettle(req, res) {
+    try {
+      const { transferId } = req.params;
+      const xenditPlatformService = require("../services/xenditPlatform.service");
+      const { platformTransfer } = require("../models");
+
+      const transfer = await platformTransfer.findByPk(transferId);
+      if (!transfer) {
+        return response.error(res, "Transfer not found");
+      }
+
+      if (transfer.status === "SUCCESS") {
+        return response.error(res, "Transfer already settled");
+      }
+
+      // Force execute the settlement (skip status checks — admin override)
+      const result = await xenditPlatformService.executePendingTransfer(transferId);
+
+      if (result.status) {
+        // Also credit voucher subsidy if applicable
+        try {
+          const voucherService = require("../services/voucher.service");
+          const { CompanyAdsBalanceHistory } = require("../models");
+
+          const alreadyCredited = await CompanyAdsBalanceHistory.findOne({
+            where: { referenceId: transfer.orderId, type: "VOUCHER_SUBSIDY" }
+          });
+
+          if (!alreadyCredited) {
+            await voucherService.creditVoucherSubsidy(transfer.orderId);
+          }
+        } catch (subsidyErr) {
+          console.error("[ManualSettle] Subsidy credit error:", subsidyErr.message);
+        }
+      }
+
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, "Settlement executed successfully", result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async manualSettleAll(req, res) {
+    try {
+      const { Op } = require("sequelize");
+      const { platformTransfer } = require("../models");
+      const xenditPlatformService = require("../services/xenditPlatform.service");
+      const voucherService = require("../services/voucher.service");
+      const { CompanyAdsBalanceHistory } = require("../models");
+
+      const pendingTransfers = await platformTransfer.findAll({
+        where: { status: { [Op.in]: ["PENDING_SETTLEMENT", "FAILED"] } }
+      });
+
+      const results = [];
+      const errors = [];
+
+      for (const transfer of pendingTransfers) {
+        try {
+          const result = await xenditPlatformService.executePendingTransfer(transfer.id);
+          if (result.status) {
+            results.push({ id: transfer.id, reference: transfer.reference, status: "settled" });
+
+            // Credit voucher subsidy
+            try {
+              const alreadyCredited = await CompanyAdsBalanceHistory.findOne({
+                where: { referenceId: transfer.orderId, type: "VOUCHER_SUBSIDY" }
+              });
+              if (!alreadyCredited) {
+                await voucherService.creditVoucherSubsidy(transfer.orderId);
+              }
+            } catch (e) { /* ignore */ }
+          } else {
+            errors.push({ id: transfer.id, reference: transfer.reference, error: result.message });
+          }
+        } catch (err) {
+          errors.push({ id: transfer.id, reference: transfer.reference, error: err.message });
+        }
+      }
+
+      return response.success(res, `Settled ${results.length}, failed ${errors.length}`, {
+        settled: results,
+        failed: errors,
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

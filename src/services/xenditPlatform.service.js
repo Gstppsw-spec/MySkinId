@@ -93,10 +93,13 @@ module.exports = {
             return { status: false, message: "Location not found" };
         }
 
+        // Removed Xendit sub-account check as per new requirement (using local DB balance instead)
+        /*
         if (!location.xenditAccountId) {
             console.warn(`[XenditPlatform] Location ${locationId} (${location.name}) has no xenditAccountId, skipping transfer.`);
             return { status: false, message: "Location does not have a Xendit sub-account" };
         }
+        */
 
         const reference = `TRF-${nanoid(12).toUpperCase()}`;
         // Calculate Fees (4% for partners registered May 2026 onwards, 1% or env value for older)
@@ -142,7 +145,7 @@ module.exports = {
             transactionItemId,
             orderId,
             locationId,
-            xenditAccountId: location.xenditAccountId,
+            xenditAccountId: location.xenditAccountId || "LOCAL_BALANCE",
             amount: transferAmount,
             platformFee,
             mdrFee: mdrShare,
@@ -161,27 +164,25 @@ module.exports = {
         }
 
         try {
-            const response = await axios.post(
-                `${XENDIT_BASE_URL}/transfers`,
-                {
-                    reference,
-                    amount: transferAmount,
-                    source_user_id: platformUserId,
-                    destination_user_id: location.xenditAccountId,
-                },
-                {
-                    headers: {
-                        Authorization: `Basic ${_getAuthHeader()}`,
-                        "Content-Type": "application/json",
-                    },
-                }
+            // Instead of Xendit API, add to local DB balance
+            const balanceService = require("./balance.service");
+            const balanceResult = await balanceService.addBalance(
+                location.companyId,
+                transferAmount,
+                transferType || "ITEM_DELIVERED",
+                orderId,
+                `Payout for ${transferType} (Ref: ${reference})`
             );
+
+            if (!balanceResult.status) {
+                throw new Error(`Failed to add balance: ${balanceResult.message}`);
+            }
 
             // Update to SUCCESS
             await transferRecord.update({
                 status: "SUCCESS",
-                xenditTransferId: response.data.transfer_id || response.data.id,
-                xenditResponse: response.data,
+                xenditTransferId: `LOCAL-${reference}`,
+                xenditResponse: { message: "Transferred to local DB balance" },
             });
 
             console.log(`[XenditPlatform] Transfer SUCCESS: ${reference} → ${location.name} (${transferAmount} IDR)`);
@@ -289,30 +290,35 @@ module.exports = {
         }
 
         try {
-            const response = await axios.post(
-                `${XENDIT_BASE_URL}/transfers`,
-                {
-                    reference: transfer.reference,
-                    amount: parseFloat(transfer.amount),
-                    source_user_id: platformUserId,
-                    destination_user_id: transfer.xenditAccountId,
-                },
-                {
-                    headers: {
-                        Authorization: `Basic ${_getAuthHeader()}`,
-                        "Content-Type": "application/json",
-                    },
-                }
+            // Fetch companyId from location
+            const { masterLocation } = require("../models");
+            const location = await masterLocation.findByPk(transfer.locationId);
+            if (!location) {
+                throw new Error(`Location ${transfer.locationId} not found`);
+            }
+
+            // Instead of Xendit API, add to local DB balance
+            const balanceService = require("./balance.service");
+            const balanceResult = await balanceService.addBalance(
+                location.companyId,
+                parseFloat(transfer.amount),
+                transfer.transferType || "ITEM_DELIVERED",
+                transfer.orderId,
+                `Settlement for ${transfer.transferType} (Ref: ${transfer.reference})`
             );
+
+            if (!balanceResult.status) {
+                throw new Error(`Failed to add balance: ${balanceResult.message}`);
+            }
 
             await transfer.update({
                 status: "SUCCESS",
-                xenditTransferId: response.data.transfer_id || response.data.id,
-                xenditResponse: response.data,
+                xenditTransferId: `LOCAL-${transfer.reference}`,
+                xenditResponse: { message: "Transferred to local DB balance via Cron" },
             });
 
             console.log(`[XenditPlatform] Pending Transfer SUCCESS: ${transfer.reference}`);
-            return { status: true, message: "Transfer successful", data: transfer.toJSON() };
+            return { status: true, message: "Transfer successful (Added to DB Balance)", data: transfer.toJSON() };
         } catch (error) {
             const detail = error.response ? JSON.stringify(error.response.data) : error.message;
             console.error(`[XenditPlatform] Pending Transfer FAILED: ${transfer.reference}:`, detail);

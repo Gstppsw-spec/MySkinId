@@ -2660,11 +2660,50 @@ module.exports = {
             }
           }
 
-          // 🔹 Credit voucher subsidy to mitra's ads balance
+          // 🔹 Voucher subsidy is NO LONGER credited at PAID time.
+          // It will be credited by the settlement cron when VOUCHER_SETTLEMENT or PRODUCT_SETTLEMENT is executed.
+
+          // 🔹 Create PENDING_SETTLEMENT for all transferable items (3-day settlement clock starts now)
           try {
-            await voucherService.creditVoucherSubsidy(orderData.id);
-          } catch (voucherSubsidyErr) {
-            console.error("[XenditCallback] Voucher subsidy error:", voucherSubsidyErr.message);
+            const xenditPlatformService = require("./xenditPlatform.service");
+            const allTrxItems = await transactionItem.findAll({
+              where: { transactionId: transactionIds },
+              include: [{ model: transaction, as: "transaction" }],
+            });
+
+            for (const item of allTrxItems) {
+              // For voucher items (service/package with voucherCode)
+              if (item.voucherCode && (item.itemType === "service" || item.itemType === "package")) {
+                const transferResult = await xenditPlatformService.transferToMerchant({
+                  locationId: item.transaction.locationId,
+                  amount: parseFloat(item.totalPrice),
+                  transferType: "VOUCHER_SETTLEMENT",
+                  transactionId: item.transaction.id,
+                  transactionItemId: item.id,
+                  orderId: item.transaction.orderId,
+                });
+                if (!transferResult.status) {
+                  console.warn(`[XenditCallback] Voucher settlement record skipped: ${transferResult.message}`);
+                }
+              }
+
+              // For product items (physical goods that need delivery check)
+              if (item.itemType === "product") {
+                const transferResult = await xenditPlatformService.transferToMerchant({
+                  locationId: item.transaction.locationId,
+                  amount: parseFloat(item.totalPrice),
+                  transferType: "PRODUCT_SETTLEMENT",
+                  transactionId: item.transaction.id,
+                  transactionItemId: item.id,
+                  orderId: item.transaction.orderId,
+                });
+                if (!transferResult.status) {
+                  console.warn(`[XenditCallback] Product settlement record skipped: ${transferResult.message}`);
+                }
+              }
+            }
+          } catch (settlementErr) {
+            console.error("[XenditCallback] Settlement recording error:", settlementErr.message);
           }
         }
       } else if (_status === "EXPIRED" || _status === "FAILED") {
@@ -3193,42 +3232,8 @@ module.exports = {
       }
       await t.commit();
 
-      // 🔹 Xendit Platform Transfer (Non-blocking)
-      try {
-        const xenditPlatformService = require("./xenditPlatform.service");
-        const transferableItems = await transactionItem.findAll({
-          where: {
-            transactionId: trx.id,
-            itemType: { [Op.in]: ["product", "service"] },
-          },
-        });
-
-        if (transferableItems.length > 0) {
-          const totalTransferAmount = transferableItems.reduce(
-            (sum, item) => sum + parseFloat(item.totalPrice),
-            0,
-          );
-          const transferResult = await xenditPlatformService.transferToMerchant(
-            {
-              locationId: trx.locationId,
-              amount: totalTransferAmount,
-              transferType: "ITEM_DELIVERED",
-              transactionId: trx.id,
-              orderId: trx.orderId,
-            },
-          );
-          if (!transferResult.status) {
-            console.warn(
-              `[Deliver] Platform transfer skipped/failed: ${transferResult.message}`,
-            );
-          }
-        }
-      } catch (transferError) {
-        console.error(
-          "[Deliver] Platform transfer error (non-blocking):",
-          transferError.message,
-        );
-      }
+      // NOTE: PENDING_SETTLEMENT (PRODUCT_SETTLEMENT) is already created at PAID time.
+      // The settlement cron will check if transaction is DELIVERED before executing.
       return { status: true };
     } catch (error) {
       await t.rollback();
@@ -3662,37 +3667,8 @@ module.exports = {
 
       await t.commit();
 
-      // 🔹 Xendit Platform: Transfer package amount to merchant after REDEEM
-      try {
-        const xenditPlatformService = require("./xenditPlatform.service");
-        const vTrxItem = await transactionItem.findOne({
-          where: { id: voucher.transactionItemId },
-          include: [{ model: transaction, as: "transaction" }],
-        });
-
-        if (vTrxItem && vTrxItem.transaction) {
-          const transferResult = await xenditPlatformService.transferToMerchant(
-            {
-              locationId: vTrxItem.locationId,
-              amount: parseFloat(vTrxItem.totalPrice),
-              transferType: "VOUCHER_REDEEM",
-              transactionId: vTrxItem.transaction.id,
-              transactionItemId: vTrxItem.id,
-              orderId: vTrxItem.transaction.orderId,
-            },
-          );
-          if (!transferResult.status) {
-            console.warn(
-              `[ClaimVoucher] Platform transfer skipped/failed: ${transferResult.message}`,
-            );
-          }
-        }
-      } catch (transferError) {
-        console.error(
-          "[ClaimVoucher] Platform transfer error (non-blocking):",
-          transferError.message,
-        );
-      }
+      // NOTE: PENDING_SETTLEMENT is already created at PAID time.
+      // The settlement cron will check voucher status (REDEEM/EXPIRED) before executing.
 
       return {
         status: true,

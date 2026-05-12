@@ -49,7 +49,7 @@ module.exports = (sequelize, DataTypes) => {
             },
             xenditAccountId: {
                 type: DataTypes.STRING(100),
-                allowNull: false,
+                allowNull: true,
             },
             amount: {
                 type: DataTypes.DECIMAL(18, 2),
