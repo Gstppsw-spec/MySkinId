@@ -761,6 +761,7 @@ module.exports = {
         transactionItem: TransactionItem,
         platformTransfer,
         masterLocation,
+        transactionShipping,
       } = require("../models");
       const balanceService = require("../services/balance.service");
       const voucherService = require("../services/voucher.service");
@@ -792,6 +793,12 @@ module.exports = {
                 as: "location",
                 attributes: ["id", "name", "companyId"],
               },
+              {
+                model: transactionShipping,
+                as: "shipping",
+                attributes: ["shippingFee"],
+                required: false,
+              },
             ],
           },
         ],
@@ -801,6 +808,11 @@ module.exports = {
 
       for (const ord of paidOrders) {
         for (const trx of ord.transactions) {
+          // Get shipping fee from transaction record or shipping sub-record
+          const shippingFee = parseFloat(trx.shippingFee || trx.shipping?.shippingFee || 0);
+          const productItems = trx.items.filter(i => i.itemType === "product");
+          const productCount = productItems.length || 1;
+
           for (const item of trx.items) {
             // Check if a platformTransfer already exists for this item
             const existingTransfer = await platformTransfer.findOne({
@@ -811,14 +823,20 @@ module.exports = {
             });
 
             if (!existingTransfer && trx.location && trx.location.companyId) {
-              // Calculate platform fee
-              const amount = parseFloat(item.totalPrice);
+              const itemPrice = parseFloat(item.totalPrice);
+              // Add shipping fee proportionally for product items
+              const itemShippingFee = item.itemType === "product"
+                ? Math.round(shippingFee / productCount)
+                : 0;
+              const grossAmount = itemPrice + itemShippingFee;
+
+              // Calculate platform fee on gross amount
               const company = await require("../models").masterCompany.findByPk(trx.location.companyId);
               const cutoffDate = new Date("2026-05-01T00:00:00Z");
               let feePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
               if (company && company.createdAt >= cutoffDate) feePercent = 4;
-              const platformFee = Math.round(amount * (feePercent / 100));
-              const netAmount = amount - platformFee;
+              const platformFee = Math.round(grossAmount * (feePercent / 100));
+              const netAmount = grossAmount - platformFee;
 
               toProcess.push({
                 orderId: ord.id,
@@ -829,7 +847,9 @@ module.exports = {
                 itemName: item.itemName,
                 locationName: trx.location.name,
                 companyId: trx.location.companyId,
-                grossAmount: amount,
+                itemPrice,
+                shippingFee: itemShippingFee,
+                grossAmount,
                 platformFee,
                 netAmount,
                 orderStatus: trx.orderStatus,
@@ -838,6 +858,7 @@ module.exports = {
           }
         }
       }
+
 
       if (dryRun) {
         return response.success(res, `Found ${toProcess.length} items to backfill (DRY RUN — no changes made)`, {
@@ -899,6 +920,7 @@ module.exports = {
         transaction: Transaction,
         transactionItem: TransactionItem,
         masterLocation,
+        transactionShipping,
       } = require("../models");
 
       // Find ALL orders that are PAID regardless of transaction orderStatus
@@ -921,6 +943,12 @@ module.exports = {
                 as: "location",
                 attributes: ["id", "name", "companyId"],
               },
+              {
+                model: transactionShipping,
+                as: "shipping",
+                attributes: ["shippingFee"],
+                required: false,
+              },
             ],
           },
         ],
@@ -929,7 +957,22 @@ module.exports = {
       const list = [];
       for (const ord of paidOrders) {
         for (const trx of ord.transactions) {
+          // Shipping fee applies per-transaction (not per-item)
+          // For product transactions, add shippingFee to the amount
+          const shippingFee = parseFloat(trx.shippingFee || trx.shipping?.shippingFee || 0);
+
+          // Count how many product items in this transaction (to split shipping fee)
+          const productItems = trx.items.filter(i => i.itemType === "product");
+          const productCount = productItems.length || 1;
+
           for (const item of trx.items) {
+            const itemPrice = parseFloat(item.totalPrice);
+            // Distribute shipping fee equally across product items
+            const itemShippingFee = item.itemType === "product"
+              ? Math.round(shippingFee / productCount)
+              : 0;
+            const grossAmount = itemPrice + itemShippingFee;
+
             list.push({
               orderId: ord.id,
               orderNumber: ord.orderNumber,
@@ -941,7 +984,9 @@ module.exports = {
               locationName: trx.location?.name || null,
               locationId: trx.locationId || null,
               companyId: trx.location?.companyId || null,
-              grossAmount: parseFloat(item.totalPrice),
+              itemPrice,
+              shippingFee: itemShippingFee,
+              grossAmount,
               orderStatus: trx.orderStatus,
               paymentStatus: ord.paymentStatus,
               createdAt: item.createdAt,
