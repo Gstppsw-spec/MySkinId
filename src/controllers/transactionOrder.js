@@ -894,7 +894,6 @@ module.exports = {
    */
   async getRawTransactionsForSettlement(req, res) {
     try {
-      const { Op } = require("sequelize");
       const {
         order: Order,
         transaction: Transaction,
@@ -902,23 +901,19 @@ module.exports = {
         masterLocation,
       } = require("../models");
 
-      // Find all orders that are PAID
+      // Find ALL orders that are PAID regardless of transaction orderStatus
       const paidOrders = await Order.findAll({
         where: { paymentStatus: "PAID" },
         include: [
           {
             model: Transaction,
             as: "transactions",
-            where: {
-              orderStatus: { [Op.in]: ["PAID", "DELIVERED", "COMPLETED"] },
-            },
+            // No orderStatus filter — show everything so we can audit
             include: [
               {
                 model: TransactionItem,
                 as: "items",
-                where: {
-                  itemType: { [Op.in]: ["product", "service", "package"] },
-                },
+                // No itemType filter here either — show all items
                 required: true,
               },
               {
@@ -942,17 +937,20 @@ module.exports = {
               transactionItemId: item.id,
               itemType: item.itemType,
               itemName: item.itemName,
-              locationName: trx.location?.name,
-              companyId: trx.location?.companyId,
+              voucherCode: item.voucherCode || null,
+              locationName: trx.location?.name || null,
+              locationId: trx.locationId || null,
+              companyId: trx.location?.companyId || null,
               grossAmount: parseFloat(item.totalPrice),
               orderStatus: trx.orderStatus,
+              paymentStatus: ord.paymentStatus,
               createdAt: item.createdAt,
             });
           }
         }
       }
 
-      return response.success(res, `Found ${list.length} items matching logic 1 & 2`, {
+      return response.success(res, `Found ${list.length} total items from all PAID orders`, {
         total: list.length,
         items: list,
       });
