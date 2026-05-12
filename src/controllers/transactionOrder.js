@@ -883,6 +883,76 @@ module.exports = {
         settled: results,
         failed: errors,
       });
+  },
+
+  /**
+   * Super Admin: View all transactions matching Logic 1 and Logic 2.
+   * Ignores the gap check (Logic 3) to see what data exists.
+   */
+  async getRawTransactionsForSettlement(req, res) {
+    try {
+      const { Op } = require("sequelize");
+      const {
+        order: Order,
+        transaction: Transaction,
+        transactionItem: TransactionItem,
+        masterLocation,
+      } = require("../models");
+
+      // Find all orders that are PAID
+      const paidOrders = await Order.findAll({
+        where: { paymentStatus: "PAID" },
+        include: [
+          {
+            model: Transaction,
+            as: "transactions",
+            where: {
+              orderStatus: { [Op.in]: ["PAID", "DELIVERED", "COMPLETED"] },
+            },
+            include: [
+              {
+                model: TransactionItem,
+                as: "items",
+                where: {
+                  itemType: { [Op.in]: ["product", "service", "package"] },
+                },
+                required: true,
+              },
+              {
+                model: masterLocation,
+                as: "location",
+                attributes: ["id", "name", "companyId"],
+              },
+            ],
+          },
+        ],
+      });
+
+      const list = [];
+      for (const ord of paidOrders) {
+        for (const trx of ord.transactions) {
+          for (const item of trx.items) {
+            list.push({
+              orderId: ord.id,
+              orderNumber: ord.orderNumber,
+              transactionId: trx.id,
+              transactionItemId: item.id,
+              itemType: item.itemType,
+              itemName: item.itemName,
+              locationName: trx.location?.name,
+              companyId: trx.location?.companyId,
+              grossAmount: parseFloat(item.totalPrice),
+              orderStatus: trx.orderStatus,
+              createdAt: item.createdAt,
+            });
+          }
+        }
+      }
+
+      return response.success(res, `Found ${list.length} items matching logic 1 & 2`, {
+        total: list.length,
+        items: list,
+      });
     } catch (error) {
       return response.serverError(res, error);
     }

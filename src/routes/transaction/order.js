@@ -164,4 +164,11 @@ router.post(
   transactionOrder.backfillOldTransactions,
 );
 
+// Super Admin: View raw transactions matching logic 1 & 2
+router.get(
+  "/settlements/raw-transactions",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.getRawTransactionsForSettlement,
+);
+
 module.exports = router;
