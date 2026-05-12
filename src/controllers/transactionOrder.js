@@ -805,15 +805,19 @@ module.exports = {
           const productCount = productItems.length || 1;
 
           for (const item of trx.items) {
-            // Check if a platformTransfer already exists for this item
-            const existingTransfer = await platformTransfer.findOne({
+            // Check if balance was already credited for this item
+            // We check both item ID and order ID for safety
+            const existingHistory = await CompanyAdsBalanceHistory.findOne({
               where: {
-                transactionId: trx.id,
-                transactionItemId: item.id,
+                [Op.or]: [
+                  { referenceId: item.id },
+                  { referenceId: ord.id }
+                ],
+                type: { [Op.in]: ["PRODUCT_SETTLEMENT", "VOUCHER_SETTLEMENT"] }
               },
             });
 
-            if (!existingTransfer && trx.location && trx.location.companyId) {
+            if (!existingHistory && trx.location && trx.location.companyId) {
               // If user provided specific transactionItemIds, filter by them
               const { transactionItemIds } = req.body;
               if (Array.isArray(transactionItemIds) && transactionItemIds.length > 0) {
@@ -877,7 +881,7 @@ module.exports = {
             item.companyId,
             item.netAmount,
             item.itemType === "product" ? "PRODUCT_SETTLEMENT" : "VOUCHER_SETTLEMENT",
-            item.orderId,
+            item.transactionItemId, // Use transactionItemId as specific reference
             `Backfill settlement: ${item.itemName} (${item.orderNumber})`
           );
 
@@ -973,11 +977,17 @@ module.exports = {
           }
 
           for (const item of trx.items) {
-            // Check if a platformTransfer already exists for this item
-            const existingTransfer = await require("../models").platformTransfer.findOne({
+            // Check if balance was already credited for this item
+            const { CompanyAdsBalanceHistory } = require("../models");
+            const { Op } = require("sequelize");
+            
+            const existingHistory = await CompanyAdsBalanceHistory.findOne({
               where: {
-                transactionId: trx.id,
-                transactionItemId: item.id,
+                [Op.or]: [
+                  { referenceId: item.id },
+                  { referenceId: ord.id }
+                ],
+                type: { [Op.in]: ["PRODUCT_SETTLEMENT", "VOUCHER_SETTLEMENT"] }
               },
             });
 
@@ -1004,7 +1014,7 @@ module.exports = {
               grossAmount,
               orderStatus: trx.orderStatus,
               paymentStatus: ord.paymentStatus,
-              isSettled: !!existingTransfer, // True if already settled
+              isSettled: !!existingHistory, // True if already settled in balance history
               createdAt: item.createdAt,
             });
           }
