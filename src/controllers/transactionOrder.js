@@ -761,7 +761,6 @@ module.exports = {
         transactionItem: TransactionItem,
         platformTransfer,
         masterLocation,
-        transactionShipping,
       } = require("../models");
       const balanceService = require("../services/balance.service");
       const voucherService = require("../services/voucher.service");
@@ -793,12 +792,6 @@ module.exports = {
                 as: "location",
                 attributes: ["id", "name", "companyId"],
               },
-              {
-                model: transactionShipping,
-                as: "shipping",
-                attributes: ["shippingFee"],
-                required: false,
-              },
             ],
           },
         ],
@@ -808,8 +801,8 @@ module.exports = {
 
       for (const ord of paidOrders) {
         for (const trx of ord.transactions) {
-          // Get shipping fee from transaction record or shipping sub-record
-          const shippingFee = parseFloat(trx.shippingFee || trx.shipping?.shippingFee || 0);
+          // shippingFee is a direct field on the transaction model
+          const shippingFee = parseFloat(trx.shippingFee || 0);
           const productItems = trx.items.filter(i => i.itemType === "product");
           const productCount = productItems.length || 1;
 
@@ -920,7 +913,6 @@ module.exports = {
         transaction: Transaction,
         transactionItem: TransactionItem,
         masterLocation,
-        transactionShipping,
       } = require("../models");
 
       // Find ALL orders that are PAID regardless of transaction orderStatus
@@ -943,12 +935,6 @@ module.exports = {
                 as: "location",
                 attributes: ["id", "name", "companyId"],
               },
-              {
-                model: transactionShipping,
-                as: "shipping",
-                attributes: ["shippingFee"],
-                required: false,
-              },
             ],
           },
         ],
@@ -957,9 +943,8 @@ module.exports = {
       const list = [];
       for (const ord of paidOrders) {
         for (const trx of ord.transactions) {
-          // Shipping fee applies per-transaction (not per-item)
-          // For product transactions, add shippingFee to the amount
-          const shippingFee = parseFloat(trx.shippingFee || trx.shipping?.shippingFee || 0);
+          // shippingFee is a direct field on the transaction model
+          const shippingFee = parseFloat(trx.shippingFee || 0);
 
           // Count how many product items in this transaction (to split shipping fee)
           const productItems = trx.items.filter(i => i.itemType === "product");
