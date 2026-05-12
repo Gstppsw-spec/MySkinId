@@ -875,13 +875,18 @@ module.exports = {
 
       for (const item of toProcess) {
         try {
-          await balanceService.addBalance(
+          const balanceResult = await balanceService.addBalance(
             item.companyId,
             item.netAmount,
             item.itemType === "product" ? "PRODUCT_SETTLEMENT" : "VOUCHER_SETTLEMENT",
             item.orderId,
             `Backfill settlement: ${item.itemName} (${item.orderNumber})`
           );
+
+          if (!balanceResult.status) {
+            throw new Error(balanceResult.message || "Failed to add balance");
+          }
+
           results.push({ ...item, status: "settled" });
 
           // Credit voucher subsidy once per order
@@ -949,6 +954,8 @@ module.exports = {
       });
 
       const list = [];
+      const { relationshipUserCompany } = require("../models");
+
       for (const ord of paidOrders) {
         for (const trx of ord.transactions) {
           // shippingFee is a direct field on the transaction model
@@ -957,6 +964,15 @@ module.exports = {
           // Count how many product items in this transaction (to split shipping fee)
           const productItems = trx.items.filter(i => i.itemType === "product");
           const productCount = productItems.length || 1;
+
+          // Fallback companyId calculation for transactions without location (like topups)
+          let fallbackCompanyId = null;
+          if (!trx.location?.companyId && ord.customerId) {
+            const link = await relationshipUserCompany.findOne({
+              where: { userId: ord.customerId, isactive: true }
+            });
+            if (link) fallbackCompanyId = link.companyId;
+          }
 
           for (const item of trx.items) {
             const itemPrice = parseFloat(item.totalPrice);
@@ -976,7 +992,7 @@ module.exports = {
               voucherCode: item.voucherCode || null,
               locationName: trx.location?.name || null,
               locationId: trx.locationId || null,
-              companyId: trx.location?.companyId || null,
+              companyId: trx.location?.companyId || fallbackCompanyId,
               itemPrice,
               shippingFee: itemShippingFee,
               grossAmount,
