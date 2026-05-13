@@ -275,5 +275,18 @@ module.exports = {
     } catch (error) {
       return response.serverError(res, error);
     }
+  },
+
+  async trackClick(req, res) {
+    try {
+      const { adsId } = req.body;
+      if (!adsId) return response.error(res, "adsId is required");
+
+      const result = await adsService.trackClick(adsId);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, null);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
   }
 };

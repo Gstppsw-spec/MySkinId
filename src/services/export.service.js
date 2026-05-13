@@ -1,4 +1,5 @@
 const PDFDocument = require("pdfkit");
+const ExcelJS = require("exceljs");
 const { Op } = require("sequelize");
 const {
   masterUser,
@@ -12,6 +13,9 @@ const {
   relationshipServiceLocation,
   relationshipPackageLocation,
   masterPackageItems,
+  masterCustomer,
+  AdsPurchase,
+  AdsConfig,
 } = require("../models");
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -608,6 +612,180 @@ function generatePDF(config) {
   });
 }
 
+/**
+ * Generate a styled Excel sheet and return it as a Buffer.
+ *
+ * @param {Object} config
+ * @param {string} config.title - Report title
+ * @param {Array}  config.columns - Array of { header, width }
+ * @param {Array}  config.rows - Array of row arrays
+ * @returns {Promise<Buffer>}
+ */
+async function generateExcel(config) {
+  const { title, columns, rows } = config;
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet(title.slice(0, 31)); // Worksheet names cannot exceed 31 chars
+
+  // Add title row
+  const titleRow = worksheet.addRow([title]);
+  titleRow.font = { bold: true, size: 14 };
+  worksheet.mergeCells(1, 1, 1, columns.length);
+  
+  // Add printed date and total
+  worksheet.addRow([`Dicetak pada: ${formatDate(new Date())}`]);
+  worksheet.addRow([`Total Data: ${rows.length} Item`]);
+  worksheet.addRow([]); // empty row
+
+  // Add headers
+  const headerRow = worksheet.addRow(columns.map(c => c.header));
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF6C3AE0' } // Purple
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'left' };
+  });
+
+  // Add data rows
+  rows.forEach((row, rowIndex) => {
+    const dataRow = worksheet.addRow(row);
+    if (rowIndex % 2 === 1) {
+      dataRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF8F6FF' } // Alt row purple
+        };
+      });
+    }
+  });
+
+  // Set column widths (rough approximation from pdf widths)
+  columns.forEach((col, idx) => {
+    worksheet.getColumn(idx + 1).width = col.width / 5 < 10 ? 10 : col.width / 5;
+  });
+
+  // Add borders to table
+  const startRow = 5;
+  const endRow = startRow + rows.length;
+  for (let r = startRow; r <= endRow; r++) {
+    const row = worksheet.getRow(r);
+    for (let c = 1; c <= columns.length; c++) {
+      const cell = row.getCell(c);
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+      };
+    }
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return buffer;
+}
+
+async function fetchCustomers(startDate, endDate) {
+  const dateWhere = buildDateFilter(startDate, endDate);
+
+  const customers = await masterCustomer.findAll({
+    where: { ...dateWhere },
+    order: [["createdAt", "ASC"]],
+  });
+
+  const rows = customers.map((c, idx) => [
+    idx + 1,
+    c.name || "-",
+    c.email || "-",
+    c.phoneNumber || "-",
+    formatDate(c.createdAt), // Tanggal Install/Register
+    c.lastActiveAt ? formatDate(c.lastActiveAt) : "-", // Terakhir Buka
+  ]);
+
+  return {
+    title: "Laporan Data Customer",
+    columns: [
+      { header: "No", width: 30 },
+      { header: "Nama Lengkap", width: 120 },
+      { header: "Email", width: 130 },
+      { header: "No. Telepon", width: 100 },
+      { header: "Tanggal Register", width: 100 },
+      { header: "Terakhir Buka App", width: 100 },
+    ],
+    rows,
+    totalData: rows.length,
+  };
+}
+
+async function fetchAdsPerformance(startDate, endDate, companyIds, locationIds) {
+  const dateWhere = buildDateFilter(startDate, endDate);
+  const whereLocation = {};
+  const whereCompany = {};
+
+  if (locationIds && locationIds.length > 0) {
+    whereLocation.id = { [Op.in]: locationIds };
+  }
+  if (companyIds && companyIds.length > 0) {
+    whereCompany.id = { [Op.in]: companyIds };
+  }
+
+  const ads = await AdsPurchase.findAll({
+    where: { 
+      status: { [Op.in]: ["PAID", "EXPIRED"] },
+      ...dateWhere 
+    },
+    include: [
+      {
+        model: masterLocation,
+        as: "location",
+        where: whereLocation,
+        include: [
+          {
+            model: masterCompany,
+            as: "company",
+            where: whereCompany,
+            attributes: ["name"]
+          }
+        ]
+      },
+      {
+        model: AdsConfig,
+        as: "config"
+      }
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  const rows = ads.map((ad, idx) => [
+    idx + 1,
+    ad.location?.company?.name || "-",
+    ad.location?.name || "-",
+    ad.adsType || "-",
+    formatDate(ad.startDate),
+    formatDate(ad.endDate),
+    ad.status,
+    ad.clickCount || 0,
+  ]);
+
+  return {
+    title: "Laporan Performa Iklan (Ads)",
+    columns: [
+      { header: "No", width: 30 },
+      { header: "Perusahaan", width: 100 },
+      { header: "Outlet", width: 100 },
+      { header: "Tipe Iklan", width: 90 },
+      { header: "Mulai Tayang", width: 90 },
+      { header: "Selesai Tayang", width: 90 },
+      { header: "Status", width: 60 },
+      { header: "Total Klik", width: 60 },
+    ],
+    rows,
+    totalData: rows.length,
+  };
+}
+
 // ─── Exported Functions ──────────────────────────────────────────────────────
 
 module.exports = {
@@ -617,5 +795,8 @@ module.exports = {
   fetchProducts,
   fetchPackages,
   fetchLocations,
+  fetchCustomers,
+  fetchAdsPerformance,
   generatePDF,
+  generateExcel,
 };

@@ -1703,6 +1703,7 @@ module.exports = {
 
       const start = new Date(startDate);
       const end = new Date(endDate);
+      end.setUTCHours(23, 59, 59, 999);
       if (end < start) throw new Error("End date must be at or after start date");
 
       // Calculate days
@@ -4032,12 +4033,15 @@ module.exports = {
         const voucherDiscountPortion = Math.round(proportion * totalVoucherDiscount);
         const mitraSubsidyPortion = Math.round(proportion * totalMitraSubsidy);
 
-        // Platform Fee (4% for partners registered May 2026 onwards, 1% or env value for older)
+        // Platform Fee (Individual company fee, or fallback to 4% for partners registered May 2026 onwards, 1% for older)
         const cutoffDate = new Date("2026-05-01T00:00:00Z");
         const companyCreatedAt = plain.location?.company?.createdAt;
+        const companyPlatformFee = plain.location?.company?.platformFee;
         let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
         
-        if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
+        if (companyPlatformFee !== null && companyPlatformFee !== undefined) {
+            platformFeePercent = parseFloat(companyPlatformFee);
+        } else if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
             platformFeePercent = 4;
         }
         const platformFee = Math.round((subtotal * platformFeePercent) / 100);
@@ -5172,12 +5176,15 @@ module.exports = {
           const mitraSubsidy = Math.round(proportion * totalMitraSubsidy);
           const myskinSubsidy = Math.round(proportion * totalMyskinSubsidy);
 
-          // Platform Fee (4% for partners registered May 2026 onwards, 1% or env value for older)
+          // Platform Fee (Individual company fee, or fallback to 4% for partners registered May 2026 onwards, 1% for older)
           const cutoffDate = new Date("2026-05-01T00:00:00Z");
           const companyCreatedAt = plain.location?.company?.createdAt;
+          const companyPlatformFee = plain.location?.company?.platformFee;
           let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
           
-          if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
+          if (companyPlatformFee !== null && companyPlatformFee !== undefined) {
+              platformFeePercent = parseFloat(companyPlatformFee);
+          } else if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
               platformFeePercent = 4;
           }
           const platformFee = Math.round((itemSubtotal * platformFeePercent) / 100);
@@ -5302,17 +5309,23 @@ module.exports = {
         paymentStatus: plainOrder.paymentStatus,
         customerPhone: plainOrder.transactions?.[0]?.shipping?.receiverPhone || plainOrder.customer?.phoneNumber || null,
         createdAt: plainOrder.createdAt,
-        payments: (plainOrder.payments || []).map((p) => ({
-          paymentMethod: p.paymentMethod,
-          paymentStatus: p.paymentStatus,
-          amount: p.amount,
-          checkoutUrl: p.checkoutUrl,
-          instructions: p.instructions 
-            ? (typeof p.instructions === "string" && p.instructions.startsWith("[") 
-                ? JSON.parse(p.instructions) 
-                : p.instructions.split("\n"))
-            : [],
-        })),
+        payments: (plainOrder.payments || []).map((p) => {
+          const paymentObj = {
+            paymentMethod: p.paymentMethod,
+            paymentStatus: p.paymentStatus,
+            amount: p.amount,
+            checkoutUrl: p.checkoutUrl,
+            instructions: p.instructions 
+              ? (typeof p.instructions === "string" && p.instructions.startsWith("[") 
+                  ? JSON.parse(p.instructions) 
+                  : p.instructions.split("\n"))
+              : [],
+          };
+          if (p.paymentMethod === "QRIS" && p.gatewayResponse?.qr_string) {
+            paymentObj.qrString = p.gatewayResponse.qr_string;
+          }
+          return paymentObj;
+        }),
         transactions: (plainOrder.transactions || []).map((trx) => ({
           id: trx.id,
           transactionNumber: trx.transactionNumber,
@@ -5618,18 +5631,19 @@ module.exports = {
           mdrFee = Math.round((subtotal / totalOrderAmount) * parseFloat(paymentData.mdrFee));
         }
 
-        // Platform Fee Calculation (1% of subtotal)
-        // If transfer already exists, use that. Otherwise calculate.
+        // Platform Fee Calculation (Individual company fee, or fallback to 4% for partners registered May 2026 onwards, 1% for older)
         let platformFee = 0;
         if (trx.transfers && trx.transfers.length > 0) {
           platformFee = parseFloat(trx.transfers[0].platformFee || 0);
         } else {
-          // Platform Fee (4% for partners registered May 2026 onwards, 1% or env value for older)
           const cutoffDate = new Date("2026-05-01T00:00:00Z");
           const companyCreatedAt = trx.location?.company?.createdAt;
-          let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "0");
+          const companyPlatformFee = trx.location?.company?.platformFee;
+          let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
           
-          if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
+          if (companyPlatformFee !== null && companyPlatformFee !== undefined) {
+              platformFeePercent = parseFloat(companyPlatformFee);
+          } else if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
               platformFeePercent = 4;
           }
           platformFee = Math.round((subtotal * platformFeePercent) / 100);

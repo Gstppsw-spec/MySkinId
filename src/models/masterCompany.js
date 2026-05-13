@@ -143,7 +143,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
-      verifiedDate: DataTypes.DATE,
+      verifiedDate: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      platformFee: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+      },
     },
     {
       sequelize,

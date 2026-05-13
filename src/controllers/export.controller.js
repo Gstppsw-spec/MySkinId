@@ -5,7 +5,7 @@ const exportService = require("../services/export.service");
  */
 async function handleExport(req, res, fetchFn, fileNamePrefix) {
   try {
-    const { startDate, endDate, companyIds, locationIds } = req.query;
+    const { startDate, endDate, companyIds, locationIds, format } = req.query;
 
     const companyIdsArray = companyIds ? companyIds.split(",") : undefined;
     const locationIdsArray = locationIds ? locationIds.split(",") : undefined;
@@ -15,27 +15,34 @@ async function handleExport(req, res, fetchFn, fileNamePrefix) {
 
     if (config.rows.length === 0) {
       return res.status(404).json({
-        status: false,
-        message: "Tidak ada data untuk di-export",
-        data: null,
+        success: false,
+        message: "No data found",
       });
     }
 
-    // Generate PDF
-    const pdfBuffer = await exportService.generatePDF(config);
+    const fileDate = new Date().toISOString().slice(0, 10);
 
-    // Set response headers
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const fileName = `${fileNamePrefix}_${timestamp}.pdf`;
-
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${fileName}"`
-    );
-    res.setHeader("Content-Length", pdfBuffer.length);
-
-    return res.send(pdfBuffer);
+    if (format === "excel") {
+      const buffer = await exportService.generateExcel(config);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileNamePrefix}_${fileDate}.xlsx"`
+      );
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      return res.send(buffer);
+    } else {
+      // Default to PDF
+      const buffer = await exportService.generatePDF(config);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${fileNamePrefix}_${fileDate}.pdf"`
+      );
+      res.setHeader("Content-Type", "application/pdf");
+      return res.send(buffer);
+    }
   } catch (error) {
     console.error(`Export ${fileNamePrefix} error:`, error);
     return res.status(500).json({
@@ -64,10 +71,18 @@ module.exports = {
   },
 
   async exportPackages(req, res) {
-    return handleExport(req, res, exportService.fetchPackages, "laporan_paket");
+    return handleExport(req, res, exportService.fetchPackages, "laporan_package");
   },
 
   async exportLocations(req, res) {
-    return handleExport(req, res, exportService.fetchLocations, "laporan_outlet");
+    return handleExport(req, res, exportService.fetchLocations, "laporan_location");
   },
+
+  async exportCustomers(req, res) {
+    return handleExport(req, res, exportService.fetchCustomers, "laporan_customer");
+  },
+
+  async exportAdsPerformance(req, res) {
+    return handleExport(req, res, exportService.fetchAdsPerformance, "laporan_ads_performance");
+  }
 };

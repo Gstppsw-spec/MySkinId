@@ -25,6 +25,7 @@ router.put(
     masterCustomerController.updateProfile
 );
 router.get("/profile", verifyToken, masterCustomerController.getProfile);
+router.post("/track-open", verifyToken, masterCustomerController.trackOpen);
 router.get("/get-customer-by-user-id/:userId", verifyToken, masterCustomerController.getCustomerByUserId);
 
 module.exports = router;

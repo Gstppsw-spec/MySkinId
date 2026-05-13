@@ -901,5 +901,17 @@ module.exports = {
       console.error("getAdminActiveAds Error:", error);
       return { status: false, message: error.message };
     }
+  },
+
+  async trackClick(adsId) {
+    try {
+      const ad = await AdsPurchase.findByPk(adsId);
+      if (!ad) return { status: false, message: "Advertisement not found" };
+
+      await ad.increment("clickCount");
+      return { status: true, message: "Ad click tracked successfully" };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
   }
 };

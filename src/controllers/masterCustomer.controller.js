@@ -307,6 +307,20 @@ class masterCustomerController {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   }
+
+  async trackOpen(req, res) {
+    try {
+      const customerId = req.user.id;
+      const { masterCustomer } = require("../models");
+      await masterCustomer.update(
+        { lastActiveAt: new Date() },
+        { where: { id: customerId } }
+      );
+      return response.success(res, "App open tracked successfully", null);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
 }
 
 module.exports = new masterCustomerController();

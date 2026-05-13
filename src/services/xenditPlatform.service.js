@@ -102,12 +102,15 @@ module.exports = {
         */
 
         const reference = `TRF-${nanoid(12).toUpperCase()}`;
-        // Calculate Fees (4% for partners registered May 2026 onwards, 1% or env value for older)
+        // Calculate Fees (Individual company fee, or fallback to 4% for partners registered May 2026 onwards, 1% for older)
         const cutoffDate = new Date("2026-05-01T00:00:00Z");
         const companyCreatedAt = location.company?.createdAt;
+        const companyPlatformFee = location.company?.platformFee;
         let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
         
-        if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
+        if (companyPlatformFee !== null && companyPlatformFee !== undefined) {
+            platformFeePercent = parseFloat(companyPlatformFee);
+        } else if (companyCreatedAt && new Date(companyCreatedAt) >= cutoffDate) {
             platformFeePercent = 4;
         }
         

@@ -29,9 +29,11 @@ class RelationshipUserCompanyController {
     try {
       const { id } = req.params;
       const payload = req.body;
+      const roleCode = req.user?.roleCode;
       const company = await RelationshipUserCompanyService.updateCompany(
         id,
-        payload
+        payload,
+        roleCode
       );
       return response.success(res, "Company berhasil diperbarui", company);
     } catch (error) {
@@ -104,7 +106,8 @@ class RelationshipUserCompanyController {
         return response.error(res, "Nama company harus diisi", null, 400);
       }
 
-      const data = await RelationshipUserCompanyService.upsertCompany(payload);
+      const roleCode = req.user?.roleCode;
+      const data = await RelationshipUserCompanyService.upsertCompany(payload, roleCode);
       return response.success(res, "Company berhasil diproses (upsert)", data);
     } catch (error) {
       console.error("UPSERT_COMPANY_ERROR:", error);

@@ -6,8 +6,9 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
 const uploadAdsImage = require("../middlewares/uploadAdsImage.middleware");
 const compressImage = require("../middlewares/compressImage");
 
-// --- CUSTOMER ---
+// --- CUSTOMER / PUBLIC ---
 router.get("/", adsController.getAds);
+router.post("/track-click", adsController.trackClick);
 
 // --- ADMIN COMPANY ---
 router.post("/buy", verifyToken, allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN"), uploadAdsImage, compressImage, adsController.buyAds);

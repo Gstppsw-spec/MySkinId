@@ -128,24 +128,35 @@ class RelationshipUserCompanyService {
     };
   }
 
-  async updateCompany(id, payload) {
+  async updateCompany(id, payload, roleCode = null) {
     const company = await masterCompany.findByPk(id);
     if (!company) throw new Error("Company tidak ditemukan");
 
+    const isSuperAdmin = roleCode === "SUPER_ADMIN";
+
     if (company.isVerified) {
       const allowedKeys = ["bankName", "bankAccountNumber", "bankAccountName", "isactive", "isActive"];
+      if (isSuperAdmin) allowedKeys.push("platformFee");
+
+      if (!isSuperAdmin && payload.platformFee !== undefined) {
+        delete payload.platformFee;
+      }
+      
       const payloadKeys = Object.keys(payload);
       const hasDisallowedFields = payloadKeys.some(key => !allowedKeys.includes(key));
 
       if (hasDisallowedFields) {
-        throw new Error("Data company sudah diverifikasi. Hanya data rekening dan status aktif yang dapat diubah.");
+        throw new Error("Data company sudah diverifikasi. Hanya data rekening, status aktif, dan pengaturan spesifik admin yang dapat diubah.");
       }
 
       const updateData = {};
       const statusValue = payload.isactive !== undefined ? payload.isactive : payload.isActive;
       if (statusValue !== undefined) updateData.isactive = statusValue;
       
-      ["bankName", "bankAccountNumber", "bankAccountName"].forEach(key => {
+      const fieldsToUpdate = ["bankName", "bankAccountNumber", "bankAccountName"];
+      if (isSuperAdmin) fieldsToUpdate.push("platformFee");
+
+      fieldsToUpdate.forEach(key => {
         if (payload[key] !== undefined) updateData[key] = payload[key];
       });
 
@@ -159,6 +170,11 @@ class RelationshipUserCompanyService {
 
     // Filter out association fields to avoid validation errors
     const allowedFields = Object.keys(masterCompany.rawAttributes);
+    if (!isSuperAdmin) {
+      const index = allowedFields.indexOf("platformFee");
+      if (index > -1) allowedFields.splice(index, 1);
+    }
+
     const cleanPayload = {};
     Object.keys(payload).forEach((key) => {
       if (allowedFields.includes(key)) {
@@ -191,7 +207,7 @@ class RelationshipUserCompanyService {
     return await masterCompany.create(cleanPayload);
   }
 
-  async upsertCompany(payload) {
+  async upsertCompany(payload, roleCode = null) {
     // Generate code if not provided
     if (!payload.code && payload.name) {
       payload.code = payload.name.toUpperCase().replace(/\s+/g, "_");
@@ -251,18 +267,28 @@ class RelationshipUserCompanyService {
       // Jika sudah ada, check verifikasi lalu update datanya
       if (company.isVerified) {
         const allowedKeys = ["bankName", "bankAccountNumber", "bankAccountName", "isactive", "isActive"];
+        const isSuperAdmin = roleCode === "SUPER_ADMIN";
+        if (isSuperAdmin) allowedKeys.push("platformFee");
+
+        if (!isSuperAdmin && payload.platformFee !== undefined) {
+          delete payload.platformFee;
+        }
+
         const payloadKeys = Object.keys(payload);
         const hasDisallowedFields = payloadKeys.some(key => !allowedKeys.includes(key));
 
         if (hasDisallowedFields) {
-          throw new Error("Data company sudah diverifikasi. Hanya data rekening dan status aktif yang dapat diubah.");
+          throw new Error("Data company sudah diverifikasi. Hanya data rekening, status aktif, dan pengaturan spesifik admin yang dapat diubah.");
         }
 
         const updateData = {};
         const statusValue = payload.isactive !== undefined ? payload.isactive : payload.isActive;
         if (statusValue !== undefined) updateData.isactive = statusValue;
         
-        ["bankName", "bankAccountNumber", "bankAccountName"].forEach(key => {
+        const fieldsToUpdate = ["bankName", "bankAccountNumber", "bankAccountName"];
+        if (isSuperAdmin) fieldsToUpdate.push("platformFee");
+
+        fieldsToUpdate.forEach(key => {
           if (payload[key] !== undefined) updateData[key] = payload[key];
         });
 
@@ -280,9 +306,17 @@ class RelationshipUserCompanyService {
         finalPayload.isactive = true;
       }
 
+      // Hindari update platformFee oleh non super admin
+      if (roleCode !== "SUPER_ADMIN") {
+        delete finalPayload.platformFee;
+      }
+
       await company.update(finalPayload);
     } else {
       // Jika tidak ada, buat baru
+      if (roleCode !== "SUPER_ADMIN") {
+        delete cleanPayload.platformFee;
+      }
       company = await masterCompany.create(cleanPayload);
     }
 
