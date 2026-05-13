@@ -41,6 +41,7 @@ const notificationRoute = require("./routes/notification.route");
 const voucherRoute = require("./routes/voucher.route");
 const referralRoute = require("./routes/referral.route");
 const balanceRoute = require("./routes/balance.route");
+const exportRoute = require("./routes/export.route");
 
 // Cron jobs
 const initGoogleRatingCron = require("./cron/googleRatingCron");
@@ -119,6 +120,7 @@ app.use("/api/v2/notifications", notificationRoute);
 app.use("/api/v2/voucher", voucherRoute);
 app.use("/api/v2/referral", referralRoute);
 app.use("/api/v2/balance", balanceRoute);
+app.use("/api/v2/export", exportRoute);
 
 // Social media routes
 app.use("/api/v2/posts", postRoute);
