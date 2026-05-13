@@ -6,7 +6,7 @@ const { allowRoles } = require("../middlewares/roleMiddleware");
 
 const auth = [verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN")];
 
-router.get("/users", ...auth, exportController.exportUsers);
+router.get("/users", exportController.exportUsers);
 router.get("/companies", ...auth, exportController.exportCompanies);
 router.get("/treatments", ...auth, exportController.exportTreatments);
 router.get("/products", ...auth, exportController.exportProducts);

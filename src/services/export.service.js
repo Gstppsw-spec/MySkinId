@@ -70,19 +70,36 @@ function formatDate(date) {
 
 // ─── Data Fetchers ───────────────────────────────────────────────────────────
 
-async function fetchUsers(startDate, endDate) {
+async function fetchUsers(startDate, endDate, companyIds, locationIds) {
   const dateWhere = buildDateFilter(startDate, endDate);
+  const where = { ...dateWhere };
+
+  const include = [];
+
+  const companyInclude = {
+    model: masterCompany,
+    as: "companies",
+    attributes: ["name"],
+    through: { attributes: [] },
+  };
+  if (companyIds && companyIds.length > 0) {
+    companyInclude.where = { id: companyIds };
+  }
+  include.push(companyInclude);
+
+  if (locationIds && locationIds.length > 0) {
+    include.push({
+      model: masterLocation,
+      as: "locations",
+      where: { id: locationIds },
+      attributes: ["name"],
+      through: { attributes: [] },
+    });
+  }
 
   const users = await masterUser.findAll({
-    where: { ...dateWhere },
-    include: [
-      {
-        model: masterCompany,
-        as: "companies",
-        attributes: ["name"],
-        through: { attributes: [] },
-      },
-    ],
+    where,
+    include,
     order: [["createdAt", "ASC"]],
   });
 
@@ -147,8 +164,12 @@ async function fetchCompanies(startDate, endDate) {
   };
 }
 
-async function fetchTreatments(startDate, endDate) {
+async function fetchTreatments(startDate, endDate, companyIds, locationIds) {
   const dateWhere = buildDateFilter(startDate, endDate);
+
+  const locationWhere = {};
+  if (locationIds && locationIds.length > 0) locationWhere.id = locationIds;
+  if (companyIds && companyIds.length > 0) locationWhere.companyId = companyIds;
 
   const services = await masterService.findAll({
     where: { ...dateWhere },
@@ -156,6 +177,7 @@ async function fetchTreatments(startDate, endDate) {
       {
         model: masterLocation,
         as: "locations",
+        where: Object.keys(locationWhere).length > 0 ? locationWhere : undefined,
         attributes: ["name"],
         through: { attributes: [] },
       },
@@ -195,8 +217,12 @@ async function fetchTreatments(startDate, endDate) {
   };
 }
 
-async function fetchProducts(startDate, endDate) {
+async function fetchProducts(startDate, endDate, companyIds, locationIds) {
   const dateWhere = buildDateFilter(startDate, endDate);
+
+  const locationWhere = {};
+  if (locationIds && locationIds.length > 0) locationWhere.id = locationIds;
+  if (companyIds && companyIds.length > 0) locationWhere.companyId = companyIds;
 
   const products = await masterProduct.findAll({
     where: { ...dateWhere },
@@ -204,6 +230,7 @@ async function fetchProducts(startDate, endDate) {
       {
         model: masterLocation,
         as: "locations",
+        where: Object.keys(locationWhere).length > 0 ? locationWhere : undefined,
         attributes: ["name"],
         through: { attributes: [] },
       },
@@ -243,8 +270,12 @@ async function fetchProducts(startDate, endDate) {
   };
 }
 
-async function fetchPackages(startDate, endDate) {
+async function fetchPackages(startDate, endDate, companyIds, locationIds) {
   const dateWhere = buildDateFilter(startDate, endDate);
+
+  const locationWhere = {};
+  if (locationIds && locationIds.length > 0) locationWhere.id = locationIds;
+  if (companyIds && companyIds.length > 0) locationWhere.companyId = companyIds;
 
   const packages = await masterPackage.findAll({
     where: { ...dateWhere },
@@ -252,6 +283,7 @@ async function fetchPackages(startDate, endDate) {
       {
         model: masterLocation,
         as: "locations",
+        where: Object.keys(locationWhere).length > 0 ? locationWhere : undefined,
         attributes: ["name"],
         through: { attributes: [] },
       },
@@ -291,11 +323,15 @@ async function fetchPackages(startDate, endDate) {
   };
 }
 
-async function fetchLocations(startDate, endDate) {
+async function fetchLocations(startDate, endDate, companyIds, locationIds) {
   const dateWhere = buildDateFilter(startDate, endDate);
+  const where = { ...dateWhere };
+
+  if (locationIds && locationIds.length > 0) where.id = locationIds;
+  if (companyIds && companyIds.length > 0) where.companyId = companyIds;
 
   const locations = await masterLocation.findAll({
-    where: { ...dateWhere },
+    where,
     order: [["createdAt", "ASC"]],
   });
 
@@ -340,8 +376,8 @@ function generatePDF(config) {
     const doc = new PDFDocument({
       size: "A4",
       layout: "landscape",
-      margins: { top: 40, bottom: 50, left: 40, right: 40 },
-      bufferPages: true,
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      autoPageBreak: false,
     });
 
     const buffers = [];
@@ -349,11 +385,14 @@ function generatePDF(config) {
     doc.on("end", () => resolve(Buffer.concat(buffers)));
     doc.on("error", reject);
 
-    const pageWidth =
-      doc.page.width - doc.page.margins.left - doc.page.margins.right;
-    const pageHeight =
-      doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
-    const startX = doc.page.margins.left;
+    const MARGIN_TOP = 40;
+    const MARGIN_BOTTOM = 50;
+    const MARGIN_LEFT = 40;
+    const MARGIN_RIGHT = 40;
+
+    const pageWidth = doc.page.width - MARGIN_LEFT - MARGIN_RIGHT;
+    const pageHeight = doc.page.height - MARGIN_TOP - MARGIN_BOTTOM;
+    const startX = MARGIN_LEFT;
     const ROW_HEIGHT = 28;
     const HEADER_ROW_HEIGHT = 32;
 
@@ -367,7 +406,7 @@ function generatePDF(config) {
     }));
 
     let currentPage = 1;
-    let currentY = doc.page.margins.top;
+    let currentY = MARGIN_TOP;
 
     // ── Draw page header (title, date, total data) ──────────────────────
     function drawPageHeader() {
@@ -462,8 +501,7 @@ function generatePDF(config) {
 
     // ── Draw page footer ────────────────────────────────────────────────
     function drawFooter(pageNum) {
-      const footerY =
-        doc.page.height - doc.page.margins.bottom + 10;
+      const footerY = doc.page.height - MARGIN_BOTTOM + 10;
 
       doc
         .font("Helvetica")
@@ -536,18 +574,21 @@ function generatePDF(config) {
     drawTableHeader();
 
     let tableStartY = tableStartYFirstPage;
-    const maxY = doc.page.height - doc.page.margins.bottom - 10;
+    const maxY = doc.page.height - MARGIN_BOTTOM - 10;
 
     rows.forEach((row, idx) => {
       // Check if we need a new page
       if (currentY + ROW_HEIGHT > maxY) {
         // Draw borders for current page table
         drawTableOuterBorder(tableStartY, currentY);
+        
+        // Draw footer for current page
+        drawFooter(currentPage);
 
         // Start new page
-        doc.addPage();
+        doc.addPage({ size: "A4", layout: "landscape", margins: { top: 0, bottom: 0, left: 0, right: 0 } });
         currentPage++;
-        currentY = doc.page.margins.top;
+        currentY = MARGIN_TOP;
 
         // Re-draw table header on new page
         tableStartY = currentY;
@@ -559,13 +600,9 @@ function generatePDF(config) {
 
     // Draw borders for the last page
     drawTableOuterBorder(tableStartY, currentY);
-
-    // Draw footers on all pages
-    const pageCount = doc.bufferedPageRange();
-    for (let i = 0; i < pageCount.count; i++) {
-      doc.switchToPage(pageCount.start + i);
-      drawFooter(i + 1);
-    }
+    
+    // Draw footer for the last page
+    drawFooter(currentPage);
 
     doc.end();
   });

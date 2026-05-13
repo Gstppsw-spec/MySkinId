@@ -5,10 +5,13 @@ const exportService = require("../services/export.service");
  */
 async function handleExport(req, res, fetchFn, fileNamePrefix) {
   try {
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, companyIds, locationIds } = req.query;
+
+    const companyIdsArray = companyIds ? companyIds.split(",") : undefined;
+    const locationIdsArray = locationIds ? locationIds.split(",") : undefined;
 
     // Fetch data
-    const config = await fetchFn(startDate, endDate);
+    const config = await fetchFn(startDate, endDate, companyIdsArray, locationIdsArray);
 
     if (config.rows.length === 0) {
       return res.status(404).json({
