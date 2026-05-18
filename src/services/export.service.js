@@ -150,6 +150,7 @@ async function fetchCompanies(startDate, endDate) {
     c.bankName || "-",
     c.bankAccountNumber || "-",
     c.bankAccountName || "-",
+    c.platformFee !== null && c.platformFee !== undefined ? c.platformFee + "%" : "Default",
   ]);
 
   return {
@@ -162,6 +163,7 @@ async function fetchCompanies(startDate, endDate) {
       { header: "Nama Bank", width: 70 },
       { header: "No. Rekening", width: 80 },
       { header: "Nama Pemilik Rekening", width: 105 },
+      { header: "Platform Fee", width: 70 },
     ],
     rows,
     totalData: rows.length,
@@ -460,19 +462,41 @@ function generatePDF(config) {
       currentY += HEADER_ROW_HEIGHT;
     }
 
+    // Helper to calculate required row height based on cell content wrapping
+    function calculateRowHeight(row) {
+      let maxHeight = ROW_HEIGHT;
+      scaledColumns.forEach((col, colIdx) => {
+        const cellValue =
+          row[colIdx] !== undefined && row[colIdx] !== null
+            ? String(row[colIdx])
+            : "-";
+        
+        doc.font("Helvetica").fontSize(FONT_SIZE_TABLE);
+        const cellHeight = doc.heightOfString(cellValue, {
+          width: col.width - 12,
+          lineBreak: true,
+        });
+        const paddedHeight = cellHeight + 12; // 6pt top/bottom padding
+        if (paddedHeight > maxHeight) {
+          maxHeight = paddedHeight;
+        }
+      });
+      return Math.round(maxHeight);
+    }
+
     // ── Draw a single data row ──────────────────────────────────────────
-    function drawDataRow(row, rowIndex) {
+    function drawDataRow(row, rowIndex, calculatedHeight) {
       // Alternate row background
       if (rowIndex % 2 === 1) {
         doc
-          .rect(startX, currentY, pageWidth, ROW_HEIGHT)
+          .rect(startX, currentY, pageWidth, calculatedHeight)
           .fill(ROW_ALT_COLOR);
       }
 
       // Draw row border (bottom line)
       doc
-        .moveTo(startX, currentY + ROW_HEIGHT)
-        .lineTo(startX + pageWidth, currentY + ROW_HEIGHT)
+        .moveTo(startX, currentY + calculatedHeight)
+        .lineTo(startX + pageWidth, currentY + calculatedHeight)
         .strokeColor(BORDER_COLOR)
         .lineWidth(0.5)
         .stroke();
@@ -490,8 +514,8 @@ function generatePDF(config) {
           .fontSize(FONT_SIZE_TABLE)
           .fillColor(TEXT_COLOR);
 
-        const textY =
-          currentY + (ROW_HEIGHT - FONT_SIZE_TABLE) / 2;
+        const textHeight = doc.heightOfString(cellValue, { width: col.width - 12 });
+        const textY = currentY + (calculatedHeight - textHeight) / 2;
         doc.text(cellValue, x + 6, textY, {
           width: col.width - 12,
           align: colIdx === 0 ? "center" : "left",
@@ -500,7 +524,7 @@ function generatePDF(config) {
         x += col.width;
       });
 
-      currentY += ROW_HEIGHT;
+      currentY += calculatedHeight;
     }
 
     // ── Draw page footer ────────────────────────────────────────────────
@@ -581,8 +605,10 @@ function generatePDF(config) {
     const maxY = doc.page.height - MARGIN_BOTTOM - 10;
 
     rows.forEach((row, idx) => {
+      const calculatedHeight = calculateRowHeight(row);
+
       // Check if we need a new page
-      if (currentY + ROW_HEIGHT > maxY) {
+      if (currentY + calculatedHeight > maxY) {
         // Draw borders for current page table
         drawTableOuterBorder(tableStartY, currentY);
         
@@ -599,7 +625,7 @@ function generatePDF(config) {
         drawTableHeader();
       }
 
-      drawDataRow(row, idx);
+      drawDataRow(row, idx, calculatedHeight);
     });
 
     // Draw borders for the last page

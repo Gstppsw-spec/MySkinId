@@ -68,5 +68,18 @@ module.exports = {
     } catch (error) {
       return res.status(500).json({ status: false, message: error.message });
     }
+  },
+
+  /**
+   * Get available disbursement banks from Xendit
+   */
+  async getAvailableDisbursementBanks(req, res) {
+    try {
+      const xenditPlatformService = require("../services/xenditPlatform.service");
+      const result = await xenditPlatformService.getAvailableDisbursementBanks();
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
   }
 };

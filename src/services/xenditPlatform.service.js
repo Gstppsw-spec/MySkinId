@@ -388,4 +388,31 @@ module.exports = {
             return { status: false, message: `Failed to fetch Xendit transaction: ${detail}` };
         }
     },
+
+    /**
+     * Get available disbursement banks from Xendit
+     */
+    async getAvailableDisbursementBanks() {
+        try {
+            const response = await axios.get(
+                `${XENDIT_BASE_URL}/available_disbursements_banks`,
+                {
+                    headers: {
+                        Authorization: `Basic ${_getAuthHeader()}`,
+                    },
+                }
+            );
+
+            // Filter to only include actual banks, excluding e-wallets
+            const excludedCodes = ["DANA", "GOPAY", "LINKAJA", "OVO", "SHOPEEPAY"];
+            const filteredBanks = response.data.filter(
+                bank => !excludedCodes.includes(bank.code.toUpperCase())
+            );
+
+            return { status: true, data: filteredBanks };
+        } catch (error) {
+            const detail = error.response ? JSON.stringify(error.response.data) : error.message;
+            return { status: false, message: `Failed to fetch available disbursement banks: ${detail}` };
+        }
+    },
 };
