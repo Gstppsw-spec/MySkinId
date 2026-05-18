@@ -1701,9 +1701,11 @@ module.exports = {
       const companyId = location.companyId;
       if (!companyId) throw new Error("Location is not linked to a company");
 
-      const start = new Date(startDate);
-      const end = new Date(endDate);
-      end.setUTCHours(23, 59, 59, 999);
+      const startStr = typeof startDate === "string" ? startDate.split("T")[0] : new Date(startDate).toISOString().split("T")[0];
+      const endStr = typeof endDate === "string" ? endDate.split("T")[0] : new Date(endDate).toISOString().split("T")[0];
+
+      const start = new Date(`${startStr}T00:00:00+07:00`);
+      const end = new Date(`${endStr}T23:59:59.999+07:00`);
       if (end < start) throw new Error("End date must be at or after start date");
 
       // Calculate days
