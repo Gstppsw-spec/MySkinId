@@ -186,7 +186,7 @@ class RelationshipUserCompanyService {
     return company;
   }
 
-  async addCompany(payload) {
+  async addCompany(payload, roleCode = null) {
     // Generate code if not provided
     if (!payload.code && payload.name) {
       payload.code = payload.name.toUpperCase().replace(/\s+/g, "_");
@@ -197,6 +197,11 @@ class RelationshipUserCompanyService {
 
     // Filter out association fields to avoid validation errors
     const allowedFields = Object.keys(masterCompany.rawAttributes);
+    if (roleCode !== "SUPER_ADMIN") {
+      const index = allowedFields.indexOf("platformFee");
+      if (index > -1) allowedFields.splice(index, 1);
+    }
+
     const cleanPayload = {};
     Object.keys(payload).forEach((key) => {
       if (allowedFields.includes(key)) {

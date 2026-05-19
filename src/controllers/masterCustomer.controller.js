@@ -379,7 +379,7 @@ class masterCustomerController {
 
       // 4. Fetch 5 latest active customers
       const latestCustomers = await masterCustomer.findAll({
-        attributes: ["id", "name", "email", "lastActiveAt", "loginMethod", "profileImageUrl"],
+        attributes: ["id", "name", "email", "lastActiveAt", "loginMethod", "profileImageUrl", "createdAt"],
         order: [
           [Sequelize.literal("CASE WHEN lastActiveAt IS NULL THEN 1 ELSE 0 END"), "ASC"],
           ["lastActiveAt", "DESC"],
@@ -424,6 +424,7 @@ class masterCustomerController {
           profileImageUrl: c.profileImageUrl,
           lastActiveAt: c.lastActiveAt,
           lastActiveDiff: getRelativeTimeIndonesian(c.lastActiveAt),
+          joinedAt: c.createdAt,
           deviceOrOs,
           status: isOnline ? "ONLINE" : "OFFLINE",
           source: "MOBILE APP"

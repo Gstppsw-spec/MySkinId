@@ -3993,7 +3993,7 @@ module.exports = {
               {
                 model: require("../models").masterCompany,
                 as: "company",
-                attributes: ["createdAt"]
+                attributes: ["createdAt", "platformFee"]
               }
             ]
           },
@@ -5123,7 +5123,7 @@ module.exports = {
               {
                 model: require("../models").masterCompany,
                 as: "company",
-                attributes: ["createdAt"]
+                attributes: ["createdAt", "platformFee"]
               }
             ]
           },
@@ -5608,7 +5608,7 @@ module.exports = {
               {
                 model: require("../models").masterCompany,
                 as: "company",
-                attributes: ["createdAt"]
+                attributes: ["createdAt", "platformFee"]
               }
             ]
           },
@@ -5734,7 +5734,7 @@ module.exports = {
         { header: "Service Fee share", key: "serviceFeeShare", width: 15 },
         { header: "Paid by Customer", key: "totalPaid", width: 15 },
         { header: "Xendit MDR", key: "xenditMdrFee", width: 15 },
-        { header: "MySkin 1% Fee", key: "platformFee", width: 15 },
+        { header: "Platform Fee", key: "platformFee", width: 15 },
         { header: "Net for Outlet", key: "netForOutlet", width: 15 },
         { header: "Status", key: "status", width: 12 },
       ];
@@ -5802,7 +5802,7 @@ module.exports = {
           "Subtotal",
           "Shipping",
           "MDR",
-          "Fee 1%",
+          "Plat. Fee",
           "Net",
         ];
 

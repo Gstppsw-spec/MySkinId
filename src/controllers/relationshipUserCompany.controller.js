@@ -85,7 +85,8 @@ class RelationshipUserCompanyController {
         return response.error(res, "Nama company harus diisi", null, 400);
       }
 
-      const data = await RelationshipUserCompanyService.addCompany(payload);
+      const roleCode = req.user?.roleCode;
+      const data = await RelationshipUserCompanyService.addCompany(payload, roleCode);
       return response.success(res, "Company berhasil ditambahkan", data);
     } catch (error) {
       console.error(error);
