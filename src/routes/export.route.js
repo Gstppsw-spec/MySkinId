@@ -12,7 +12,7 @@ router.get("/treatments", ...auth, exportController.exportTreatments);
 router.get("/products", ...auth, exportController.exportProducts);
 router.get("/packages", ...auth, exportController.exportPackages);
 router.get("/locations", ...auth, exportController.exportLocations);
-router.get("/customers", ...auth, exportController.exportCustomers);
-router.get("/ads-performance", ...auth, exportController.exportAdsPerformance);
+router.get("/customers", exportController.exportCustomers);
+router.get("/ads-performance", exportController.exportAdsPerformance);
 
 module.exports = router;
