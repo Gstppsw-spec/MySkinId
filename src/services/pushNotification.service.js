@@ -1,5 +1,5 @@
 const admin = require("../../config/firebase");
-const { pushToken } = require("../models");
+const { pushToken, masterCustomer, masterUser } = require("../models");
 
 class PushNotificationService {
   /**
@@ -23,13 +23,52 @@ class PushNotificationService {
         };
       }
 
+      let finalCustomerId = customerId !== undefined ? customerId : null;
+      let finalUserId = userId !== undefined ? userId : null;
+
+      // Validasi & Resolusi customerId jika dikirim
+      if (finalCustomerId) {
+        const customerExists = await masterCustomer.findByPk(finalCustomerId);
+        if (!customerExists) {
+          // Periksa apakah ID ini sebenarnya milik user (misal karena JWT tanpa roleCode)
+          const userExists = await masterUser.findByPk(finalCustomerId);
+          if (userExists) {
+            finalUserId = finalCustomerId;
+            finalCustomerId = null;
+          } else {
+            return {
+              status: false,
+              message: "Customer tidak ditemukan atau tidak valid",
+            };
+          }
+        }
+      }
+
+      // Validasi & Resolusi userId jika dikirim
+      if (finalUserId) {
+        const userExists = await masterUser.findByPk(finalUserId);
+        if (!userExists) {
+          // Periksa apakah ID ini sebenarnya milik customer
+          const customerExists = await masterCustomer.findByPk(finalUserId);
+          if (customerExists) {
+            finalCustomerId = finalUserId;
+            finalUserId = null;
+          } else {
+            return {
+              status: false,
+              message: "User tidak ditemukan atau tidak valid",
+            };
+          }
+        }
+      }
+
       // Upsert: if token already exists, update the owner & reactivate
       const existing = await pushToken.findOne({ where: { token } });
 
       if (existing) {
         await existing.update({
-          customerId: customerId || existing.customerId,
-          userId: userId || existing.userId,
+          customerId: finalCustomerId,
+          userId: finalUserId,
           deviceId: deviceId || existing.deviceId,
           platform: platform || existing.platform,
           isActive: true,
@@ -43,8 +82,8 @@ class PushNotificationService {
 
       const newToken = await pushToken.create({
         token,
-        customerId,
-        userId,
+        customerId: finalCustomerId,
+        userId: finalUserId,
         deviceId,
         platform: platform || "mobile",
         isActive: true,
