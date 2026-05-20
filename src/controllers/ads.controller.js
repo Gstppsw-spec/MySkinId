@@ -316,20 +316,48 @@ module.exports = {
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
-      // 1. Fetch all paid purchases for aggregate statistics (unfiltered by company/status to keep global metrics consistent)
+      const user = req.user;
+      const roleCode = user?.roleCode;
+      const isGlobalAdmin = ["SUPER_ADMIN", "OPERATIONAL_ADMIN"].includes(roleCode);
+
+      const allowedCompanyIds = user?.companyIds || [];
+      const allowedLocationIds = user?.locationIds || [];
+
+      const purchaseInclude = [
+        {
+          model: order,
+          as: "order",
+          attributes: ["totalAmount", "paymentStatus"]
+        },
+        {
+          model: AdsConfig,
+          as: "config",
+          attributes: ["pricePerDay"]
+        }
+      ];
+
+      if (!isGlobalAdmin) {
+        const statsLocationWhere = {};
+        if (roleCode === "COMPANY_ADMIN" && allowedCompanyIds.length > 0) {
+          statsLocationWhere.companyId = { [Op.in]: allowedCompanyIds };
+        } else if (roleCode === "OUTLET_ADMIN" && allowedLocationIds.length > 0) {
+          statsLocationWhere.id = { [Op.in]: allowedLocationIds };
+        } else {
+          statsLocationWhere.id = -1; // force empty
+        }
+
+        purchaseInclude.push({
+          model: masterLocation,
+          as: "location",
+          attributes: ["id", "companyId"],
+          where: statsLocationWhere,
+          required: true
+        });
+      }
+
+      // 1. Fetch paid purchases for aggregate statistics (filtered for non-global admins)
       const purchases = await AdsPurchase.findAll({
-        include: [
-          {
-            model: order,
-            as: "order",
-            attributes: ["totalAmount", "paymentStatus"]
-          },
-          {
-            model: AdsConfig,
-            as: "config",
-            attributes: ["pricePerDay"]
-          }
-        ]
+        include: purchaseInclude
       });
 
       const getRevenue = (p) => {
@@ -503,9 +531,37 @@ module.exports = {
         whereClause.startDate = { [Op.lte]: filterEnd };
       }
 
-      const locationWhere = {};
+      let companyIds = [];
       if (companyId && companyId !== "ALL" && companyId !== "") {
-        locationWhere.companyId = companyId;
+        if (typeof companyId === "string") {
+          companyIds = companyId.split(",").map(id => id.trim()).filter(id => id !== "ALL" && id !== "");
+        } else if (Array.isArray(companyId)) {
+          companyIds = companyId.map(id => String(id).trim()).filter(id => id !== "ALL" && id !== "");
+        } else {
+          companyIds = [String(companyId)];
+        }
+      }
+
+      const locationWhere = {};
+      if (companyIds.length > 0) {
+        locationWhere.companyId = { [Op.in]: companyIds };
+      }
+
+      if (!isGlobalAdmin) {
+        if (roleCode === "OUTLET_ADMIN") {
+          locationWhere.id = { [Op.in]: allowedLocationIds };
+        } else if (roleCode === "COMPANY_ADMIN") {
+          const allowedStr = allowedCompanyIds.map(String);
+          if (companyIds.length > 0) {
+            companyIds = companyIds.filter(id => allowedStr.includes(String(id)));
+            if (companyIds.length === 0) {
+              companyIds = [-1]; // force empty
+            }
+            locationWhere.companyId = { [Op.in]: companyIds };
+          } else {
+            locationWhere.companyId = { [Op.in]: allowedCompanyIds };
+          }
+        }
       }
 
       const { count: totalCampaigns, rows: campaignRows } = await AdsPurchase.findAndCountAll({
@@ -515,7 +571,7 @@ module.exports = {
             model: masterLocation,
             as: "location",
             attributes: ["id", "name", "companyId"],
-            required: !!(companyId && companyId !== "ALL" && companyId !== ""),
+            required: !isGlobalAdmin || companyIds.length > 0,
             where: locationWhere,
             include: [
               {

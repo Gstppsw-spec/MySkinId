@@ -5,15 +5,62 @@ const exportService = require("../services/export.service");
  */
 async function handleExport(req, res, fetchFn, fileNamePrefix) {
   try {
-    const { startDate, endDate, companyIds, locationIds, format } = req.query;
+    const { startDate, endDate, companyIds, companyId, locationIds, locationId, format, search } = req.query;
 
-    const companyIdsArray = companyIds ? companyIds.split(",") : undefined;
-    const locationIdsArray = locationIds ? locationIds.split(",") : undefined;
+    const activeCompanyIds = companyIds || companyId;
+    const activeLocationIds = locationIds || locationId;
+
+    let companyIdsArray;
+    if (activeCompanyIds) {
+      if (typeof activeCompanyIds === "string") {
+        companyIdsArray = activeCompanyIds.split(",").map(id => id.trim()).filter(Boolean);
+      } else if (Array.isArray(activeCompanyIds)) {
+        companyIdsArray = activeCompanyIds.map(id => String(id).trim()).filter(Boolean);
+      }
+    }
+
+    let locationIdsArray;
+    if (activeLocationIds) {
+      if (typeof activeLocationIds === "string") {
+        locationIdsArray = activeLocationIds.split(",").map(id => id.trim()).filter(Boolean);
+      } else if (Array.isArray(activeLocationIds)) {
+        locationIdsArray = activeLocationIds.map(id => String(id).trim()).filter(Boolean);
+      }
+    }
+
+    // Apply role-based filtering if user is not global admin
+    const user = req.user;
+    const roleCode = user?.roleCode;
+    const isGlobalAdmin = ["SUPER_ADMIN", "OPERATIONAL_ADMIN"].includes(roleCode);
+
+    if (user && !isGlobalAdmin) {
+      if (roleCode === "COMPANY_ADMIN") {
+        const allowedCompanyIds = (user.companyIds || []).map(String);
+        if (companyIdsArray && companyIdsArray.length > 0) {
+          companyIdsArray = companyIdsArray.filter(id => allowedCompanyIds.includes(String(id)));
+          if (companyIdsArray.length === 0) {
+            companyIdsArray = [-1]; // force empty
+          }
+        } else {
+          companyIdsArray = allowedCompanyIds;
+        }
+      } else if (roleCode === "OUTLET_ADMIN") {
+        const allowedLocationIds = (user.locationIds || []).map(String);
+        if (locationIdsArray && locationIdsArray.length > 0) {
+          locationIdsArray = locationIdsArray.filter(id => allowedLocationIds.includes(String(id)));
+          if (locationIdsArray.length === 0) {
+            locationIdsArray = [-1]; // force empty
+          }
+        } else {
+          locationIdsArray = allowedLocationIds;
+        }
+      }
+    }
 
     // Fetch data
-    const config = await fetchFn(startDate, endDate, companyIdsArray, locationIdsArray);
+    const config = await fetchFn(startDate, endDate, companyIdsArray, locationIdsArray, search);
 
-    if (config.rows.length === 0) {
+    if (config.rows.length === 0 && !config.allowEmpty) {
       return res.status(404).json({
         success: false,
         message: "No data found",
@@ -84,5 +131,9 @@ module.exports = {
 
   async exportAdsPerformance(req, res) {
     return handleExport(req, res, exportService.fetchAdsPerformance, "laporan_ads_performance");
+  },
+
+  async exportConsultationSummary(req, res) {
+    return handleExport(req, res, exportService.fetchConsultationSummary, "laporan_ringkasan_konsultasi");
   }
 };

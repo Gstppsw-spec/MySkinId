@@ -812,6 +812,90 @@ async function fetchAdsPerformance(startDate, endDate, companyIds, locationIds) 
   };
 }
 
+async function fetchConsultationSummary(startDate, endDate, companyIds, locationIds, search) {
+  const { transactionItem, transaction, order, masterCustomer } = require("../models");
+
+  const customerWhereClause = {};
+  if (search && search !== "") {
+    customerWhereClause[Op.or] = [
+      { name: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } }
+    ];
+  }
+
+  const orderWhereClause = { 
+    paymentStatus: "PAID",
+    ...buildDateFilter(startDate, endDate)
+  };
+
+  const transactionItemWhere = {
+    itemType: "CONSULTATION_QUOTA"
+  };
+
+  if (locationIds && locationIds.length > 0) {
+    transactionItemWhere.locationId = { [Op.in]: locationIds };
+  }
+
+  const items = await transactionItem.findAll({
+    where: transactionItemWhere,
+    include: [
+      {
+        model: transaction,
+        as: "transaction",
+        required: true,
+        include: [
+          {
+            model: order,
+            as: "order",
+            required: true,
+            where: orderWhereClause,
+            include: [
+              {
+                model: masterCustomer,
+                as: "customer",
+                required: true,
+                where: customerWhereClause
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    order: [["createdAt", "DESC"]]
+  });
+
+  const rows = items.map((item, idx) => {
+    const orderData = item.transaction.order;
+    const customerData = orderData.customer;
+
+    return [
+      idx + 1,
+      customerData.name || "-",
+      customerData.email || "-",
+      customerData.phoneNumber || "-",
+      `${item.quantity} KUOTA`,
+      formatDate(orderData.createdAt),
+      formatRupiah(item.totalPrice)
+    ];
+  });
+
+  return {
+    title: "Laporan Ringkasan Dashboard Konsultasi",
+    columns: [
+      { header: "No", width: 30 },
+      { header: "Nama Lengkap", width: 150 },
+      { header: "Email", width: 160 },
+      { header: "No. Telepon", width: 100 },
+      { header: "Jumlah Kuota", width: 90 },
+      { header: "Tanggal Beli", width: 140 },
+      { header: "Biaya", width: 100 }
+    ],
+    rows,
+    totalData: rows.length,
+    allowEmpty: true
+  };
+}
+
 // ─── Exported Functions ──────────────────────────────────────────────────────
 
 module.exports = {
@@ -823,6 +907,7 @@ module.exports = {
   fetchLocations,
   fetchCustomers,
   fetchAdsPerformance,
+  fetchConsultationSummary,
   generatePDF,
   generateExcel,
 };

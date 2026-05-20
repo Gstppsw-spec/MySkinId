@@ -341,9 +341,22 @@ module.exports = {
       const limit = parseInt(pageSize);
       const offset = (page - 1) * limit;
 
+      const user = req.user;
+      const roleCode = user?.roleCode;
+      const isGlobalAdmin = ["SUPER_ADMIN", "OPERATIONAL_ADMIN"].includes(roleCode);
+      const allowedLocationIds = user?.locationIds || [];
+
+      const transactionItemWhere = {
+        itemType: "CONSULTATION_QUOTA"
+      };
+
+      if (!isGlobalAdmin && roleCode === "OUTLET_ADMIN") {
+        transactionItemWhere.locationId = { [Op.in]: allowedLocationIds.length > 0 ? allowedLocationIds : [-1] };
+      }
+
       // 1. Fetch all PAID consultation quota transaction items for metrics calculations
       const allPaidItems = await transactionItem.findAll({
-        where: { itemType: "CONSULTATION_QUOTA" },
+        where: transactionItemWhere,
         include: [
           {
             model: transaction,
@@ -467,7 +480,7 @@ module.exports = {
       }
 
       const { count: totalItems, rows: items } = await transactionItem.findAndCountAll({
-        where: { itemType: "CONSULTATION_QUOTA" },
+        where: transactionItemWhere,
         include: [
           {
             model: transaction,

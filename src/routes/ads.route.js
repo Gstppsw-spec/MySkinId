@@ -30,6 +30,6 @@ router.delete("/config", verifyToken, allowRoles("SUPER_ADMIN"), adsController.d
 router.get("/company-balances", verifyToken, allowRoles("SUPER_ADMIN"), adsController.getCompanyBalances);
 router.delete("/admin/:id", verifyToken, allowRoles("SUPER_ADMIN"), adsController.deleteAds);
 router.get("/admin/active-ads", verifyToken, allowRoles("SUPER_ADMIN"), adsController.getAdminActiveAds);
-router.get("/dashboard-summary", verifyToken, adsController.getAdsDashboardSummary);
+router.get("/dashboard-summary", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OUTLET_ADMIN"), adsController.getAdsDashboardSummary);
 
 module.exports = router;

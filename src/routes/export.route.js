@@ -13,6 +13,7 @@ router.get("/products", ...auth, exportController.exportProducts);
 router.get("/packages", ...auth, exportController.exportPackages);
 router.get("/locations", ...auth, exportController.exportLocations);
 router.get("/customers", exportController.exportCustomers);
-router.get("/ads-performance", exportController.exportAdsPerformance);
+router.get("/ads-performance", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN", "COMPANY_ADMIN", "OUTLET_ADMIN"), exportController.exportAdsPerformance);
+router.get("/consultation-summary", verifyToken, allowRoles("SUPER_ADMIN", "OUTLET_ADMIN"), exportController.exportConsultationSummary);
 
 module.exports = router;
