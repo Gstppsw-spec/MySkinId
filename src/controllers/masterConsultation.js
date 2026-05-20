@@ -331,4 +331,224 @@ module.exports = {
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);
   },
+
+  async getConsultationDashboardSummary(req, res) {
+    try {
+      const { transactionItem, transaction, order, masterCustomer } = require("../models");
+      const { Op } = require("sequelize");
+
+      const { search, startDate, endDate, page = 1, pageSize = 10 } = req.query;
+      const limit = parseInt(pageSize);
+      const offset = (page - 1) * limit;
+
+      // 1. Fetch all PAID consultation quota transaction items for metrics calculations
+      const allPaidItems = await transactionItem.findAll({
+        where: { itemType: "CONSULTATION_QUOTA" },
+        include: [
+          {
+            model: transaction,
+            as: "transaction",
+            required: true,
+            include: [
+              {
+                model: order,
+                as: "order",
+                required: true,
+                where: { paymentStatus: "PAID" }
+              }
+            ]
+          }
+        ]
+      });
+
+      // Calculate monthly growth boundaries
+      const now = new Date();
+      const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const endOfPrevMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+      // Metrik Penampung
+      let totalPatientsAllTime = new Set();
+      let totalTransactionsAllTime = 0;
+      let totalRevenueAllTime = 0;
+      let totalQuotaAllTime = 0;
+
+      let patientsThisMonth = new Set();
+      let transactionsThisMonth = 0;
+      let revenueThisMonth = 0;
+      let quotaThisMonth = 0;
+
+      let patientsPrevMonth = new Set();
+      let transactionsPrevMonth = 0;
+      let revenuePrevMonth = 0;
+      let quotaPrevMonth = 0;
+
+      allPaidItems.forEach((item) => {
+        const orderDate = new Date(item.transaction.order.createdAt);
+        const customerId = item.transaction.order.customerId;
+        const price = parseFloat(item.totalPrice || 0);
+        const qty = parseInt(item.quantity || 0);
+
+        // All-Time
+        totalPatientsAllTime.add(customerId);
+        totalTransactionsAllTime += 1;
+        totalRevenueAllTime += price;
+        totalQuotaAllTime += qty;
+
+        // This Month
+        if (orderDate >= startOfThisMonth) {
+          patientsThisMonth.add(customerId);
+          transactionsThisMonth += 1;
+          revenueThisMonth += price;
+          quotaThisMonth += qty;
+        }
+        // Prev Month
+        else if (orderDate >= startOfPrevMonth && orderDate <= endOfPrevMonth) {
+          patientsPrevMonth.add(customerId);
+          transactionsPrevMonth += 1;
+          revenuePrevMonth += price;
+          quotaPrevMonth += qty;
+        }
+      });
+
+      const calcGrowth = (curr, prev) => {
+        if (prev === 0) return curr > 0 ? "+100.0%" : "+0.0%";
+        const diff = ((curr - prev) / prev) * 100;
+        return `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`;
+      };
+
+      const metrics = {
+        totalPatients: {
+          value: `${totalPatientsAllTime.size} Orang`,
+          growth: `${calcGrowth(patientsThisMonth.size, patientsPrevMonth.size)} Bulan ini`
+        },
+        totalTransactions: {
+          value: `${totalTransactionsAllTime} Transaksi`,
+          growth: `${calcGrowth(transactionsThisMonth, transactionsPrevMonth)} Bulan ini`
+        },
+        consultationRevenue: {
+          value: `Rp ${totalRevenueAllTime.toLocaleString("id-ID")}`,
+          growth: `${calcGrowth(revenueThisMonth, revenuePrevMonth)} Bulan ini`
+        },
+        totalQuotaSold: {
+          value: `${totalQuotaAllTime} Kuota`,
+          growth: `${calcGrowth(quotaThisMonth, quotaPrevMonth)} Bulan ini`
+        }
+      };
+
+      // 2. Query for filtered and paginated patients list (table)
+      const customerWhereClause = {};
+      if (search && search !== "") {
+        customerWhereClause[Op.or] = [
+          { name: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } }
+        ];
+      }
+
+      const orderWhereClause = { paymentStatus: "PAID" };
+      if (startDate && endDate) {
+        const filterStart = new Date(startDate);
+        const filterEnd = new Date(endDate);
+        filterEnd.setHours(23, 59, 59, 999);
+        orderWhereClause.createdAt = {
+          [Op.between]: [filterStart, filterEnd]
+        };
+      } else if (startDate) {
+        const filterStart = new Date(startDate);
+        orderWhereClause.createdAt = {
+          [Op.gte]: filterStart
+        };
+      } else if (endDate) {
+        const filterEnd = new Date(endDate);
+        filterEnd.setHours(23, 59, 59, 999);
+        orderWhereClause.createdAt = {
+          [Op.lte]: filterEnd
+        };
+      }
+
+      const { count: totalItems, rows: items } = await transactionItem.findAndCountAll({
+        where: { itemType: "CONSULTATION_QUOTA" },
+        include: [
+          {
+            model: transaction,
+            as: "transaction",
+            required: true,
+            include: [
+              {
+                model: order,
+                as: "order",
+                required: true,
+                where: orderWhereClause,
+                include: [
+                  {
+                    model: masterCustomer,
+                    as: "customer",
+                    required: true,
+                    where: customerWhereClause
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset
+      });
+
+      const formatIndonesianDate = (dateString) => {
+        if (!dateString) return "-";
+        const months = [
+          "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+          "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+        ];
+        const d = new Date(dateString);
+        if (isNaN(d.getTime())) return "-";
+        return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      };
+
+      const formatIndonesianTime = (dateString) => {
+        if (!dateString) return "-";
+        const d = new Date(dateString);
+        if (isNaN(d.getTime())) return "-";
+        
+        // Convert to WIB (UTC+7)
+        const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+        const wibTime = new Date(utc + 3600000 * 7);
+        
+        const pad = (num) => String(num).padStart(2, "0");
+        return `${pad(wibTime.getHours())}.${pad(wibTime.getMinutes())} WIB`;
+      };
+
+      const mappedPatients = items.map((item, idx) => {
+        const orderData = item.transaction.order;
+        const customerData = orderData.customer;
+
+        return {
+          no: offset + idx + 1,
+          customerProfile: {
+            name: customerData.name,
+            email: customerData.email || "-",
+            phoneNumber: customerData.phoneNumber || "-"
+          },
+          jumlahKuota: `${item.quantity} KUOTA`,
+          tanggalBeliDate: formatIndonesianDate(orderData.createdAt),
+          tanggalBeliTime: formatIndonesianTime(orderData.createdAt),
+          biaya: `Rp ${parseFloat(item.totalPrice).toLocaleString("id-ID")}`
+        };
+      });
+
+      return response.success(res, "Consultation dashboard summary fetched successfully", {
+        metrics,
+        patients: {
+          rows: mappedPatients,
+          totalCount: totalItems,
+          page: parseInt(page),
+          pageSize: parseInt(pageSize)
+        }
+      });
+    } catch (error) {
+      return response.error(res, error.message, null);
+    }
+  }
 };

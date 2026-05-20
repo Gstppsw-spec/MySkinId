@@ -292,9 +292,31 @@ module.exports = {
 
   async getAdsDashboardSummary(req, res) {
     try {
-      const { AdsPurchase, order, AdsConfig } = require("../models");
+      const { 
+        AdsPurchase, 
+        order, 
+        AdsConfig, 
+        masterLocation, 
+        masterCompany, 
+        masterProduct, 
+        masterService, 
+        masterPackage 
+      } = require("../models");
       const { Op } = require("sequelize");
 
+      const { 
+        companyId, 
+        status, 
+        startDate, 
+        endDate, 
+        page = 1, 
+        pageSize = 10 
+      } = req.query;
+
+      const limit = parseInt(pageSize);
+      const offset = (page - 1) * limit;
+
+      // 1. Fetch all paid purchases for aggregate statistics (unfiltered by company/status to keep global metrics consistent)
       const purchases = await AdsPurchase.findAll({
         include: [
           {
@@ -441,6 +463,129 @@ module.exports = {
         }
       ];
 
+      // 2. Fetch and filter campaign performance list (the table)
+      const whereClause = {};
+
+      if (status && status !== "ALL" && status !== "SEMUA STATUS") {
+        const now = new Date();
+        if (status === "AKTIF") {
+          whereClause.status = "PAID";
+          whereClause.isActive = true;
+          whereClause.startDate = { [Op.lte]: now };
+          whereClause.endDate = { [Op.gte]: now };
+        } else if (status === "EXPIRED") {
+          whereClause[Op.or] = [
+            { status: "EXPIRED" },
+            { endDate: { [Op.lt]: now } }
+          ];
+        } else if (status === "PENDING") {
+          whereClause.status = "PENDING";
+        } else if (status === "BATAL") {
+          whereClause.status = "CANCELLED";
+        }
+      }
+
+      const parseDate = (dStr) => {
+        if (!dStr || dStr === "null" || dStr === "undefined" || dStr === "") return null;
+        const d = new Date(dStr);
+        return isNaN(d.getTime()) ? null : d;
+      };
+
+      const filterStart = parseDate(startDate);
+      const filterEnd = parseDate(endDate);
+
+      if (filterStart && filterEnd) {
+        whereClause.startDate = { [Op.lte]: filterEnd };
+        whereClause.endDate = { [Op.gte]: filterStart };
+      } else if (filterStart) {
+        whereClause.endDate = { [Op.gte]: filterStart };
+      } else if (filterEnd) {
+        whereClause.startDate = { [Op.lte]: filterEnd };
+      }
+
+      const locationWhere = {};
+      if (companyId && companyId !== "ALL" && companyId !== "") {
+        locationWhere.companyId = companyId;
+      }
+
+      const { count: totalCampaigns, rows: campaignRows } = await AdsPurchase.findAndCountAll({
+        where: whereClause,
+        include: [
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id", "name", "companyId"],
+            required: !!(companyId && companyId !== "ALL" && companyId !== ""),
+            where: locationWhere,
+            include: [
+              {
+                model: masterCompany,
+                as: "company",
+                attributes: ["id", "name"]
+              }
+            ]
+          },
+          { model: masterProduct, as: "product", attributes: ["id", "name"], required: false },
+          { model: masterService, as: "service", attributes: ["id", "name"], required: false },
+          { model: masterPackage, as: "package", attributes: ["id", "name"], required: false }
+        ],
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset
+      });
+
+      const formatIndonesianDate = (dateString) => {
+        if (!dateString) return "-";
+        const months = [
+          "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+          "Jul", "Agt", "Sep", "Okt", "Nov", "Des"
+        ];
+        const d = new Date(dateString);
+        if (isNaN(d.getTime())) return "-";
+        return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+      };
+
+      const mappedCampaigns = campaignRows.map(p => {
+        let title = "";
+        if (p.data && (p.data.title || p.data.name)) {
+          title = p.data.title || p.data.name;
+        } else if (p.adsType === "TOPDEALS") {
+          if (p.referenceType === "PRODUCT" && p.product) title = p.product.name;
+          else if (p.referenceType === "SERVICE" && p.service) title = p.service.name;
+          else if (p.referenceType === "PACKAGE" && p.package) title = p.package.name;
+        } else if (["PREMIUM_SEARCH", "PREMIUM_BADGE", "PREMIUM_HOME"].includes(p.adsType)) {
+          title = p.location?.name ? `Premium Ad - ${p.location.name}` : "Premium Ad";
+        }
+        if (!title) {
+          title = `${p.adsType.charAt(0) + p.adsType.slice(1).toLowerCase().replace("_", " ")} Ad`;
+        }
+
+        const now = new Date();
+        let computedStatus = "TIDAK AKTIF";
+        if (p.status === "PAID" && p.isActive && new Date(p.startDate) <= now && new Date(p.endDate) >= now) {
+          computedStatus = "AKTIF";
+        } else if (p.status === "EXPIRED" || new Date(p.endDate) < now) {
+          computedStatus = "EXPIRED";
+        } else if (p.status === "PENDING") {
+          computedStatus = "PENDING";
+        } else if (p.status === "CANCELLED") {
+          computedStatus = "BATAL";
+        }
+
+        return {
+          id: p.id,
+          title,
+          adsType: p.adsType,
+          companyName: p.location?.company?.name || "-",
+          locationName: p.location?.name || "-",
+          clickCount: p.clickCount || 0,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          periodeAktif: `${formatIndonesianDate(p.startDate)} s/d ${formatIndonesianDate(p.endDate)}`,
+          status: computedStatus
+        };
+      });
+
       return response.success(res, "Ads dashboard summary fetched successfully", {
         metrics: {
           totalAdClicks: {
@@ -449,7 +594,13 @@ module.exports = {
             change: "+8.4%"
           }
         },
-        performance: performanceList
+        performance: performanceList,
+        campaigns: {
+          rows: mappedCampaigns,
+          totalCount: totalCampaigns,
+          page: parseInt(page),
+          pageSize: parseInt(pageSize)
+        }
       });
     } catch (error) {
       return response.serverError(res, error);

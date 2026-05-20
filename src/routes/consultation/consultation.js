@@ -34,6 +34,8 @@ const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 router.use(verifyToken);
 
+router.get("/dashboard-summary", allowRoles("SUPER_ADMIN", "OUTLET_ADMIN"), consultation.getConsultationDashboardSummary);
+
 router.get("/room/readyToAssign", consultation.readyToAssign);
 
 router.post("/room", consultation.createRoom);
