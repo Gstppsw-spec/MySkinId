@@ -4,6 +4,8 @@ const {
   CompanyAdsBalanceHistory, 
   CompanyWithdrawal,
   masterCompany,
+  masterLocation,
+  platformTransfer,
   sequelize 
 } = require("../models");
 const payoutService = require("./payout.service");
@@ -229,8 +231,27 @@ module.exports = {
       if (!res.status) return res;
 
       const record = res.data;
-      const totalBalance = parseFloat(record.balance || 0);
+      const storedBalance = parseFloat(record.balance || 0);
       const nonWithdrawable = parseFloat(record.nonWithdrawableBalance || 0);
+
+      // Get locations under this company
+      const locations = await masterLocation.findAll({
+        where: { companyId },
+        attributes: ["id"]
+      });
+      const locationIds = locations.map(loc => loc.id);
+
+      // Calculate pending settlements sum
+      let pendingTransfersAmount = 0;
+      if (locationIds.length > 0) {
+        const pendingTransfers = await platformTransfer.findAll({
+          where: {
+            locationId: { [Op.in]: locationIds },
+            status: "PENDING_SETTLEMENT"
+          }
+        });
+        pendingTransfersAmount = pendingTransfers.reduce((sum, pt) => sum + parseFloat(pt.amount || 0), 0);
+      }
 
       // Calculate hold balance: sum of TOPUP amounts less than 3 days old
       const threeDaysAgo = new Date();
@@ -244,7 +265,13 @@ module.exports = {
         }
       });
 
-      const holdBalance = recentTopups.reduce((sum, h) => sum + parseFloat(h.amount || 0), 0);
+      const recentTopupsAmount = recentTopups.reduce((sum, h) => sum + parseFloat(h.amount || 0), 0);
+
+      // holdBalance includes recent topups AND pending settlements
+      const holdBalance = recentTopupsAmount + pendingTransfersAmount;
+
+      // totalBalance includes stored balance AND pending settlements
+      const totalBalance = storedBalance + pendingTransfersAmount;
 
       const withdrawable = Math.max(0, totalBalance - nonWithdrawable - holdBalance);
 
