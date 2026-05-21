@@ -7,7 +7,7 @@ const {
   masterLocation,
   platformTransfer,
   sequelize,
-  Transaction
+  transaction
 } = require("../models");
 const payoutService = require("./payout.service");
 
@@ -55,7 +55,7 @@ module.exports = {
       const newNonWithdrawable = currentNonWithdrawable - spendFromFree;
 
       const newBalance = parseFloat(balanceRecord.balance) - parseFloat(amount);
-      await balanceRecord.update({ 
+      await balanceRecord.update({
         balance: newBalance,
         nonWithdrawableBalance: newNonWithdrawable
       }, { transaction: t });
@@ -201,21 +201,21 @@ module.exports = {
           company: comp.name,
           currentBalance: balance.balance || 0,
           lastTopup: lastTopupHistory ? {
-              amount: lastTopupHistory.amount,
-              date: lastTopupHistory.createdAt
+            amount: lastTopupHistory.amount,
+            date: lastTopupHistory.createdAt
           } : null
         };
       });
 
-      return { 
-        status: true, 
-        message: "Balances fetched successfully", 
+      return {
+        status: true,
+        message: "Balances fetched successfully",
         data: {
           totalCount: count,
           totalPages: Math.ceil(count / limit),
           currentPage: page,
           rows: data
-        } 
+        }
       };
     } catch (error) {
       return { status: false, message: error.message };
@@ -254,7 +254,7 @@ module.exports = {
             status: "PENDING_SETTLEMENT"
           },
           include: [{
-            model: Transaction,
+            model: transaction,
             as: 'transaction',
             include: [{
               model: masterLocation,
