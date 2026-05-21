@@ -246,7 +246,19 @@ module.exports = {
       if (locationIds.length > 0) {
         const pendingTransfers = await platformTransfer.findAll({
           where: {
-            locationId: { [Op.in]: locationIds },
+            [Op.or]: [
+              // Transfer dengan locationId yang termasuk lokasi perusahaan
+              { locationId: { [Op.in]: locationIds } },
+              // Transfer tanpa locationId namun transaction.companyId sama dengan companyId
+              sequelize.where(
+                sequelize.literal(`(
+                  SELECT "companyId"
+                  FROM "transactions" AS "t"
+                  WHERE "t"."id" = "platformTransfer"."transactionId"
+                )`),
+                companyId
+              )
+            ],
             status: "PENDING_SETTLEMENT"
           }
         });
