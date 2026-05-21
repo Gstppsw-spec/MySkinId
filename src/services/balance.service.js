@@ -1,12 +1,13 @@
 const { Op } = require("sequelize");
-const { 
-  CompanyAdsBalance, 
-  CompanyAdsBalanceHistory, 
+const {
+  CompanyAdsBalance,
+  CompanyAdsBalanceHistory,
   CompanyWithdrawal,
   masterCompany,
   masterLocation,
   platformTransfer,
-  sequelize 
+  sequelize,
+  Transaction
 } = require("../models");
 const payoutService = require("./payout.service");
 
@@ -248,17 +249,18 @@ module.exports = {
           where: {
             [Op.or]: [
               { locationId: { [Op.in]: locationIds } },
-              sequelize.where(
-                sequelize.literal(`(
-                  SELECT companyId
-                  FROM transactions AS t
-                  WHERE t.id = platformTransfer.transactionId
-                )`),
-                companyId
-              )
+              { '$transaction.location.companyId$': companyId }
             ],
             status: "PENDING_SETTLEMENT"
-          }
+          },
+          include: [{
+            model: Transaction,
+            as: 'transaction',
+            include: [{
+              model: masterLocation,
+              as: 'location'
+            }]
+          }]
         });
         pendingTransfersAmount = pendingTransfers.reduce((sum, pt) => sum + parseFloat(pt.amount || 0), 0);
       }
