@@ -247,14 +247,12 @@ module.exports = {
         const pendingTransfers = await platformTransfer.findAll({
           where: {
             [Op.or]: [
-              // Transfer dengan locationId yang termasuk lokasi perusahaan
               { locationId: { [Op.in]: locationIds } },
-              // Transfer tanpa locationId namun transaction.companyId sama dengan companyId
               sequelize.where(
                 sequelize.literal(`(
-                  SELECT "companyId"
-                  FROM "transactions" AS "t"
-                  WHERE "t"."id" = "platformTransfer"."transactionId"
+                  SELECT companyId
+                  FROM transactions AS t
+                  WHERE t.id = platformTransfer.transactionId
                 )`),
                 companyId
               )
