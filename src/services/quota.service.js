@@ -50,13 +50,26 @@ module.exports = {
         }
       }
 
+      const freeQuotaAvailable = hasFreeQuota ? monthlyFreeQuota : 0;
+      const remaining = freeQuotaAvailable + quotaRecord.purchasedBalance;
+
+      // Count rooms created by this customer (= used quota)
+      const { masterRoomConsultation } = require("../models");
+      const usedCount = await masterRoomConsultation.count({
+        where: { customerId }
+      });
+
+      const totalQuota = usedCount + remaining;
+
       return {
         status: true,
         message: "Quota fetched successfully",
         data: {
-          freeQuotaAvailable: hasFreeQuota ? monthlyFreeQuota : 0,
+          totalQuota,
+          usedCount,
+          remaining,
+          freeQuotaAvailable,
           purchasedBalance: quotaRecord.purchasedBalance,
-          totalQuota: (hasFreeQuota ? monthlyFreeQuota : 0) + quotaRecord.purchasedBalance,
           lastFreeQuotaUsedAt: quotaRecord.lastFreeQuotaUsedAt
         }
       };
@@ -201,6 +214,8 @@ module.exports = {
         ];
       }
 
+      const { masterRoomConsultation } = require("../models");
+
       const { count, rows } = await masterCustomer.findAndCountAll({
         where,
         attributes: ["id", "name", "username", "email", "profileImageUrl"],
@@ -222,8 +237,10 @@ module.exports = {
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
 
-      const enrichedRows = rows.map(customer => {
+      const enrichedRows = await Promise.all(rows.map(async (customer) => {
         const quota = customer.consultationQuota;
+
+        // Calculate free quota availability
         let hasFreeQuota = true;
         if (quota && quota.lastFreeQuotaUsedAt) {
           const lastUsed = new Date(quota.lastFreeQuotaUsedAt);
@@ -234,6 +251,19 @@ module.exports = {
             hasFreeQuota = false;
           }
         }
+        const freeQuotaAvailable = hasFreeQuota ? monthlyFreeQuota : 0;
+
+        // Count rooms created by this customer (= used quota count)
+        const usedCount = await masterRoomConsultation.count({
+          where: { customerId: customer.id }
+        });
+
+        // remaining = currently available quota (free + purchased balance)
+        const purchasedBalance = quota ? quota.purchasedBalance : 0;
+        const remaining = freeQuotaAvailable + purchasedBalance;
+
+        // totalQuota = used + remaining (total ever allocated to this customer)
+        const totalQuota = usedCount + remaining;
 
         return {
           id: customer.id,
@@ -241,12 +271,15 @@ module.exports = {
           username: customer.username,
           email: customer.email,
           profileImageUrl: customer.profileImageUrl,
-          purchasedBalance: quota ? quota.purchasedBalance : 0,
-          freeQuotaAvailable: hasFreeQuota ? monthlyFreeQuota : 0,
-          totalQuota: (hasFreeQuota ? monthlyFreeQuota : 0) + (quota ? quota.purchasedBalance : 0),
-          lastFreeQuotaUsedAt: quota ? quota.lastFreeQuotaUsedAt : null
+          totalQuota,
+          usedCount,
+          remaining,
+          purchasedBalance,
+          freeQuotaAvailable,
+          lastFreeQuotaUsedAt: quota ? quota.lastFreeQuotaUsedAt : null,
+          lastUpdated: quota ? quota.updatedAt : null
         };
-      });
+      }));
 
       return {
         status: true,

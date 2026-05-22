@@ -959,6 +959,145 @@ class PostService {
 
         return results;
     }
+
+    /**
+     * Get list of reported posts (admin)
+     * @param {Object} filters - { page, pageSize, status }
+     * @returns {Object} Paginated reported posts
+     */
+    async getReportedPosts({ page = 1, pageSize = 10, status } = {}) {
+        const limit = pageSize;
+        const offset = (page - 1) * pageSize;
+
+        const where = {};
+        if (status) {
+            where.status = status;
+        }
+
+        const { count, rows } = await db.reportedPosts.findAndCountAll({
+            where,
+            include: [
+                {
+                    model: db.masterCustomer,
+                    as: "reporter",
+                    attributes: ["id", "name", "username", "profileImageUrl"],
+                },
+                {
+                    model: db.posts,
+                    as: "post",
+                    include: [
+                        {
+                            model: db.masterCustomer,
+                            as: "user",
+                            attributes: ["id", "name", "username", "profileImageUrl"],
+                        },
+                        {
+                            model: db.postMedia,
+                            as: "media",
+                            separate: true,
+                            order: [["orderIndex", "ASC"]],
+                        },
+                    ],
+                },
+            ],
+            order: [["createdAt", "DESC"]],
+            distinct: true,
+            limit,
+            offset,
+        });
+
+        const reports = rows.map((report) => {
+            const reportJson = report.toJSON();
+            if (reportJson.post && reportJson.post.media) {
+                reportJson.post.media = reportJson.post.media.map((m) => ({
+                    ...m,
+                    postId: undefined,
+                }));
+            }
+            return reportJson;
+        });
+
+        return { reports, totalCount: count };
+    }
+
+    /**
+     * Get report summary (admin)
+     * @returns {Object} Summary stats
+     */
+    async getReportSummary() {
+        const [totalReports, pendingReports, reviewedReports, approvedReports, rejectedReports] =
+            await Promise.all([
+                db.reportedPosts.count(),
+                db.reportedPosts.count({ where: { status: "pending" } }),
+                db.reportedPosts.count({ where: { status: "reviewed" } }),
+                db.reportedPosts.count({ where: { status: "approved" } }),
+                db.reportedPosts.count({ where: { status: "rejected" } }),
+            ]);
+
+        // Count unique posts that have been deleted (approved = acted upon / post deleted)
+        const postsActedOn = await db.reportedPosts.count({
+            where: { status: "approved" },
+            distinct: true,
+            col: "postId",
+        });
+
+        return {
+            totalReports,
+            pendingReports,
+            reviewedReports,
+            approvedReports,
+            rejectedReports,
+            postsActedOn,
+        };
+    }
+
+    /**
+     * Admin delete a reported post and update all related reports
+     * @param {string} postId - Post ID to delete
+     * @returns {Object} Success message
+     */
+    async adminDeletePost(postId) {
+        const post = await db.posts.findByPk(postId);
+
+        if (!post) {
+            throw new Error("Post not found");
+        }
+
+        // Update all reports for this post to "approved"
+        await db.reportedPosts.update(
+            { status: "approved" },
+            { where: { postId } }
+        );
+
+        // Delete the post
+        await post.destroy();
+
+        return { message: "Post berhasil dihapus dan laporan telah ditindak" };
+    }
+
+    /**
+     * Admin update report status (reviewed/rejected)
+     * @param {string} reportId - Report ID
+     * @param {string} status - New status
+     * @param {string} note - Optional note
+     * @returns {Object} Updated report
+     */
+    async updateReportStatus(reportId, status) {
+        const allowedStatuses = ["reviewed", "rejected"];
+        if (!allowedStatuses.includes(status)) {
+            throw new Error("Status tidak valid. Gunakan: reviewed, rejected");
+        }
+
+        const report = await db.reportedPosts.findByPk(reportId);
+        if (!report) {
+            throw new Error("Laporan tidak ditemukan");
+        }
+
+        report.status = status;
+        await report.save();
+
+        return report;
+    }
 }
 
 module.exports = new PostService();

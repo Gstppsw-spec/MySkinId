@@ -696,6 +696,140 @@ class RequestVerificationService {
       return { status: false, message: error.message, data: null };
     }
   }
+
+  async requestReverify(data) {
+    try {
+      const { refferenceId, refferenceType, note } = data;
+
+      const allowedTypes = [
+        "location",
+        "company",
+        "product",
+        "service",
+        "package",
+      ];
+
+      if (!allowedTypes.includes(refferenceType)) {
+        return {
+          status: false,
+          message: "Reference type tidak valid",
+          data: null,
+        };
+      }
+
+      // Find the entity
+      let entity = null;
+      if (refferenceType === "location") {
+        entity = await masterLocation.findByPk(refferenceId);
+      } else if (refferenceType === "company") {
+        entity = await masterCompany.findByPk(refferenceId);
+      } else if (refferenceType === "product") {
+        entity = await masterProduct.findByPk(refferenceId);
+      } else if (refferenceType === "service") {
+        entity = await masterService.findByPk(refferenceId);
+      } else if (refferenceType === "package") {
+        entity = await masterPackage.findByPk(refferenceId);
+      }
+
+      if (!entity) {
+        return {
+          status: false,
+          message: `${refferenceType.charAt(0).toUpperCase() + refferenceType.slice(1)} tidak ditemukan`,
+          data: null,
+        };
+      }
+
+      if (!entity.isVerified) {
+        return {
+          status: false,
+          message: `${refferenceType.charAt(0).toUpperCase() + refferenceType.slice(1)} belum terverifikasi, tidak bisa request verifikasi ulang`,
+          data: null,
+        };
+      }
+
+      // Revert verified status and deactivate
+      entity.isVerified = false;
+      entity.verifiedDate = null;
+
+      // Deactivate: location & company use "isactive", product/service/package use "isActive"
+      if (refferenceType === "location" || refferenceType === "company") {
+        entity.isactive = false;
+      } else {
+        entity.isActive = false;
+      }
+
+      await entity.save();
+
+      // Update or create the verification request back to pending
+      let verificationRequest = await requestVerification.findOne({
+        where: { refferenceId, refferenceType },
+        order: [["createdAt", "DESC"]],
+      });
+
+      if (verificationRequest) {
+        verificationRequest.status = "pending";
+        verificationRequest.note = note || verificationRequest.note;
+        await verificationRequest.save();
+      } else {
+        verificationRequest = await requestVerification.create({
+          refferenceId,
+          refferenceType,
+          note: note || null,
+          status: "pending",
+        });
+      }
+
+      // Send notification
+      try {
+        const typeLabel = refferenceType.charAt(0).toUpperCase() + refferenceType.slice(1);
+        let entityName = entity.name || "";
+        let companyId = null;
+        let locationId = null;
+
+        if (refferenceType === "location") {
+          locationId = entity.id;
+          companyId = entity.companyId;
+        } else if (refferenceType === "company") {
+          companyId = entity.id;
+        } else {
+          const { relationshipProductLocation, relationshipServiceLocation, relationshipPackageLocation } = require("../models");
+          let pivot;
+          if (refferenceType === "product") pivot = await relationshipProductLocation.findOne({ where: { productId: entity.id } });
+          else if (refferenceType === "service") pivot = await relationshipServiceLocation.findOne({ where: { serviceId: entity.id } });
+          else if (refferenceType === "package") pivot = await relationshipPackageLocation.findOne({ where: { packageId: entity.id } });
+
+          if (pivot) {
+            const loc = await masterLocation.findByPk(pivot.locationId);
+            if (loc) {
+              locationId = loc.id;
+              companyId = loc.companyId;
+            }
+          }
+        }
+
+        await NotificationService.createNotification({
+          companyId,
+          locationId,
+          title: `${typeLabel} - Request Verifikasi Ulang`,
+          body: `${typeLabel} '${entityName}' telah direset dan menunggu verifikasi ulang. Data dinonaktifkan sementara.`,
+          category: "Verification",
+          type: "VERIFICATION_REVERIFY",
+          referenceId: refferenceId,
+          referenceType: refferenceType,
+        });
+      } catch (notifErr) {
+        console.error("[RequestVerificationService] Notification Error:", notifErr.message);
+      }
+
+      return {
+        status: true,
+        message: "Berhasil request verifikasi ulang. Data telah dinonaktifkan sementara.",
+        data: verificationRequest,
+      };
+    } catch (error) {
+      return { status: false, message: error.message, data: null };
+    }
+  }
 }
 
 module.exports = new RequestVerificationService();

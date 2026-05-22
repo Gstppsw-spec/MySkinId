@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const postController = require("../../controllers/post.controller");
 const { verifyToken } = require("../../middlewares/authMiddleware");
+const { allowRoles } = require("../../middlewares/roleMiddleware");
 const compressImage = require("../../middlewares/compressImage");
 
 // All routes require authentication
@@ -18,6 +19,12 @@ router.get("/blocked", postController.getBlockedPosts);
 
 // Search tags
 router.get("/tags/search", postController.searchTags);
+
+// === Report management (admin) ===
+router.get("/reports/summary", allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), postController.getReportSummary);
+router.get("/reports", allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), postController.getReportedPosts);
+router.delete("/reports/:postId", allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), postController.adminDeletePost);
+router.put("/reports/:reportId", allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"), postController.updateReportStatus);
 
 // getPostLikedbyUserId
 router.get("/liked/:userId", postController.getPostLikedbyUserId);

@@ -370,6 +370,108 @@ class PostController {
             });
         }
     }
+
+    /**
+     * Get reported posts list (admin)
+     * GET /posts/reports
+     */
+    async getReportedPosts(req, res) {
+        try {
+            const page = parseInt(req.query.page) || 1;
+            const pageSize = parseInt(req.query.pageSize) || 10;
+            const { status } = req.query;
+
+            const { reports, totalCount } = await postService.getReportedPosts({
+                page,
+                pageSize,
+                status,
+            });
+
+            res.status(200).json({
+                success: true,
+                data: reports,
+                pagination: formatPagination(totalCount, page, pageSize),
+            });
+        } catch (error) {
+            console.error("Get reported posts error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to fetch reported posts",
+            });
+        }
+    }
+
+    /**
+     * Get report summary (admin)
+     * GET /posts/reports/summary
+     */
+    async getReportSummary(req, res) {
+        try {
+            const summary = await postService.getReportSummary();
+
+            res.status(200).json({
+                success: true,
+                data: summary,
+            });
+        } catch (error) {
+            console.error("Get report summary error:", error);
+            res.status(500).json({
+                success: false,
+                message: error.message || "Failed to fetch report summary",
+            });
+        }
+    }
+
+    /**
+     * Admin delete a reported post
+     * DELETE /posts/reports/:postId
+     */
+    async adminDeletePost(req, res) {
+        try {
+            const { postId } = req.params;
+
+            const result = await postService.adminDeletePost(postId);
+
+            res.status(200).json({
+                success: true,
+                message: result.message,
+            });
+        } catch (error) {
+            console.error("Admin delete post error:", error);
+            const statusCode = error.message === "Post not found" ? 404 : 500;
+            res.status(statusCode).json({
+                success: false,
+                message: error.message || "Failed to delete post",
+            });
+        }
+    }
+
+    /**
+     * Update report status (admin)
+     * PUT /posts/reports/:reportId
+     */
+    async updateReportStatus(req, res) {
+        try {
+            const { reportId } = req.params;
+            const { status } = req.body;
+
+            const report = await postService.updateReportStatus(reportId, status);
+
+            res.status(200).json({
+                success: true,
+                message: "Status laporan berhasil diperbarui",
+                data: report,
+            });
+        } catch (error) {
+            console.error("Update report status error:", error);
+            const statusCode =
+                error.message === "Laporan tidak ditemukan" ? 404 : 400;
+            res.status(statusCode).json({
+                success: false,
+                message: error.message || "Failed to update report status",
+            });
+        }
+    }
 }
 
 // Export controller instance and upload middleware

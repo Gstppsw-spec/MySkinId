@@ -10,5 +10,6 @@ router.post("/", verifyToken, allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN"), contr
 router.get("/", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN", "COMPANY_ADMIN", "OUTLET_ADMIN", "DOCTOR_GENERAL"), controller.list);
 router.get("/:id", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN", "COMPANY_ADMIN", "OUTLET_ADMIN", "DOCTOR_GENERAL"), controller.detail);
 router.put("/:id", verifyToken, allowRoles("SUPER_ADMIN", "DOCTOR_GENERAL"), controller.update);
+router.post("/reverify", verifyToken, allowRoles("COMPANY_ADMIN", "OUTLET_ADMIN"), controller.reverify);
 
 module.exports = router;

@@ -48,6 +48,12 @@ class RequestVerificationController {
         return res.status(result.status ? 200 : 400).json(result);
     }
 
+    async reverify(req, res) {
+        const data = req.body;
+        const result = await RequestVerificationService.requestReverify(data);
+        return res.status(result.status ? 200 : 400).json(result);
+    }
+
 }
 
 module.exports = new RequestVerificationController();

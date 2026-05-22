@@ -1939,11 +1939,13 @@ module.exports = {
           model: masterPackageItems,
           as: "items",
           attributes: ["id", "qty"],
+          required: true,
           include: [
             {
               model: masterService,
               as: "service",
               attributes: ["id", "name", "description", "duration", "price"],
+              required: true,
               include: [
                 {
                   model: masterSubCategoryService,
