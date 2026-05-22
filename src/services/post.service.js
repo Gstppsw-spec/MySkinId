@@ -969,35 +969,36 @@ class PostService {
         const limit = pageSize;
         const offset = (page - 1) * pageSize;
 
-        const where = {};
+        const reportWhere = {};
         if (status) {
-            where.status = status;
+            reportWhere.status = status;
         }
 
-        const { count, rows } = await db.reportedPosts.findAndCountAll({
-            where,
+        const { count, rows } = await db.posts.findAndCountAll({
             include: [
                 {
-                    model: db.masterCustomer,
-                    as: "reporter",
-                    attributes: ["id", "name", "username", "profileImageUrl"],
-                },
-                {
-                    model: db.posts,
-                    as: "post",
+                    model: db.reportedPosts,
+                    as: "reports",
+                    required: true,
+                    where: reportWhere,
                     include: [
                         {
                             model: db.masterCustomer,
-                            as: "user",
+                            as: "reporter",
                             attributes: ["id", "name", "username", "profileImageUrl"],
                         },
-                        {
-                            model: db.postMedia,
-                            as: "media",
-                            separate: true,
-                            order: [["orderIndex", "ASC"]],
-                        },
                     ],
+                },
+                {
+                    model: db.masterCustomer,
+                    as: "user",
+                    attributes: ["id", "name", "username", "profileImageUrl"],
+                },
+                {
+                    model: db.postMedia,
+                    as: "media",
+                    separate: true,
+                    order: [["orderIndex", "ASC"]],
                 },
             ],
             order: [["createdAt", "DESC"]],
@@ -1006,15 +1007,24 @@ class PostService {
             offset,
         });
 
-        const reports = rows.map((report) => {
-            const reportJson = report.toJSON();
-            if (reportJson.post && reportJson.post.media) {
-                reportJson.post.media = reportJson.post.media.map((m) => ({
+        const reports = rows.map((post) => {
+            const postJson = post.toJSON();
+            if (postJson.media) {
+                postJson.media = postJson.media.map((m) => ({
                     ...m,
                     postId: undefined,
                 }));
             }
-            return reportJson;
+            return {
+                id: postJson.id,
+                caption: postJson.caption,
+                createdAt: postJson.createdAt,
+                updatedAt: postJson.updatedAt,
+                user: postJson.user,
+                media: postJson.media,
+                reports: postJson.reports,
+                totalReports: postJson.reports ? postJson.reports.length : 0,
+            };
         });
 
         return { reports, totalCount: count };

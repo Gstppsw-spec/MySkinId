@@ -377,15 +377,31 @@ class masterCustomerController {
         }
       });
 
-      // 4. Fetch 5 latest active customers
-      const latestCustomers = await masterCustomer.findAll({
+      // 4. Fetch active customers with pagination and optional search
+      const { formatPagination } = require("../utils/pagination");
+      const page = parseInt(req.query.page) || 1;
+      const pageSize = parseInt(req.query.pageSize) || 10;
+      const offset = (page - 1) * pageSize;
+      const search = req.query.search || "";
+
+      const customerWhere = {};
+      if (search) {
+        customerWhere[Op.or] = [
+          { name: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } }
+        ];
+      }
+
+      const { count, rows: latestCustomers } = await masterCustomer.findAndCountAll({
+        where: customerWhere,
         attributes: ["id", "name", "email", "lastActiveAt", "loginMethod", "profileImageUrl", "createdAt"],
         order: [
           [Sequelize.literal("CASE WHEN lastActiveAt IS NULL THEN 1 ELSE 0 END"), "ASC"],
           ["lastActiveAt", "DESC"],
           ["createdAt", "DESC"]
         ],
-        limit: 5
+        limit: pageSize,
+        offset: offset
       });
 
       // Helper for friendly relative time in Indonesian
@@ -446,7 +462,8 @@ class masterCustomerController {
             change: "+12.5%"
           }
         },
-        latestActivities: mappedCustomers
+        latestActivities: mappedCustomers,
+        pagination: formatPagination(count, page, pageSize)
       });
     } catch (error) {
       return response.serverError(res, error);

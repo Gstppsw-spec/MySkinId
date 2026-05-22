@@ -61,6 +61,12 @@ module.exports = (sequelize, DataTypes) => {
             foreignKey: "postId",
             as: "tags",
         });
+
+        // Association with reportedPosts
+        Posts.hasMany(models.reportedPosts, {
+            foreignKey: "postId",
+            as: "reports",
+        });
     };
 
     return Posts;
