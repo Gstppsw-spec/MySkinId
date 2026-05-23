@@ -96,6 +96,10 @@ class CompanyVerificationService {
       if (data.status === "approved" && request.company) {
         request.company.isVerified = true;
         request.company.verifiedDate = new Date();
+        // Set default platformFee 4% jika belum pernah diset
+        if (!request.company.platformFee) {
+          request.company.platformFee = 4;
+        }
         await request.company.save();
       }
 

@@ -965,13 +965,33 @@ class PostService {
      * @param {Object} filters - { page, pageSize, status }
      * @returns {Object} Paginated reported posts
      */
-    async getReportedPosts({ page = 1, pageSize = 10, status } = {}) {
+    async getReportedPosts({ page = 1, pageSize = 10, status, search, startDate, endDate } = {}) {
         const limit = pageSize;
         const offset = (page - 1) * pageSize;
 
         const reportWhere = {};
         if (status) {
             reportWhere.status = status;
+        }
+        if (startDate || endDate) {
+            reportWhere.createdAt = {};
+            if (startDate) {
+                reportWhere.createdAt[Op.gte] = new Date(startDate);
+            }
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                reportWhere.createdAt[Op.lte] = end;
+            }
+        }
+
+        const authorWhere = {};
+        if (search) {
+            authorWhere[Op.or] = [
+                { name: { [Op.like]: `%${search}%` } },
+                { email: { [Op.like]: `%${search}%` } },
+                { username: { [Op.like]: `%${search}%` } }
+            ];
         }
 
         const { count, rows } = await db.posts.findAndCountAll({
@@ -992,7 +1012,9 @@ class PostService {
                 {
                     model: db.masterCustomer,
                     as: "user",
-                    attributes: ["id", "name", "username", "profileImageUrl"],
+                    attributes: ["id", "name", "username", "profileImageUrl", "email"],
+                    where: search ? authorWhere : undefined,
+                    required: search ? true : false,
                 },
                 {
                     model: db.postMedia,

@@ -377,19 +377,62 @@ class masterCustomerController {
         }
       });
 
-      // 4. Fetch active customers with pagination and optional search
+      // 4. Fetch active customers with pagination and optional search, status, and registration date range filters
       const { formatPagination } = require("../utils/pagination");
       const page = parseInt(req.query.page) || 1;
       const pageSize = parseInt(req.query.pageSize) || 10;
       const offset = (page - 1) * pageSize;
       const search = req.query.search || "";
+      const status = req.query.status || "";
+      const startDate = req.query.startDate || "";
+      const endDate = req.query.endDate || "";
 
       const customerWhere = {};
+      const andConditions = [];
+
       if (search) {
-        customerWhere[Op.or] = [
-          { name: { [Op.like]: `%${search}%` } },
-          { email: { [Op.like]: `%${search}%` } }
-        ];
+        andConditions.push({
+          [Op.or]: [
+            { name: { [Op.like]: `%${search}%` } },
+            { email: { [Op.like]: `%${search}%` } },
+            { username: { [Op.like]: `%${search}%` } }
+          ]
+        });
+      }
+
+      if (status) {
+        const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+        if (status.toUpperCase() === "ONLINE") {
+          andConditions.push({
+            lastActiveAt: {
+              [Op.gte]: fiveMinsAgo
+            }
+          });
+        } else if (status.toUpperCase() === "OFFLINE") {
+          andConditions.push({
+            [Op.or]: [
+              { lastActiveAt: null },
+              { lastActiveAt: { [Op.lt]: fiveMinsAgo } }
+            ]
+          });
+        }
+      }
+
+      if (startDate || endDate) {
+        const dateCondition = {};
+        if (startDate) {
+          dateCondition[Op.gte] = new Date(startDate);
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          dateCondition[Op.lte] = end;
+        }
+        andConditions.push({ createdAt: dateCondition });
+      }
+
+      if (andConditions.length > 0) {
+        customerWhere[Op.and] = andConditions;
       }
 
       const { count, rows: latestCustomers } = await masterCustomer.findAndCountAll({

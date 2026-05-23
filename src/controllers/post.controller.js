@@ -379,12 +379,15 @@ class PostController {
         try {
             const page = parseInt(req.query.page) || 1;
             const pageSize = parseInt(req.query.pageSize) || 10;
-            const { status } = req.query;
+            const { status, search, startDate, endDate } = req.query;
 
             const { reports, totalCount } = await postService.getReportedPosts({
                 page,
                 pageSize,
                 status,
+                search,
+                startDate,
+                endDate,
             });
 
             res.status(200).json({
