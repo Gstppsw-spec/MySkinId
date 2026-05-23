@@ -3670,8 +3670,37 @@ module.exports = {
 
       await t.commit();
 
-      // NOTE: PENDING_SETTLEMENT is already created at PAID time.
-      // The settlement cron will check voucher status (REDEEM/EXPIRED) before executing.
+      // 🔹 Check and create PENDING_SETTLEMENT if it doesn't exist yet (for older vouchers or callback failures)
+      try {
+        const voucherTrxItem = await transactionItem.findOne({
+          where: { id: voucher.transactionItemId },
+          include: [{ model: transaction, as: "transaction" }],
+        });
+
+        if (voucherTrxItem && voucherTrxItem.transaction) {
+          const existingTransfer = await platformTransfer.findOne({
+            where: { transactionItemId: voucherTrxItem.id, transferType: "VOUCHER_SETTLEMENT" }
+          });
+
+          if (!existingTransfer) {
+            console.log(`[ClaimVoucher] No transfer record found for item ${voucherTrxItem.id}. Creating VOUCHER_SETTLEMENT now.`);
+            const xenditPlatformService = require("./xenditPlatform.service");
+            const transferResult = await xenditPlatformService.transferToMerchant({
+              locationId: voucherTrxItem.transaction.locationId,
+              amount: parseFloat(voucherTrxItem.totalPrice),
+              transferType: "VOUCHER_SETTLEMENT",
+              transactionId: voucherTrxItem.transaction.id,
+              transactionItemId: voucherTrxItem.id,
+              orderId: voucherTrxItem.transaction.orderId,
+            });
+            if (!transferResult.status) {
+              console.warn(`[ClaimVoucher] Voucher settlement record skipped: ${transferResult.message}`);
+            }
+          }
+        }
+      } catch (settlementErr) {
+        console.error("[ClaimVoucher] Error checking/creating settlement record:", settlementErr.message);
+      }
 
       return {
         status: true,

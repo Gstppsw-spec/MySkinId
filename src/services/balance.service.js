@@ -247,20 +247,9 @@ module.exports = {
       if (locationIds.length > 0) {
         const pendingTransfers = await platformTransfer.findAll({
           where: {
-            [Op.or]: [
-              { locationId: { [Op.in]: locationIds } },
-              { '$transaction.location.companyId$': companyId }
-            ],
+            locationId: { [Op.in]: locationIds },
             status: "PENDING_SETTLEMENT"
-          },
-          include: [{
-            model: transaction,
-            as: 'transaction',
-            include: [{
-              model: masterLocation,
-              as: 'location'
-            }]
-          }]
+          }
         });
         pendingTransfersAmount = pendingTransfers.reduce((sum, pt) => sum + parseFloat(pt.amount || 0), 0);
       }
