@@ -5482,26 +5482,27 @@ module.exports = {
       }
 
       const whereClause = { locationId: { [Op.in]: locationIds } };
+      const incomeWhere = {
+        locationId: { [Op.in]: locationIds },
+        status: { [Op.in]: ["SUCCESS", "PENDING_SETTLEMENT"] },
+      };
 
+      let dateFilter = null;
       if (startDate && endDate) {
-        whereClause.createdAt = {
-          [Op.between]: [new Date(startDate), new Date(endDate)],
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter = {
+          [Op.between]: [start, end],
         };
+        whereClause.createdAt = dateFilter;
+        incomeWhere.createdAt = dateFilter;
       }
 
       // A. Total Transaksi
       const totalTransactions = await transaction.count({ where: whereClause });
 
-      // B. Total Pendapatan (Status SUCCESS in platformTransfers)
-      const incomeWhere = {
-        locationId: { [Op.in]: locationIds },
-        status: "SUCCESS",
-      };
-      if (startDate && endDate) {
-        incomeWhere.createdAt = {
-          [Op.between]: [new Date(startDate), new Date(endDate)],
-        };
-      }
+      // B. Total Pendapatan (Status SUCCESS or PENDING_SETTLEMENT in platformTransfers)
       const totalRevenue =
         (await platformTransfer.sum("amount", { where: incomeWhere })) || 0;
 
@@ -5533,17 +5534,7 @@ module.exports = {
               {
                 model: transaction,
                 as: "transaction",
-                where:
-                  startDate && endDate
-                    ? {
-                      createdAt: {
-                        [Op.between]: [
-                          new Date(startDate),
-                          new Date(endDate),
-                        ],
-                      },
-                    }
-                    : {},
+                where: dateFilter ? { createdAt: dateFilter } : {},
               },
             ],
           },

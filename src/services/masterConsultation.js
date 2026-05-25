@@ -22,6 +22,9 @@ const {
   consultationRecommendationCategory,
   masterUser,
   masterRole,
+  relationshipProductLocation,
+  relationshipServiceLocation,
+  relationshipPackageLocation,
 } = require("../models");
 
 const { Op, Sequelize, where, Model } = require("sequelize");
@@ -424,6 +427,14 @@ module.exports = {
         isQuestionareCompleted = totalAnswers >= totalRequired;
       }
 
+      const doctorReplyCount = await masterConsultationMessage.count({
+        where: {
+          roomId: room.id,
+          senderRole: "doctor",
+        },
+      });
+      const isDoctorReply = doctorReplyCount > 0;
+
       return {
         status: true,
         message: "Success",
@@ -432,6 +443,7 @@ module.exports = {
           imageCount,
           isScanning,
           isQuestionareCompleted,
+          isDoctorReply,
         },
       };
     } catch (error) {
@@ -1696,11 +1708,11 @@ module.exports = {
           where: { id: { [Op.in]: rawProductCategoryIds } },
           attributes: ["id"],
         });
-        
+
         if (existing.length !== rawProductCategoryIds.length) {
           return { status: false, message: "Satu atau lebih kategori produk tidak ditemukan", data: null };
         }
-        
+
         existing.forEach((cat) => validProductCategoryIds.push(cat.id));
       }
 
@@ -1894,18 +1906,128 @@ module.exports = {
           }
         }
       } else if (isLocationAvailable) {
-        // Only search for nearest locations if the room is NOT tied to a specific location
-        const distanceLiteral = buildDistanceLiteral(latitude, longitude);
+        // Find all location IDs that actually have at least one product, service, or package matching the recommended categories
+        let matchingLocationIds = [];
 
-        nearestLocations = await masterLocation.findAll({
-          attributes: ["id", "name", "ratingAvg", [distanceLiteral, "distance"]],
-          where: {
-            latitude: { [Op.ne]: null },
-            longitude: { [Op.ne]: null },
-          },
-          order: [[distanceLiteral, "ASC"]],
-          limit: 10,
-        });
+        // 1. Locations with matching products
+        if (allProductCategoryIds.length > 0) {
+          const prodLocs = await relationshipProductLocation.findAll({
+            attributes: ["locationId"],
+            where: { isActive: true },
+            include: [
+              {
+                model: masterProduct,
+                as: "product",
+                where: { isActive: true, isVerified: true },
+                required: true,
+                include: [
+                  {
+                    model: masterProductCategory,
+                    as: "categories",
+                    where: { id: { [Op.in]: allProductCategoryIds } },
+                    required: true,
+                    attributes: [],
+                  }
+                ]
+              }
+            ],
+            raw: true
+          });
+          prodLocs.forEach(pl => {
+            if (pl.locationId) matchingLocationIds.push(pl.locationId);
+          });
+        }
+
+        // 2. Locations with matching services
+        if (allPackageCategoryIds.length > 0) {
+          const svcLocs = await relationshipServiceLocation.findAll({
+            attributes: ["locationId"],
+            where: { isActive: true },
+            include: [
+              {
+                model: masterService,
+                as: "service",
+                where: { isActive: true, isVerified: true },
+                required: true,
+                include: [
+                  {
+                    model: masterSubCategoryService,
+                    as: "categories",
+                    where: { id: { [Op.in]: allPackageCategoryIds } },
+                    required: true,
+                    attributes: [],
+                  }
+                ]
+              }
+            ],
+            raw: true
+          });
+          svcLocs.forEach(sl => {
+            if (sl.locationId) matchingLocationIds.push(sl.locationId);
+          });
+        }
+
+        // 3. Locations with matching packages
+        if (allPackageCategoryIds.length > 0) {
+          const pkgLocs = await relationshipPackageLocation.findAll({
+            attributes: ["locationId"],
+            where: { isActive: true },
+            include: [
+              {
+                model: masterPackage,
+                as: "package",
+                where: { isActive: true, isVerified: true },
+                required: true,
+                include: [
+                  {
+                    model: masterPackageItems,
+                    as: "items",
+                    required: true,
+                    include: [
+                      {
+                        model: masterService,
+                        as: "service",
+                        required: true,
+                        include: [
+                          {
+                            model: masterSubCategoryService,
+                            as: "categories",
+                            where: { id: { [Op.in]: allPackageCategoryIds } },
+                            required: true,
+                            attributes: [],
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            raw: true
+          });
+          pkgLocs.forEach(pl => {
+            if (pl.locationId) matchingLocationIds.push(pl.locationId);
+          });
+        }
+
+        // Deduplicate location IDs
+        matchingLocationIds = [...new Set(matchingLocationIds)];
+
+        if (matchingLocationIds.length > 0) {
+          // Only search for nearest locations if the room is NOT tied to a specific location
+          const distanceLiteral = buildDistanceLiteral(latitude, longitude);
+
+          nearestLocations = await masterLocation.findAll({
+            attributes: ["id", "name", "ratingAvg", [distanceLiteral, "distance"]],
+            where: {
+              id: { [Op.in]: matchingLocationIds },
+              latitude: { [Op.ne]: null },
+              longitude: { [Op.ne]: null },
+            },
+            order: [[distanceLiteral, "ASC"]],
+            limit: 10,
+          });
+        }
       }
 
       const locationIds = nearestLocations.map((loc) => loc.id);
