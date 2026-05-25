@@ -257,8 +257,8 @@ module.exports = {
 
   async getRecommendations(req, res) {
     const { id } = req.params;
-    const { sortBy } = req.query;
-    const result = await consultation.getRecommendations(id, sortBy);
+    const { sortBy, latt, long } = req.query;
+    const result = await consultation.getRecommendations(id, sortBy, latt, long);
     return result.status
       ? response.success(res, result.message, result.data)
       : response.error(res, result.message, null);

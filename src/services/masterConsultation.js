@@ -1786,7 +1786,7 @@ module.exports = {
     }
   },
 
-  async getRecommendations(roomId, sortBy) {
+  async getRecommendations(roomId, sortBy, queryLatt, queryLong) {
     try {
       const room = await masterRoomConsultation.findOne({
         where: { id: roomId },
@@ -1854,34 +1854,48 @@ module.exports = {
         };
       }
 
-      // Determine customer location
-      let latitude = room.latitude;
-      let longitude = room.longitude;
-      let isLocationAvailable = !!(latitude && longitude);
+      // Determine customer location - prioritize query params, fallback to room data
+      let latitude = queryLatt ? parseFloat(queryLatt) : (room.latitude ? parseFloat(room.latitude) : null);
+      let longitude = queryLong ? parseFloat(queryLong) : (room.longitude ? parseFloat(room.longitude) : null);
+      let isLocationAvailable = !!(latitude && longitude && !isNaN(latitude) && !isNaN(longitude));
       let nearestLocations = [];
+
+      // Build distance calculation literal for reuse
+      const buildDistanceLiteral = (lat, lng) => Sequelize.literal(`
+        (6371 * acos(
+          cos(radians(${lat})) *
+          cos(radians(CAST(latitude AS FLOAT))) *
+          cos(radians(CAST(longitude AS FLOAT)) - radians(${lng})) +
+          sin(radians(${lat})) *
+          sin(radians(CAST(latitude AS FLOAT)))
+        )) * 1000.0
+      `);
 
       // Determine if we should show nearest locations or only the specific outlet
       if (room.locationId) {
         // If room is connected to a specific location, ONLY show that location
-        const fallbackOutlet = await masterLocation.findByPk(room.locationId, {
-          attributes: ["id", "name", "ratingAvg"],
-        });
-        if (fallbackOutlet) {
-          const outletJson = fallbackOutlet.toJSON();
-          outletJson.distance = 0;
-          nearestLocations = [outletJson];
+        // but calculate real distance if user location is available
+        if (isLocationAvailable) {
+          const distanceLiteral = buildDistanceLiteral(latitude, longitude);
+          const fallbackOutlet = await masterLocation.findByPk(room.locationId, {
+            attributes: ["id", "name", "ratingAvg", [distanceLiteral, "distance"]],
+          });
+          if (fallbackOutlet) {
+            nearestLocations = [fallbackOutlet];
+          }
+        } else {
+          const fallbackOutlet = await masterLocation.findByPk(room.locationId, {
+            attributes: ["id", "name", "ratingAvg"],
+          });
+          if (fallbackOutlet) {
+            const outletJson = fallbackOutlet.toJSON();
+            outletJson.distance = 0;
+            nearestLocations = [outletJson];
+          }
         }
       } else if (isLocationAvailable) {
         // Only search for nearest locations if the room is NOT tied to a specific location
-        const distanceLiteral = Sequelize.literal(`
-          (6371 * acos(
-            cos(radians(${parseFloat(latitude)})) *
-            cos(radians(CAST(latitude AS FLOAT))) *
-            cos(radians(CAST(longitude AS FLOAT)) - radians(${parseFloat(longitude)})) +
-            sin(radians(${parseFloat(latitude)})) *
-            sin(radians(CAST(latitude AS FLOAT)))
-          )) * 1000.0
-        `);
+        const distanceLiteral = buildDistanceLiteral(latitude, longitude);
 
         nearestLocations = await masterLocation.findAll({
           attributes: ["id", "name", "ratingAvg", [distanceLiteral, "distance"]],
