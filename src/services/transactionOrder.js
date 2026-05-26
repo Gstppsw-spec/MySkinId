@@ -5502,9 +5502,19 @@ module.exports = {
       // A. Total Transaksi
       const totalTransactions = await transaction.count({ where: whereClause });
 
-      // B. Total Pendapatan (Status SUCCESS or PENDING_SETTLEMENT in platformTransfers)
-      const totalRevenue =
-        (await platformTransfer.sum("amount", { where: incomeWhere })) || 0;
+      // B. Total Pendapatan (from PAID transactions, not platformTransfer which may be incomplete)
+      const revenueResult = await transaction.findAll({
+        where: whereClause,
+        include: [{
+          model: order,
+          as: "order",
+          where: { paymentStatus: "PAID" },
+          attributes: [],
+        }],
+        attributes: [[sequelize.fn('SUM', sequelize.col('transaction.grandTotal')), 'total']],
+        raw: true,
+      });
+      const totalRevenue = parseFloat(revenueResult[0]?.total || 0);
 
       // C. Transaksi Sukses (orderStatus = 'COMPLETED')
       const successTransactions = await transaction.count({
