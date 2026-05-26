@@ -1029,4 +1029,191 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  /**
+   * Super Admin: Delete raw transaction/order and all associated mock data.
+   */
+  async deleteRawTransaction(req, res) {
+    const { sequelize } = require("../models");
+    const t = await sequelize.transaction();
+    try {
+      const { orderId } = req.params;
+      if (!orderId) {
+        await t.rollback();
+        return response.error(res, "Order ID is required", 400);
+      }
+
+      const {
+        order: Order,
+        transaction: Transaction,
+        transactionItem: TransactionItem,
+        transactionShipping: TransactionShipping,
+        orderPayment: OrderPayment,
+        VoucherUsage,
+        platformTransfer: PlatformTransfer,
+        referralPoints: ReferralPoints,
+        AdsPurchase,
+        AdsDesignRequest,
+        customerVoucher: CustomerVoucher,
+        CompanyAdsBalanceHistory,
+      } = require("../models");
+
+      // Find the order along with its transactions and items
+      const ord = await Order.findOne({
+        where: { id: orderId },
+        include: [
+          {
+            model: Transaction,
+            as: "transactions",
+            include: [
+              {
+                model: TransactionItem,
+                as: "items",
+              }
+            ]
+          }
+        ]
+      });
+
+      if (!ord) {
+        await t.rollback();
+        return response.error(res, "Order not found", 404);
+      }
+
+      const transactionIds = ord.transactions ? ord.transactions.map(trx => trx.id) : [];
+      const transactionItemIds = [];
+      if (ord.transactions) {
+        for (const trx of ord.transactions) {
+          if (trx.items) {
+            for (const item of trx.items) {
+              transactionItemIds.push(item.id);
+            }
+          }
+        }
+      }
+
+      const { Op } = require("sequelize");
+
+      // 1. platformTransfer
+      if (PlatformTransfer) {
+        await PlatformTransfer.destroy({
+          where: {
+            [Op.or]: [
+              { orderId },
+              { transactionId: { [Op.in]: transactionIds } },
+              { transactionItemId: { [Op.in]: transactionItemIds } }
+            ]
+          },
+          transaction: t
+        });
+      }
+
+      // 2. CompanyAdsBalanceHistory
+      if (CompanyAdsBalanceHistory) {
+        await CompanyAdsBalanceHistory.destroy({
+          where: {
+            referenceId: {
+              [Op.in]: [orderId, ...transactionIds, ...transactionItemIds]
+            }
+          },
+          transaction: t
+        });
+      }
+
+      // 3. VoucherUsage
+      if (VoucherUsage) {
+        await VoucherUsage.destroy({
+          where: { orderId },
+          transaction: t
+        });
+      }
+
+      // 4. referralPoints
+      if (ReferralPoints) {
+        await ReferralPoints.destroy({
+          where: {
+            [Op.or]: [
+              { orderId },
+              { transactionId: { [Op.in]: transactionIds } }
+            ]
+          },
+          transaction: t
+        });
+      }
+
+      // 5. AdsPurchase
+      if (AdsPurchase) {
+        await AdsPurchase.destroy({
+          where: { orderId },
+          transaction: t
+        });
+      }
+
+      // 6. AdsDesignRequest
+      if (AdsDesignRequest) {
+        await AdsDesignRequest.destroy({
+          where: { orderId },
+          transaction: t
+        });
+      }
+
+      // 7. customerVoucher
+      if (CustomerVoucher) {
+        await CustomerVoucher.destroy({
+          where: {
+            transactionItemId: { [Op.in]: transactionItemIds }
+          },
+          transaction: t
+        });
+      }
+
+      // 8. transactionItems
+      if (TransactionItem) {
+        await TransactionItem.destroy({
+          where: {
+            transactionId: { [Op.in]: transactionIds }
+          },
+          transaction: t
+        });
+      }
+
+      // 9. transactionShipping
+      if (TransactionShipping) {
+        await TransactionShipping.destroy({
+          where: {
+            transactionId: { [Op.in]: transactionIds }
+          },
+          transaction: t
+        });
+      }
+
+      // 10. orderPayment
+      if (OrderPayment) {
+        await OrderPayment.destroy({
+          where: { orderId },
+          transaction: t
+        });
+      }
+
+      // 11. transactions
+      if (Transaction) {
+        await Transaction.destroy({
+          where: { orderId },
+          transaction: t
+        });
+      }
+
+      // 12. order itself
+      await Order.destroy({
+        where: { id: orderId },
+        transaction: t
+      });
+
+      await t.commit();
+      return response.success(res, `Successfully deleted order ${orderId} and all associated fake transaction data.`);
+    } catch (error) {
+      await t.rollback();
+      return response.serverError(res, error);
+    }
+  },
 };

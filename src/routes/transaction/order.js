@@ -171,4 +171,11 @@ router.get(
   transactionOrder.getRawTransactionsForSettlement,
 );
 
+// Super Admin: Delete raw transaction and associated data
+router.delete(
+  "/settlements/raw-transactions/:orderId",
+  allowRoles("SUPER_ADMIN"),
+  transactionOrder.deleteRawTransaction,
+);
+
 module.exports = router;
