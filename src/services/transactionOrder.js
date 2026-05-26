@@ -3979,7 +3979,7 @@ module.exports = {
         }
       }
 
-      const { count, rows } = await transaction.findAndCountAll({
+      const count = await transaction.count({
         where: whereClause,
         include: [
           {
@@ -3990,49 +3990,100 @@ module.exports = {
               {
                 model: masterCustomer,
                 as: "customer",
-                attributes: ["id", "name", "phoneNumber"],
                 required: !!search,
-              },
-              {
-                model: orderPayment,
-                as: "payments",
-                attributes: ["paymentMethod", "paymentStatus", "amount", "mdrFee"],
-              },
-              {
-                model: VoucherUsage,
-                as: "vouchers",
-                attributes: ["discountAmount", "myskinSubsidy", "mitraSubsidy"],
-              },
-            ],
-          },
-          {
-            model: transactionItem,
-            as: "items",
-            attributes: ["itemName", "quantity", "totalPrice"],
-          },
-          {
-            model: transactionShipping,
-            as: "shipping",
+              }
+            ]
           },
           {
             model: masterLocation,
             as: "location",
-            attributes: ["id", "name", "phone", "companyId"],
+            required: companyId && companyId.length > 0,
+          }
+        ],
+        distinct: true,
+      });
+
+      const idRows = await transaction.findAll({
+        attributes: ["id"],
+        where: whereClause,
+        include: [
+          {
+            model: order,
+            as: "order",
+            required: !!search,
             include: [
               {
-                model: require("../models").masterCompany,
-                as: "company",
-                attributes: ["createdAt", "platformFee"]
+                model: masterCustomer,
+                as: "customer",
+                required: !!search,
               }
             ]
           },
+          {
+            model: masterLocation,
+            as: "location",
+            required: companyId && companyId.length > 0,
+          }
         ],
         limit: limit,
         offset: offset,
         order: [["createdAt", "DESC"]],
-        distinct: true,
-        subQuery: false,
+        raw: true,
       });
+
+      const transactionIds = idRows.map(r => r.id);
+
+      let rows = [];
+      if (transactionIds.length > 0) {
+        rows = await transaction.findAll({
+          where: { id: { [Op.in]: transactionIds } },
+          include: [
+            {
+              model: order,
+              as: "order",
+              include: [
+                {
+                  model: masterCustomer,
+                  as: "customer",
+                  attributes: ["id", "name", "phoneNumber"],
+                },
+                {
+                  model: orderPayment,
+                  as: "payments",
+                  attributes: ["paymentMethod", "paymentStatus", "amount", "mdrFee"],
+                },
+                {
+                  model: VoucherUsage,
+                  as: "vouchers",
+                  attributes: ["discountAmount", "myskinSubsidy", "mitraSubsidy"],
+                },
+              ],
+            },
+            {
+              model: transactionItem,
+              as: "items",
+              attributes: ["itemName", "quantity", "totalPrice"],
+            },
+            {
+              model: transactionShipping,
+              as: "shipping",
+            },
+            {
+              model: masterLocation,
+              as: "location",
+              attributes: ["id", "name", "phone", "companyId"],
+              include: [
+                {
+                  model: require("../models").masterCompany,
+                  as: "company",
+                  attributes: ["createdAt", "platformFee"]
+                }
+              ]
+            },
+          ],
+          order: [["createdAt", "DESC"]],
+        });
+      }
 
       const result = rows.map((r) => {
         const plain = r.get({ plain: true });
