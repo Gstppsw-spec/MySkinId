@@ -405,23 +405,23 @@ module.exports = {
         }
       });
 
-      // Blend with high-fidelity realistic seed values for a stunning default look
-      const carouselClicks = stats.CAROUSEL.clicks || 12402;
-      const carouselRev = stats.CAROUSEL.revenue || 2400000;
+      const carouselClicks = stats.CAROUSEL.clicks;
+      const carouselRev = stats.CAROUSEL.revenue;
 
-      const bannerClicks = stats.BANNER.clicks || 8921;
-      const bannerRev = stats.BANNER.revenue || 1800000;
+      const bannerClicks = stats.BANNER.clicks;
+      const bannerRev = stats.BANNER.revenue;
 
-      const popupClicks = stats.POPUP.clicks || 15432;
-      const popupRev = stats.POPUP.revenue || 4200000;
+      const popupClicks = stats.POPUP.clicks;
+      const popupRev = stats.POPUP.revenue;
 
-      const topdealsClicks = stats.TOPDEALS.clicks || 5231;
-      const topdealsRev = stats.TOPDEALS.revenue || 900000;
+      const topdealsClicks = stats.TOPDEALS.clicks;
+      const topdealsRev = stats.TOPDEALS.revenue;
 
-      const premiumClicks = stats.PREMIUM_OUTLET.clicks || 3245;
-      const premiumRev = stats.PREMIUM_OUTLET.revenue || 1200000;
+      const premiumClicks = stats.PREMIUM_OUTLET.clicks;
+      const premiumRev = stats.PREMIUM_OUTLET.revenue;
 
       const sumClicks = carouselClicks + bannerClicks + popupClicks + topdealsClicks + premiumClicks;
+      const safePercent = (clicks) => sumClicks > 0 ? Math.round((clicks / sumClicks) * 100) : 0;
 
       const formatCurrencyPremium = (value) => {
         if (value >= 1000000) {
@@ -442,7 +442,7 @@ module.exports = {
           revenue: formatCurrencyPremium(carouselRev),
           revenueRaw: carouselRev,
           change: "+4.2%",
-          percentageOfTotalClicks: Math.round((carouselClicks / sumClicks) * 100),
+          percentageOfTotalClicks: safePercent(carouselClicks),
           color: "purple"
         },
         {
@@ -453,7 +453,7 @@ module.exports = {
           revenue: formatCurrencyPremium(bannerRev),
           revenueRaw: bannerRev,
           change: "+3.1%",
-          percentageOfTotalClicks: Math.round((bannerClicks / sumClicks) * 100),
+          percentageOfTotalClicks: safePercent(bannerClicks),
           color: "blue"
         },
         {
@@ -464,7 +464,7 @@ module.exports = {
           revenue: formatCurrencyPremium(popupRev),
           revenueRaw: popupRev,
           change: "+5.8%",
-          percentageOfTotalClicks: Math.round((popupClicks / sumClicks) * 100),
+          percentageOfTotalClicks: safePercent(popupClicks),
           color: "purple"
         },
         {
@@ -475,7 +475,7 @@ module.exports = {
           revenue: formatCurrencyPremium(topdealsRev),
           revenueRaw: topdealsRev,
           change: "+2.4%",
-          percentageOfTotalClicks: Math.round((topdealsClicks / sumClicks) * 100),
+          percentageOfTotalClicks: safePercent(topdealsClicks),
           color: "green"
         },
         {
@@ -486,7 +486,7 @@ module.exports = {
           revenue: formatCurrencyPremium(premiumRev),
           revenueRaw: premiumRev,
           change: "+1.9%",
-          percentageOfTotalClicks: Math.round((premiumClicks / sumClicks) * 100),
+          percentageOfTotalClicks: safePercent(premiumClicks),
           color: "red"
         }
       ];
