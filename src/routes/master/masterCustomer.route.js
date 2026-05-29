@@ -62,4 +62,12 @@ router.put(
   masterCustomerController.setReferrerForAdmin
 );
 
+// Admin: Get list of all freelance/busdev accounts with their metrics
+router.get(
+  "/admin/freelancers",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterCustomerController.getFreelancersListForAdmin
+);
+
 module.exports = router;

@@ -600,6 +600,26 @@ class masterCustomerController {
       return response.serverError(res, error);
     }
   }
+
+  async getFreelancersListForAdmin(req, res) {
+    try {
+      const { page, limit, search, startDate, endDate } = req.query;
+      const result = await masterCustomerService.getFreelancersListForAdmin({
+        page,
+        limit,
+        search,
+        startDate,
+        endDate
+      });
+
+      if (!result.status) {
+        return response.error(res, result.message, null);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
 }
 
 module.exports = new masterCustomerController();

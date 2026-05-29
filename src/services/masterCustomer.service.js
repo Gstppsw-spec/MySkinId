@@ -1046,6 +1046,103 @@ class masterCustomerService {
     }
   }
 
+  async getFreelancersListForAdmin(filters) {
+    try {
+      const { page = 1, limit = 10, search, startDate, endDate } = filters;
+      const { getPagination, formatPagination } = require("../utils/pagination");
+      const { limit: queryLimit, offset } = getPagination(page, limit);
+
+      const whereCondition = { isFreelance: true };
+      const andConditions = [];
+
+      if (search) {
+        andConditions.push({
+          [Op.or]: [
+            { name: { [Op.like]: `%${search}%` } },
+            { email: { [Op.like]: `%${search}%` } },
+            { phoneNumber: { [Op.like]: `%${search}%` } },
+          ]
+        });
+      }
+
+      if (startDate || endDate) {
+        const dateCondition = {};
+        if (startDate) {
+          dateCondition[Op.gte] = new Date(startDate);
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          dateCondition[Op.lte] = end;
+        }
+        andConditions.push({ createdAt: dateCondition });
+      }
+
+      if (andConditions.length > 0) {
+        whereCondition[Op.and] = andConditions;
+      }
+
+      const { count, rows: freelancers } = await masterCustomer.findAndCountAll({
+        where: whereCondition,
+        attributes: [
+          "id", "name", "username", "email", "phoneNumber", "countryCode",
+          "referralCode", "profileImageUrl", "isActive", "createdAt"
+        ],
+        include: [
+          {
+            model: sequelize.models.referralBalance,
+            as: "referralBalance",
+            attributes: ["balance", "totalEarned", "totalWithdrawn"]
+          }
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: queryLimit,
+        offset: offset,
+      });
+
+      // Map freelancers to include referred count
+      const items = await Promise.all(
+        freelancers.map(async (f) => {
+          const referredCount = await masterCustomer.count({
+            where: { referredBy: f.id }
+          });
+
+          return {
+            id: f.id,
+            name: f.name,
+            username: f.username,
+            email: f.email,
+            phoneNumber: f.phoneNumber,
+            countryCode: f.countryCode,
+            referralCode: f.referralCode,
+            profileImageUrl: f.profileImageUrl,
+            isActive: f.isActive,
+            createdAt: f.createdAt,
+            referredCount,
+            balance: f.referralBalance ? parseFloat(f.referralBalance.balance) : 0,
+            totalEarned: f.referralBalance ? parseFloat(f.referralBalance.totalEarned) : 0,
+            totalWithdrawn: f.referralBalance ? parseFloat(f.referralBalance.totalWithdrawn) : 0,
+          };
+        })
+      );
+
+      return {
+        status: true,
+        message: "Freelancers list fetched successfully",
+        data: {
+          items,
+          pagination: formatPagination(count, page, limit),
+        },
+      };
+    } catch (error) {
+      console.error("getFreelancersListForAdmin error:", error);
+      return {
+        status: false,
+        message: error.message || "Error fetching freelancers list",
+      };
+    }
+  }
+
   static normalizeNumber(phoneNumber, countryCode = "62") {
     phoneNumber = phoneNumber.toString().replace(/[^0-9]/g, "");
     countryCode = countryCode.toString().replace(/[^0-9]/g, "");
