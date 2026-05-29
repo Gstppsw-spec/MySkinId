@@ -115,6 +115,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
+      isFreelance: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: "Ditandai oleh superadmin, freelance/busdev tidak dapat komisi referral",
+      },
       lastLoginAt: {
         type: DataTypes.DATE,
         allowNull: true,

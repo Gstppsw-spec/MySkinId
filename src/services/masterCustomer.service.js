@@ -844,6 +844,190 @@ class masterCustomerService {
     }
   }
 
+  async getCustomerListForAdmin(filters) {
+    try {
+      const { page = 1, limit = 10, search, isFreelance, startDate, endDate } = filters;
+      const { getPagination, formatPagination } = require("../utils/pagination");
+      const { limit: queryLimit, offset } = getPagination(page, limit);
+
+      const whereCondition = {};
+      const andConditions = [];
+
+      if (search) {
+        andConditions.push({
+          [Op.or]: [
+            { name: { [Op.like]: `%${search}%` } },
+            { email: { [Op.like]: `%${search}%` } },
+            { phoneNumber: { [Op.like]: `%${search}%` } },
+          ]
+        });
+      }
+
+      if (isFreelance !== undefined && isFreelance !== '') {
+        const freelanceBool = isFreelance === true || isFreelance === 'true';
+        andConditions.push({ isFreelance: freelanceBool });
+      }
+
+      if (startDate || endDate) {
+        const dateCondition = {};
+        if (startDate) {
+          dateCondition[Op.gte] = new Date(startDate);
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          dateCondition[Op.lte] = end;
+        }
+        andConditions.push({ createdAt: dateCondition });
+      }
+
+      if (andConditions.length > 0) {
+        whereCondition[Op.and] = andConditions;
+      }
+
+      const { count, rows: customers } = await masterCustomer.findAndCountAll({
+        where: whereCondition,
+        attributes: [
+          "id", "name", "username", "email", "phoneNumber", "countryCode",
+          "profileImageUrl", "isActive", "isFreelance", "lastActiveAt", "createdAt"
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: queryLimit,
+        offset: offset,
+      });
+
+      return {
+        status: true,
+        message: "Customer list fetched successfully",
+        data: {
+          items: customers,
+          pagination: formatPagination(count, page, limit),
+        },
+      };
+    } catch (error) {
+      console.error("getCustomerListForAdmin error:", error);
+      return {
+        status: false,
+        message: error.message || "Error fetching customer list",
+      };
+    }
+  }
+
+  async getReferredCustomersForAdmin(filters) {
+    try {
+      const { customerId, page = 1, limit = 10, search, startDate, endDate } = filters;
+      if (!customerId) {
+        return { status: false, message: "customerId wajib diisi" };
+      }
+
+      const { getPagination, formatPagination } = require("../utils/pagination");
+      const { limit: queryLimit, offset } = getPagination(page, limit);
+
+      const overallCount = await masterCustomer.count({
+        where: { referredBy: customerId }
+      });
+
+      const whereCondition = { referredBy: customerId };
+      const andConditions = [];
+
+      if (search) {
+        andConditions.push({
+          [Op.or]: [
+            { name: { [Op.like]: `%${search}%` } },
+            { email: { [Op.like]: `%${search}%` } },
+            { phoneNumber: { [Op.like]: `%${search}%` } },
+          ]
+        });
+      }
+
+      if (startDate || endDate) {
+        const dateCondition = {};
+        if (startDate) {
+          dateCondition[Op.gte] = new Date(startDate);
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          dateCondition[Op.lte] = end;
+        }
+        andConditions.push({ createdAt: dateCondition });
+      }
+
+      if (andConditions.length > 0) {
+        whereCondition[Op.and] = andConditions;
+      }
+
+      const { count: filteredCount, rows: items } = await masterCustomer.findAndCountAll({
+        where: whereCondition,
+        attributes: [
+          "id", "name", "username", "email", "phoneNumber", "countryCode",
+          "profileImageUrl", "isActive", "createdAt"
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: queryLimit,
+        offset: offset,
+      });
+
+      return {
+        status: true,
+        message: "Referred customers list fetched successfully",
+        data: {
+          overallTotal: overallCount,
+          filteredTotal: filteredCount,
+          items,
+          pagination: formatPagination(filteredCount, page, limit),
+        }
+      };
+    } catch (error) {
+      console.error("getReferredCustomersForAdmin error:", error);
+      return {
+        status: false,
+        message: error.message || "Error fetching referred customers list",
+      };
+    }
+  }
+
+  async setReferrerForAdmin({ customerId, referrerId }) {
+    try {
+      if (!customerId || !referrerId) {
+        return { status: false, message: "customerId dan referrerId (freelance/busdev) wajib diisi" };
+      }
+
+      if (customerId === referrerId) {
+        return { status: false, message: "Customer tidak dapat mereferensikan diri sendiri" };
+      }
+
+      const customer = await masterCustomer.findByPk(customerId);
+      if (!customer) {
+        return { status: false, message: "Customer tidak ditemukan" };
+      }
+
+      const referrer = await masterCustomer.findByPk(referrerId);
+      if (!referrer) {
+        return { status: false, message: "Referrer (freelance/busdev) tidak ditemukan" };
+      }
+
+      await customer.update({ referredBy: referrerId });
+
+      return {
+        status: true,
+        message: "Referrer berhasil dikaitkan secara manual oleh admin",
+        data: {
+          customerId: customer.id,
+          customerName: customer.name,
+          referrerId: referrer.id,
+          referrerName: referrer.name,
+        }
+      };
+    } catch (error) {
+      console.error("setReferrerForAdmin error:", error);
+      return {
+        status: false,
+        message: error.message || "Error setting referrer",
+      };
+    }
+  }
+
   static normalizeNumber(phoneNumber, countryCode = "62") {
     phoneNumber = phoneNumber.toString().replace(/[^0-9]/g, "");
     countryCode = countryCode.toString().replace(/[^0-9]/g, "");

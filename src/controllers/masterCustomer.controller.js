@@ -437,7 +437,7 @@ class masterCustomerController {
 
       const { count, rows: latestCustomers } = await masterCustomer.findAndCountAll({
         where: customerWhere,
-        attributes: ["id", "name", "email", "lastActiveAt", "loginMethod", "profileImageUrl", "createdAt"],
+        attributes: ["id", "name", "email", "lastActiveAt", "loginMethod", "profileImageUrl", "createdAt", "isFreelance"],
         order: [
           [Sequelize.literal("CASE WHEN lastActiveAt IS NULL THEN 1 ELSE 0 END"), "ASC"],
           ["lastActiveAt", "DESC"],
@@ -486,7 +486,8 @@ class masterCustomerController {
           joinedAt: c.createdAt,
           deviceOrOs,
           status: isOnline ? "ONLINE" : "OFFLINE",
-          source: "MOBILE APP"
+          source: "MOBILE APP",
+          isFreelance: c.isFreelance || false,
         };
       });
 
@@ -508,6 +509,93 @@ class masterCustomerController {
         latestActivities: mappedCustomers,
         pagination: formatPagination(count, page, pageSize)
       });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+  async toggleFreelance(req, res) {
+    try {
+      const { customerId, isFreelance } = req.body || {};
+      if (!customerId || typeof isFreelance !== "boolean") {
+        return response.error(res, "customerId dan isFreelance (boolean) wajib diisi", null);
+      }
+
+      const { masterCustomer } = require("../models");
+      const customer = await masterCustomer.findByPk(customerId);
+      if (!customer) {
+        return response.error(res, "Customer tidak ditemukan", null);
+      }
+
+      await customer.update({ isFreelance });
+
+      return response.success(
+        res,
+        `Customer berhasil ditandai sebagai ${isFreelance ? "freelance" : "non-freelance"}`,
+        {
+          id: customer.id,
+          name: customer.name,
+          isFreelance: customer.isFreelance,
+        }
+      );
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+
+  async getCustomerListForAdmin(req, res) {
+    try {
+      const { page, limit, search, isFreelance, startDate, endDate } = req.query;
+      const result = await masterCustomerService.getCustomerListForAdmin({
+        page,
+        limit,
+        search,
+        isFreelance,
+        startDate,
+        endDate
+      });
+
+      if (!result.status) {
+        return response.error(res, result.message, null);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+
+  async getReferredCustomersForAdmin(req, res) {
+    try {
+      const { customerId, page, limit, search, startDate, endDate } = req.query;
+      const result = await masterCustomerService.getReferredCustomersForAdmin({
+        customerId,
+        page,
+        limit,
+        search,
+        startDate,
+        endDate
+      });
+
+      if (!result.status) {
+        return response.error(res, result.message, null);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+
+  async setReferrerForAdmin(req, res) {
+    try {
+      const { customerId, referrerId, freelanceId } = req.body || {};
+      const result = await masterCustomerService.setReferrerForAdmin({
+        customerId,
+        referrerId: referrerId || freelanceId
+      });
+
+      if (!result.status) {
+        return response.error(res, result.message, null);
+      }
+      return response.success(res, result.message, result.data);
     } catch (error) {
       return response.serverError(res, error);
     }

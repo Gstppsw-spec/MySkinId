@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const masterCustomerController = require("../../controllers/masterCustomer.controller");
 const { verifyToken } = require("../../middlewares/authMiddleware");
+const { allowRoles } = require("../../middlewares/roleMiddleware");
 const uploadProfileImage = require("../../middlewares/uploadProfileImage.middleware");
 const compressImage = require("../../middlewares/compressImage");
 
@@ -28,5 +29,37 @@ router.get("/profile", verifyToken, masterCustomerController.getProfile);
 router.post("/track-open", verifyToken, masterCustomerController.trackOpen);
 router.get("/dashboard-summary", verifyToken, masterCustomerController.getCustomerDashboardSummary);
 router.get("/get-customer-by-user-id/:userId", verifyToken, masterCustomerController.getCustomerByUserId);
+
+// Admin: Toggle freelance/busdev status
+router.put(
+  "/toggle-freelance",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterCustomerController.toggleFreelance
+);
+
+// Admin: Get customer list with pagination and filters
+router.get(
+  "/admin/list",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterCustomerController.getCustomerListForAdmin
+);
+
+// Admin: Get list of referred customers for a specific freelance/busdev
+router.get(
+  "/admin/referred-customers",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterCustomerController.getReferredCustomersForAdmin
+);
+
+// Admin: Manually associate customer to a freelance/busdev (referrer)
+router.put(
+  "/admin/set-referrer",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterCustomerController.setReferrerForAdmin
+);
 
 module.exports = router;

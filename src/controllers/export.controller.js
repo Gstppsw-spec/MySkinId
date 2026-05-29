@@ -126,7 +126,11 @@ module.exports = {
   },
 
   async exportCustomers(req, res) {
-    return handleExport(req, res, exportService.fetchCustomers, "laporan_customer");
+    const { busdevName } = req.query;
+    const fetchFn = (startDate, endDate, companyIdsArray, locationIdsArray, search) => {
+      return exportService.fetchCustomers(startDate, endDate, busdevName);
+    };
+    return handleExport(req, res, fetchFn, "laporan_customer");
   },
 
   async exportAdsPerformance(req, res) {

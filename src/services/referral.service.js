@@ -223,6 +223,12 @@ module.exports = {
         return;
       }
 
+      // If referrer is freelance/busdev, skip commission entirely (0%)
+      if (referrer.isFreelance === true) {
+        console.log(`[Referral] Referrer ${referrerId} is freelance/busdev — skipping commission for order ${orderId}`);
+        return;
+      }
+
       // Prevent duplicate: check if we already credited for this order
       const existingCredit = await referralPoints.findOne({
         where: { orderId, referrerId },

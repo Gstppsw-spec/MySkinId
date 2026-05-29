@@ -713,11 +713,31 @@ async function generateExcel(config) {
   return buffer;
 }
 
-async function fetchCustomers(startDate, endDate) {
+async function fetchCustomers(startDate, endDate, busdevName) {
   const dateWhere = buildDateFilter(startDate, endDate);
+  const where = { ...dateWhere };
+
+  if (busdevName && busdevName.trim() !== "") {
+    const referrers = await masterCustomer.findAll({
+      where: {
+        name: { [Op.like]: `%${busdevName}%` },
+        isFreelance: true
+      },
+      attributes: ["id"]
+    });
+    const referrerIds = referrers.map(r => r.id);
+    where.referredBy = { [Op.in]: referrerIds };
+  }
 
   const customers = await masterCustomer.findAll({
-    where: { ...dateWhere },
+    where,
+    include: [
+      {
+        model: masterCustomer,
+        as: "referrer",
+        attributes: ["name"]
+      }
+    ],
     order: [["createdAt", "ASC"]],
   });
 
@@ -728,6 +748,7 @@ async function fetchCustomers(startDate, endDate) {
     c.phoneNumber || "-",
     formatDate(c.createdAt), // Tanggal Install/Register
     c.lastActiveAt ? formatDate(c.lastActiveAt) : "-", // Terakhir Buka
+    c.referrer ? c.referrer.name : "-", // Referrer / Busdev
   ]);
 
   return {
@@ -739,6 +760,7 @@ async function fetchCustomers(startDate, endDate) {
       { header: "No. Telepon", width: 100 },
       { header: "Tanggal Register", width: 100 },
       { header: "Terakhir Buka App", width: 100 },
+      { header: "Referrer / Busdev", width: 120 },
     ],
     rows,
     totalData: rows.length,
