@@ -1005,19 +1005,32 @@ class masterCustomerService {
     }
   }
 
-  async setReferrerForAdmin({ customerId, referrerId }) {
+  async setReferrerForAdmin({ customerIds, customerId, custId, custid, referrerId }) {
     try {
-      if (!customerId || !referrerId) {
-        return { status: false, message: "customerId dan referrerId (freelance/busdev) wajib diisi" };
+      if (!referrerId) {
+        return { status: false, message: "referrerId (freelance/busdev) wajib diisi" };
       }
 
-      if (customerId === referrerId) {
-        return { status: false, message: "Customer tidak dapat mereferensikan diri sendiri" };
-      }
+      let ids = [];
+      const addId = (val) => {
+        if (!val) return;
+        if (Array.isArray(val)) {
+          ids.push(...val);
+        } else if (typeof val === "string") {
+          ids.push(val);
+        }
+      };
 
-      const customer = await masterCustomer.findByPk(customerId);
-      if (!customer) {
-        return { status: false, message: "Customer tidak ditemukan" };
+      addId(customerIds);
+      addId(customerId);
+      addId(custId);
+      addId(custid);
+
+      // Remove duplicates and filter empty/falsy values
+      ids = [...new Set(ids.filter(Boolean))];
+
+      if (ids.length === 0) {
+        return { status: false, message: "customerIds, customerId, custId, atau custid wajib diisi" };
       }
 
       const referrer = await masterCustomer.findByPk(referrerId);
@@ -1025,16 +1038,45 @@ class masterCustomerService {
         return { status: false, message: "Referrer (freelance/busdev) tidak ditemukan" };
       }
 
-      await customer.update({ referredBy: referrerId });
+      const validIds = [];
+      const errors = [];
+
+      for (const id of ids) {
+        if (id === referrerId) {
+          errors.push({ id, message: "Customer tidak dapat mereferensikan diri sendiri" });
+          continue;
+        }
+
+        const customer = await masterCustomer.findByPk(id);
+        if (!customer) {
+          errors.push({ id, message: "Customer tidak ditemukan" });
+          continue;
+        }
+
+        validIds.push(id);
+      }
+
+      if (validIds.length === 0) {
+        return {
+          status: false,
+          message: "Tidak ada customer ID yang valid untuk diproses",
+          errors
+        };
+      }
+
+      await masterCustomer.update(
+        { referredBy: referrerId },
+        { where: { id: { [Op.in]: validIds } } }
+      );
 
       return {
         status: true,
-        message: "Referrer berhasil dikaitkan secara manual oleh admin",
+        message: `Berhasil mengaitkan ${validIds.length} customer ke referrer secara manual`,
         data: {
-          customerId: customer.id,
-          customerName: customer.name,
+          processedCount: validIds.length,
           referrerId: referrer.id,
           referrerName: referrer.name,
+          errors: errors.length > 0 ? errors : undefined
         }
       };
     } catch (error) {

@@ -586,14 +586,17 @@ class masterCustomerController {
 
   async setReferrerForAdmin(req, res) {
     try {
-      const { customerId, referrerId, freelanceId } = req.body || {};
+      const { customerIds, customerId, custId, custid, referrerId, freelanceId } = req.body || {};
       const result = await masterCustomerService.setReferrerForAdmin({
+        customerIds,
         customerId,
+        custId,
+        custid,
         referrerId: referrerId || freelanceId
       });
 
       if (!result.status) {
-        return response.error(res, result.message, null);
+        return response.error(res, result.message, result.data);
       }
       return response.success(res, result.message, result.data);
     } catch (error) {

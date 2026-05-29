@@ -953,13 +953,6 @@ async function fetchFreelancers(startDate, endDate, companyIds, locationIds, sea
 
   const freelancers = await masterCustomer.findAll({
     where,
-    include: [
-      {
-        model: masterCustomer.sequelize.models.referralBalance,
-        as: "referralBalance",
-        attributes: ["balance", "totalEarned", "totalWithdrawn"]
-      }
-    ],
     order: [["createdAt", "ASC"]],
   });
 
@@ -969,10 +962,6 @@ async function fetchFreelancers(startDate, endDate, companyIds, locationIds, sea
         where: { referredBy: f.id }
       });
 
-      const balance = f.referralBalance ? parseFloat(f.referralBalance.balance) : 0;
-      const totalEarned = f.referralBalance ? parseFloat(f.referralBalance.totalEarned) : 0;
-      const totalWithdrawn = f.referralBalance ? parseFloat(f.referralBalance.totalWithdrawn) : 0;
-
       return [
         idx + 1,
         f.name || "-",
@@ -980,9 +969,6 @@ async function fetchFreelancers(startDate, endDate, companyIds, locationIds, sea
         f.phoneNumber || "-",
         f.referralCode || "-",
         referredCount,
-        formatRupiah(totalEarned),
-        formatRupiah(totalWithdrawn),
-        formatRupiah(balance),
         formatDate(f.createdAt),
       ];
     })
@@ -997,9 +983,6 @@ async function fetchFreelancers(startDate, endDate, companyIds, locationIds, sea
       { header: "No. Telepon", width: 100 },
       { header: "Kode Referral", width: 90 },
       { header: "Jumlah Diajak", width: 80 },
-      { header: "Total Pendapatan", width: 100 },
-      { header: "Total Penarikan", width: 100 },
-      { header: "Sisa Saldo", width: 100 },
       { header: "Tanggal Gabung", width: 120 },
     ],
     rows,
