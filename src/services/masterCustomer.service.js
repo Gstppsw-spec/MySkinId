@@ -526,9 +526,27 @@ class masterCustomerService {
       if (!customer)
         return { status: false, message: "Customer tidak ditemukan" };
 
-      const usernameExists = await masterCustomer.findOne({ where: { username } });
-      if (usernameExists && usernameExists.id !== customerId)
-        return { status: false, message: "Username sudah digunakan" };
+      if (username) {
+        const usernameExists = await masterCustomer.findOne({ where: { username } });
+        if (usernameExists && usernameExists.id !== customerId)
+          return { status: false, message: "Username sudah digunakan" };
+      }
+
+      if (email) {
+        const emailExists = await masterCustomer.findOne({
+          where: { email, id: { [Op.ne]: customerId } },
+        });
+        if (emailExists)
+          return { status: false, message: "Email sudah digunakan oleh akun lain" };
+      }
+
+      if (phoneNumber) {
+        const phoneExists = await masterCustomer.findOne({
+          where: { phoneNumber, id: { [Op.ne]: customerId } },
+        });
+        if (phoneExists)
+          return { status: false, message: "Nomor HP sudah digunakan oleh akun lain" };
+      }
 
       let updateData = { name, email, phoneNumber, username };
 
