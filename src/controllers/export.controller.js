@@ -128,7 +128,7 @@ module.exports = {
   async exportCustomers(req, res) {
     const { busdevName } = req.query;
     const fetchFn = (startDate, endDate, companyIdsArray, locationIdsArray, search) => {
-      return exportService.fetchCustomers(startDate, endDate, busdevName);
+      return exportService.fetchCustomers(startDate, endDate, search, busdevName);
     };
     return handleExport(req, res, fetchFn, "laporan_customer");
   },
@@ -138,7 +138,11 @@ module.exports = {
   },
 
   async exportAdsPerformance(req, res) {
-    return handleExport(req, res, exportService.fetchAdsPerformance, "laporan_ads_performance");
+    const { status } = req.query;
+    const fetchFn = (startDate, endDate, companyIdsArray, locationIdsArray, search) => {
+      return exportService.fetchAdsPerformance(startDate, endDate, companyIdsArray, locationIdsArray, search, status);
+    };
+    return handleExport(req, res, fetchFn, "laporan_ads_performance");
   },
 
   async exportConsultationSummary(req, res) {

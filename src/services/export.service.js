@@ -713,9 +713,17 @@ async function generateExcel(config) {
   return buffer;
 }
 
-async function fetchCustomers(startDate, endDate, busdevName) {
+async function fetchCustomers(startDate, endDate, search, busdevName) {
   const dateWhere = buildDateFilter(startDate, endDate);
   const where = { ...dateWhere };
+
+  if (search && search.trim() !== "") {
+    where[Op.or] = [
+      { name: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { phoneNumber: { [Op.like]: `%${search}%` } },
+    ];
+  }
 
   if (busdevName && busdevName.trim() !== "") {
     const referrers = await masterCustomer.findAll({
@@ -767,8 +775,24 @@ async function fetchCustomers(startDate, endDate, busdevName) {
   };
 }
 
-async function fetchAdsPerformance(startDate, endDate, companyIds, locationIds) {
-  const dateWhere = buildDateFilter(startDate, endDate);
+async function fetchAdsPerformance(startDate, endDate, companyIds, locationIds, search, status) {
+  const where = {};
+  
+  if (startDate || endDate) {
+    if (startDate) {
+      where.startDate = { [Op.gte]: new Date(startDate + "T00:00:00") };
+    }
+    if (endDate) {
+      where.endDate = { [Op.lte]: new Date(endDate + "T23:59:59") };
+    }
+  }
+
+  if (status && status.trim() !== "") {
+    where.status = status;
+  } else {
+    where.status = { [Op.in]: ["PAID", "EXPIRED"] };
+  }
+
   const whereLocation = {};
   const whereCompany = {};
 
@@ -780,10 +804,7 @@ async function fetchAdsPerformance(startDate, endDate, companyIds, locationIds) 
   }
 
   const ads = await AdsPurchase.findAll({
-    where: { 
-      status: { [Op.in]: ["PAID", "EXPIRED"] },
-      ...dateWhere 
-    },
+    where,
     include: [
       {
         model: masterLocation,
