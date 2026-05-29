@@ -1126,10 +1126,30 @@ class masterCustomerService {
         })
       );
 
+      // Get overall total freelancers count
+      const totalFreelancers = await masterCustomer.count({
+        where: { isFreelance: true }
+      });
+
+      // Get all freelancer IDs to count their total referred customers
+      const allFreelancers = await masterCustomer.findAll({
+        where: { isFreelance: true },
+        attributes: ["id"]
+      });
+      const freelancerIds = allFreelancers.map(f => f.id);
+
+      const totalReferredByAllFreelancers = freelancerIds.length > 0 
+        ? await masterCustomer.count({ where: { referredBy: { [Op.in]: freelancerIds } } })
+        : 0;
+
       return {
         status: true,
         message: "Freelancers list fetched successfully",
         data: {
+          stats: {
+            totalFreelancers,
+            totalReferredByAllFreelancers,
+          },
           items,
           pagination: formatPagination(count, page, limit),
         },

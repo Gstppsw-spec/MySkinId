@@ -133,6 +133,10 @@ module.exports = {
     return handleExport(req, res, fetchFn, "laporan_customer");
   },
 
+  async exportFreelancers(req, res) {
+    return handleExport(req, res, exportService.fetchFreelancers, "laporan_freelance");
+  },
+
   async exportAdsPerformance(req, res) {
     return handleExport(req, res, exportService.fetchAdsPerformance, "laporan_ads_performance");
   },

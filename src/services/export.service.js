@@ -918,6 +918,74 @@ async function fetchConsultationSummary(startDate, endDate, companyIds, location
   };
 }
 
+async function fetchFreelancers(startDate, endDate, companyIds, locationIds, search) {
+  const dateWhere = buildDateFilter(startDate, endDate);
+  const where = { isFreelance: true, ...dateWhere };
+
+  if (search) {
+    where[Op.or] = [
+      { name: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { phoneNumber: { [Op.like]: `%${search}%` } },
+    ];
+  }
+
+  const freelancers = await masterCustomer.findAll({
+    where,
+    include: [
+      {
+        model: masterCustomer.sequelize.models.referralBalance,
+        as: "referralBalance",
+        attributes: ["balance", "totalEarned", "totalWithdrawn"]
+      }
+    ],
+    order: [["createdAt", "ASC"]],
+  });
+
+  const rows = await Promise.all(
+    freelancers.map(async (f, idx) => {
+      const referredCount = await masterCustomer.count({
+        where: { referredBy: f.id }
+      });
+
+      const balance = f.referralBalance ? parseFloat(f.referralBalance.balance) : 0;
+      const totalEarned = f.referralBalance ? parseFloat(f.referralBalance.totalEarned) : 0;
+      const totalWithdrawn = f.referralBalance ? parseFloat(f.referralBalance.totalWithdrawn) : 0;
+
+      return [
+        idx + 1,
+        f.name || "-",
+        f.email || "-",
+        f.phoneNumber || "-",
+        f.referralCode || "-",
+        referredCount,
+        formatRupiah(totalEarned),
+        formatRupiah(totalWithdrawn),
+        formatRupiah(balance),
+        formatDate(f.createdAt),
+      ];
+    })
+  );
+
+  return {
+    title: "Laporan Data Freelance - Busdev",
+    columns: [
+      { header: "No", width: 30 },
+      { header: "Nama Lengkap", width: 120 },
+      { header: "Email", width: 130 },
+      { header: "No. Telepon", width: 100 },
+      { header: "Kode Referral", width: 90 },
+      { header: "Jumlah Diajak", width: 80 },
+      { header: "Total Pendapatan", width: 100 },
+      { header: "Total Penarikan", width: 100 },
+      { header: "Sisa Saldo", width: 100 },
+      { header: "Tanggal Gabung", width: 120 },
+    ],
+    rows,
+    totalData: rows.length,
+  };
+}
+
 // ─── Exported Functions ──────────────────────────────────────────────────────
 
 module.exports = {
@@ -928,6 +996,7 @@ module.exports = {
   fetchPackages,
   fetchLocations,
   fetchCustomers,
+  fetchFreelancers,
   fetchAdsPerformance,
   fetchConsultationSummary,
   generatePDF,
