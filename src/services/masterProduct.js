@@ -232,6 +232,42 @@ module.exports = {
         ],
       });
 
+      const activeFlashSaleItemIds = [];
+      activeFlashSales.forEach((fs) => {
+        if (fs.items) {
+          fs.items.forEach((item) => {
+            activeFlashSaleItemIds.push(item.id);
+          });
+        }
+      });
+
+      const boughtMap = {};
+      if (customerId && activeFlashSaleItemIds.length > 0) {
+        const { transactionItem: trxItemModel, transaction: trxModel, order: orderModel } = require("../models");
+        const itemsBought = await trxItemModel.findAll({
+          where: {
+            flashSaleItemId: { [Op.in]: activeFlashSaleItemIds },
+          },
+          include: [{
+            model: trxModel,
+            as: "transaction",
+            required: true,
+            include: [{
+              model: orderModel,
+              as: "order",
+              where: {
+                customerId,
+                paymentStatus: "PAID",
+              },
+              required: true,
+            }],
+          }],
+        });
+        itemsBought.forEach((i) => {
+          boughtMap[i.flashSaleItemId] = (boughtMap[i.flashSaleItemId] || 0) + (i.quantity || 0);
+        });
+      }
+
       const result = products.flatMap((prod) => {
         const plain = prod.get({ plain: true });
         if (plain.images) plain.images = sortPrimaryFirst(plain.images);
@@ -251,6 +287,8 @@ module.exports = {
               quota: item.quota,
               sold: item.sold,
               endDateFlashSale: fs.endDate,
+              maxBuyPerCustomer: item.maxBuyPerCustomer || 0,
+              alreadyBought: boughtMap[item.id] || 0,
             };
             break;
           }
@@ -1004,6 +1042,42 @@ module.exports = {
         ],
       });
 
+      const activeFlashSaleItemIds = [];
+      activeFlashSales.forEach((fs) => {
+        if (fs.items) {
+          fs.items.forEach((item) => {
+            activeFlashSaleItemIds.push(item.id);
+          });
+        }
+      });
+
+      const boughtMap = {};
+      if (customerId && activeFlashSaleItemIds.length > 0) {
+        const { transactionItem: trxItemModel, transaction: trxModel, order: orderModel } = require("../models");
+        const itemsBought = await trxItemModel.findAll({
+          where: {
+            flashSaleItemId: { [Op.in]: activeFlashSaleItemIds },
+          },
+          include: [{
+            model: trxModel,
+            as: "transaction",
+            required: true,
+            include: [{
+              model: orderModel,
+              as: "order",
+              where: {
+                customerId,
+                paymentStatus: "PAID",
+              },
+              required: true,
+            }],
+          }],
+        });
+        itemsBought.forEach((i) => {
+          boughtMap[i.flashSaleItemId] = (boughtMap[i.flashSaleItemId] || 0) + (i.quantity || 0);
+        });
+      }
+
       const result = products.map((prod) => {
         const plain = prod.get({ plain: true });
         if (plain.images) plain.images = sortPrimaryFirst(plain.images);
@@ -1023,6 +1097,8 @@ module.exports = {
               quota: item.quota,
               sold: item.sold,
               endDateFlashSale: fs.endDate,
+              maxBuyPerCustomer: item.maxBuyPerCustomer || 0,
+              alreadyBought: boughtMap[item.id] || 0,
             };
             break;
           }
