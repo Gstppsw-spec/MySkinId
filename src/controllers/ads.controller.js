@@ -152,6 +152,26 @@ module.exports = {
   },
 
   // --- SUPER ADMIN ---
+  async createDirectAd(req, res) {
+    try {
+      const data = { ...req.body };
+
+      // Handle uploaded images
+      if (req.files && req.files.length > 0) {
+        const imageUrls = req.files.map((file) => {
+          return `${process.env.BACKEND_URL || "https://api.myskin.blog"}/uploads/ads/${file.filename}`;
+        });
+        data.images = imageUrls;
+      }
+
+      const result = await adsService.createDirectAd(data);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async adminTopup(req, res) {
     try {
       const { companyId, companyIds, amount, description } = req.body;

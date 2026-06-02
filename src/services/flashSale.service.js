@@ -43,13 +43,31 @@ async function syncStatuses() {
   );
 }
 
+/**
+ * Calculate distance between two lat/lng points using Haversine formula
+ */
+function getDistance(lat1, lon1, lat2, lon2) {
+  if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined) return null;
+  if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
+  const R = 6371; // Radius of the earth in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c; // Distance in km
+  return d;
+}
+
 /* ── Include helpers ──────────────────────────── */
 
 const itemIncludes = [
   {
     model: masterLocation,
     as: "location",
-    attributes: ["id", "name"],
+    attributes: ["id", "name", "latitude", "longitude"],
     include: [
       {
         model: masterLocationImage,
@@ -207,14 +225,19 @@ module.exports = {
 
       if (status) {
         existing.status = status;
-      } else {
-        // Recalculate status based on time
-        const now = new Date();
-        const start = existing.startDate;
-        const end = existing.endDate;
-        if (now < start) existing.status = "UPCOMING";
-        else if (now >= start && now < end) existing.status = "ACTIVE";
-        else existing.status = "ENDED";
+      }
+
+      // Recalculate/Enforce status based on dates if start date is in the future or event has ended
+      const now = new Date();
+      const start = existing.startDate;
+      const end = existing.endDate;
+      if (now < start) {
+        existing.status = "UPCOMING";
+      } else if (now >= end) {
+        existing.status = "ENDED";
+      } else if (!status) {
+        // If status was not provided and we are in active range, set to ACTIVE
+        existing.status = "ACTIVE";
       }
 
       await existing.save();
@@ -270,7 +293,7 @@ module.exports = {
 
       const results = [];
       for (const item of items) {
-        const { itemType, productId, packageId, serviceId, flashPrice, quota } = item;
+        const { itemType, productId, packageId, serviceId, flashPrice, quota, maxBuyPerCustomer } = item;
 
         if (!itemType || !["PRODUCT", "PACKAGE", "SERVICE"].includes(itemType)) throw new Error("itemType must be PRODUCT, PACKAGE, or SERVICE");
         
@@ -405,7 +428,8 @@ module.exports = {
           serviceId: itemType === "SERVICE" ? serviceId : null,
           flashPrice: flashPrice || 0,
           quota: quota || 0,
-          sold: 0
+          sold: 0,
+          maxBuyPerCustomer: maxBuyPerCustomer || 0
         }, { transaction: t });
 
         results.push(newItem);
@@ -474,7 +498,7 @@ module.exports = {
      CUSTOMER — Browse Flash Sale Aktif
      ═══════════════════════════════════════════════ */
 
-  async getActive() {
+  async getActive(userLat, userLng) {
     try {
       await syncStatuses();
 
@@ -499,8 +523,35 @@ module.exports = {
             } else if (item.itemType === "SERVICE" && item.service && item.location?.images) {
               item.service.images = item.location.images;
             }
+
+            // Calculate distance if location lat/lng exist
+            if (userLat !== undefined && userLng !== undefined && item.location?.latitude && item.location?.longitude) {
+              const itemLat = parseFloat(item.location.latitude);
+              const itemLng = parseFloat(item.location.longitude);
+              const d = getDistance(userLat, userLng, itemLat, itemLng);
+              if (d !== null) {
+                item.distance = Math.round(d * 10) / 10;
+                item.distanceLabel = `${item.distance} km`;
+              } else {
+                item.distance = null;
+                item.distanceLabel = null;
+              }
+            } else {
+              item.distance = null;
+              item.distanceLabel = null;
+            }
+
             return item;
           });
+
+          // Sort items by distance if user location is provided
+          if (userLat !== undefined && userLng !== undefined) {
+            plain.items.sort((a, b) => {
+              if (a.distance === null || a.distance === undefined) return 1;
+              if (b.distance === null || b.distance === undefined) return -1;
+              return a.distance - b.distance;
+            });
+          }
         }
         return plain;
       });

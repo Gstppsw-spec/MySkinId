@@ -50,7 +50,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       locationId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
       },
       orderId: {
         type: DataTypes.UUID,

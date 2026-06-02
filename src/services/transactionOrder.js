@@ -493,6 +493,38 @@ module.exports = {
           }
 
           if (flashSaleItemId) {
+            // NEW: Max buy per customer validation
+            if (fsItem.maxBuyPerCustomer > 0) {
+              const itemsBought = await transactionItem.findAll({
+                where: {
+                  flashSaleItemId: flashSaleItemId,
+                },
+                include: [{
+                  model: transaction,
+                  as: "transaction",
+                  required: true,
+                  include: [{
+                    model: order,
+                    as: "order", 
+                    where: { 
+                      customerId,
+                      paymentStatus: "PAID" 
+                    },
+                    required: true,
+                  }]
+                }]
+              });
+              
+              const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+              const totalAfterPurchase = alreadyBought + item.qty;
+              if (totalAfterPurchase > fsItem.maxBuyPerCustomer) {
+                throw new Error(
+                  `Maksimal pembelian untuk item ini adalah ${fsItem.maxBuyPerCustomer}. ` +
+                  `Anda sudah membeli ${alreadyBought}. Anda mencoba membeli ${item.qty}.`
+                );
+              }
+            }
+
             unitPrice = parseFloat(fsItem.flashPrice);
             discountAmount = 0;
           } else {

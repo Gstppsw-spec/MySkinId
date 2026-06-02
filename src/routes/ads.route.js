@@ -22,6 +22,7 @@ router.get("/waiting-payment", verifyToken, allowRoles("COMPANY_ADMIN", "OUTLET_
 router.get("/config", verifyToken, allowRoles("SUPER_ADMIN", "COMPANY_ADMIN", "OUTLET_ADMIN"), adsController.getAdsConfig);
 
 // --- SUPER ADMIN ---
+router.post("/admin/direct", verifyToken, allowRoles("SUPER_ADMIN"), uploadAdsImage, compressImage, adsController.createDirectAd);
 router.post("/admin/topup", verifyToken, allowRoles("SUPER_ADMIN"), adsController.adminTopup);
 router.post("/config/bulk", verifyToken, allowRoles("SUPER_ADMIN"), adsController.bulkUpsertAdsConfig);
 router.post("/config", verifyToken, allowRoles("SUPER_ADMIN"), adsController.upsertAdsConfig);

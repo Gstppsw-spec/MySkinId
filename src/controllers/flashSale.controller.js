@@ -108,7 +108,10 @@ module.exports = {
 
   async getActive(req, res) {
     try {
-      const result = await flashSaleService.getActive();
+      const { latt, long } = req.query;
+      const userLat = latt ? parseFloat(latt) : undefined;
+      const userLng = long ? parseFloat(long) : undefined;
+      const result = await flashSaleService.getActive(userLat, userLng);
       if (!result.status) return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
     } catch (error) {

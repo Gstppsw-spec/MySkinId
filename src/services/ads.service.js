@@ -919,5 +919,67 @@ module.exports = {
     } catch (error) {
       return { status: false, message: error.message };
     }
+  },
+
+  async createDirectAd(data) {
+    try {
+      const {
+        adsType,
+        startDate,
+        endDate,
+        targetPath,
+        images,
+        locationId,
+        referenceType,
+        referenceId,
+      } = data;
+
+      if (!adsType) throw new Error("Ads Type is required");
+      if (!startDate || !endDate) throw new Error("Start and End dates are required");
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (end < start) throw new Error("End date must be at or after start date");
+
+      // Validate polymorphic reference if provided
+      if (referenceType && referenceId) {
+        let exists = false;
+        if (referenceType === "PRODUCT")
+          exists = await masterProduct.findByPk(referenceId);
+        else if (referenceType === "PACKAGE")
+          exists = await masterPackage.findByPk(referenceId);
+        else if (referenceType === "SERVICE")
+          exists = await masterService.findByPk(referenceId);
+        else if (referenceType === "OUTLET")
+          exists = await masterLocation.findByPk(referenceId);
+
+        if (!exists) throw new Error(`Invalid ${referenceType} reference ID`);
+      }
+
+      // Build target data
+      const finalAdsData = {
+        images: images || [],
+        imageUrl: images && images.length > 0 ? images[0] : null,
+        targetPath: targetPath || null,
+      };
+
+      const newAd = await AdsPurchase.create({
+        locationId: locationId || null,
+        orderId: null,
+        adsType,
+        configId: null,
+        startDate: start,
+        endDate: end,
+        data: finalAdsData,
+        status: "PAID",
+        isActive: true,
+        referenceType: referenceType || "OUTLET",
+        referenceId: referenceId || null,
+      });
+
+      return { status: true, message: "Direct ad created successfully", data: newAd };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
   }
 };
