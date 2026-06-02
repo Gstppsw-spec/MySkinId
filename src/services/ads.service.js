@@ -870,18 +870,23 @@ module.exports = {
           endDate: p.endDate,
           data: p.data,
           locationId: p.locationId,
-          locationName: p.location ? p.location.name : null
+          locationName: p.location ? p.location.name : null,
+          position: p.config?.position || null,
+          slideNumber: p.config?.slideNumber || null
         };
       };
 
       activePurchases.forEach((p) => {
         const locName = p.location ? p.location.name : null;
+        const position = p.config?.position || null;
+        const slideNumber = p.config?.slideNumber || null;
+
         if (p.adsType === "BANNER") {
-          responseData.banners.push({ id: p.id, data: p.data, locationId: p.locationId, locationName: locName, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate });
+          responseData.banners.push({ id: p.id, data: p.data, locationId: p.locationId, locationName: locName, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate, position, slideNumber });
         } else if (p.adsType === "CAROUSEL") {
-          responseData.carousels.push({ id: p.id, data: p.data, locationId: p.locationId, locationName: locName, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate });
+          responseData.carousels.push({ id: p.id, data: p.data, locationId: p.locationId, locationName: locName, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate, position, slideNumber });
         } else if (p.adsType === "POPUP") {
-          responseData.popup = { id: p.id, data: p.data, locationId: p.locationId, locationName: locName, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate };
+          responseData.popup = { id: p.id, data: p.data, locationId: p.locationId, locationName: locName, adsType: p.adsType, startDate: p.startDate, endDate: p.endDate, position, slideNumber };
         } else if (p.adsType === "TOPDEALS") {
           let entity = null;
           let typeKey = "";
