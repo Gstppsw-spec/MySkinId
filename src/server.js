@@ -47,6 +47,7 @@ const exportRoute = require("./routes/export.route");
 const initGoogleRatingCron = require("./cron/googleRatingCron");
 const initFlashSaleCron = require("./cron/flashSaleCron");
 const initSettlementCron = require("./cron/settlementCron");
+const initConsultationAutoCloseCron = require("./cron/consultationAutoCloseCron");
 
 // Social media routes
 const postRoute = require("./routes/social/post.route");
@@ -134,6 +135,7 @@ initSocket(server);
 initGoogleRatingCron();
 initFlashSaleCron();
 initSettlementCron();
+initConsultationAutoCloseCron();
 
 // const io = new Server(server, { cors: { origin: "*" } });
 
