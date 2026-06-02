@@ -21,6 +21,18 @@ const {
 async function syncStatuses() {
   const now = new Date();
 
+  // 1. Demote ACTIVE to UPCOMING if startDate is in the future
+  await flashSale.update(
+    { status: "UPCOMING" },
+    {
+      where: {
+        status: "ACTIVE",
+        startDate: { [Op.gt]: now },
+      },
+    }
+  );
+
+  // 2. Promote UPCOMING to ACTIVE if current time is within range
   await flashSale.update(
     { status: "ACTIVE" },
     {
@@ -32,6 +44,7 @@ async function syncStatuses() {
     }
   );
 
+  // 3. Mark as ENDED if endDate has passed
   await flashSale.update(
     { status: "ENDED" },
     {
@@ -148,7 +161,20 @@ module.exports = {
       const { limit, offset } = pagination;
 
       const where = {};
-      if (statusFilter) where.status = statusFilter;
+      if (statusFilter) {
+        if (typeof statusFilter === "string") {
+          const statuses = statusFilter.split(",").map(s => s.trim().toUpperCase());
+          if (statuses.length > 1) {
+            where.status = { [Op.in]: statuses };
+          } else {
+            where.status = statuses[0];
+          }
+        } else if (Array.isArray(statusFilter)) {
+          where.status = { [Op.in]: statusFilter.map(s => s.trim().toUpperCase()) };
+        } else {
+          where.status = statusFilter;
+        }
+      }
       if (name) where.title = { [Op.like]: `%${name}%` };
 
       const { count, rows: data } = await flashSale.findAndCountAll({

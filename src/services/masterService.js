@@ -8,10 +8,13 @@ const {
   relationshipUserLocation,
   requestVerification,
   relationshipUserCompany,
+  flashSale,
+  flashSaleItem,
 } = require("../models");
 
 const { Op, Sequelize } = require("sequelize");
 const { sortPrimaryFirst } = require("../helpers/sortPrimaryImage");
+const flashSaleService = require("./flashSale.service");
 
 /**
  * Helper: backward compat — add singular location/locationId from locations array
@@ -206,6 +209,18 @@ module.exports = {
         };
       }
 
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "SERVICE" },
+          },
+        ],
+      });
+
       const result = services.flatMap((prod) => {
         const plain = prod.get({ plain: true });
         // Sort primary images first in nested locations
@@ -216,11 +231,33 @@ module.exports = {
           });
         }
 
+        let flashSaleInfo = null;
+        let isFlashSale = false;
+
+        for (const fs of activeFlashSales) {
+          const item = fs.items.find((i) => i.serviceId === plain.id);
+          if (item) {
+            isFlashSale = true;
+            flashSaleInfo = {
+              flashPrice: item.flashPrice,
+              flashSaleId: fs.id,
+              flashSaleItemId: item.id,
+              titleFlashSale: fs.title,
+              quota: item.quota,
+              sold: item.sold,
+              endDateFlashSale: fs.endDate,
+            };
+            break;
+          }
+        }
+
         if (plain.locations && plain.locations.length > 0) {
           return plain.locations.map(loc => {
             return {
               ...plain,
               locations: [loc],
+              isFlashSale,
+              flashSale: flashSaleInfo,
               isFavorite: customerId
                 ? plain.favorites && plain.favorites.length > 0
                 : false,
@@ -234,6 +271,8 @@ module.exports = {
         return [{
           ...plain,
           locations: [],
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,
@@ -329,6 +368,37 @@ module.exports = {
           return loc;
         });
       }
+      // Flash Sale Integration
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "SERVICE", serviceId: id },
+          },
+        ],
+      });
+
+      let flashSaleInfo = null;
+      let isFlashSale = false;
+
+      if (activeFlashSales.length > 0) {
+        const fs = activeFlashSales[0];
+        const item = fs.items[0];
+        isFlashSale = true;
+        flashSaleInfo = {
+          flashPrice: item.flashPrice,
+          flashSaleId: fs.id,
+          flashSaleItemId: item.id,
+          titleFlashSale: fs.title,
+          quota: item.quota,
+          sold: item.sold,
+          endDateFlashSale: fs.endDate,
+        };
+      }
+
       const mapped = mapServiceWithBackwardCompat(plain);
 
       return {
@@ -336,6 +406,8 @@ module.exports = {
         message: "Success",
         data: {
           ...mapped,
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: plain.favorites?.length > 0 || false,
           favorites: undefined,
         },
@@ -706,11 +778,46 @@ module.exports = {
         return { status: false, message: "Service not found", data: null };
       }
 
+      await flashSaleService.syncStatuses();
+      const activeFlashSales = await flashSale.findAll({
+        where: { status: "ACTIVE" },
+        include: [
+          {
+            model: flashSaleItem,
+            as: "items",
+            where: { itemType: "SERVICE" },
+          },
+        ],
+      });
+
       const result = service.map((prod) => {
         const plain = prod.get({ plain: true });
         const mapped = mapServiceWithBackwardCompat(plain);
+
+        let flashSaleInfo = null;
+        let isFlashSale = false;
+
+        for (const fs of activeFlashSales) {
+          const item = fs.items.find((i) => i.serviceId === plain.id);
+          if (item) {
+            isFlashSale = true;
+            flashSaleInfo = {
+              flashPrice: item.flashPrice,
+              flashSaleId: fs.id,
+              flashSaleItemId: item.id,
+              titleFlashSale: fs.title,
+              quota: item.quota,
+              sold: item.sold,
+              endDateFlashSale: fs.endDate,
+            };
+            break;
+          }
+        }
+
         return {
           ...mapped,
+          isFlashSale,
+          flashSale: flashSaleInfo,
           isFavorite: customerId
             ? plain.favorites && plain.favorites.length > 0
             : false,

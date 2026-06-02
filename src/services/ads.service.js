@@ -932,9 +932,18 @@ module.exports = {
         locationId,
         referenceType,
         referenceId,
+        configId,
       } = data;
 
-      if (!adsType) throw new Error("Ads Type is required");
+      let finalAdsType = adsType;
+
+      if (configId) {
+        const config = await AdsConfig.findByPk(configId);
+        if (!config) throw new Error("Ads configuration not found");
+        if (!finalAdsType) finalAdsType = config.type;
+      }
+
+      if (!finalAdsType) throw new Error("Ads Type is required");
       if (!startDate || !endDate) throw new Error("Start and End dates are required");
 
       const start = new Date(startDate);
@@ -966,8 +975,8 @@ module.exports = {
       const newAd = await AdsPurchase.create({
         locationId: locationId || null,
         orderId: null,
-        adsType,
-        configId: null,
+        adsType: finalAdsType,
+        configId: configId || null,
         startDate: start,
         endDate: end,
         data: finalAdsData,
