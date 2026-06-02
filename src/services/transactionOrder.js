@@ -5306,8 +5306,11 @@ module.exports = {
           // Net for Item
           const netForItem = itemSubtotal - platformFee - mdrFee - mitraSubsidy;
 
+          const normalPrice = item.product?.price || item.package?.price || item.service?.price || null;
           return {
             ...item,
+            isFlashSale: !!item.flashSaleItemId,
+            normalPrice: normalPrice,
             financials: {
               itemSubtotal,
               itemMdrFee: mdrFee,
@@ -5456,6 +5459,8 @@ module.exports = {
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
             imageUrl: item.product?.images?.[0]?.imageUrl || null,
+            isFlashSale: !!item.flashSaleItemId,
+            normalPrice: item.product?.price || item.package?.price || item.service?.price || null,
           })),
           shipping: trx.shipping
             ? {

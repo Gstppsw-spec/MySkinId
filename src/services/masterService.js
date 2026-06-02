@@ -388,6 +388,32 @@ module.exports = {
         const fs = activeFlashSales[0];
         const item = fs.items[0];
         isFlashSale = true;
+
+        let alreadyBought = 0;
+        if (customerId && item.id) {
+          const { transactionItem: trxItemModel, transaction: trxModel, order: orderModel } = require("../models");
+          const itemsBought = await trxItemModel.findAll({
+            where: {
+              flashSaleItemId: item.id,
+            },
+            include: [{
+              model: trxModel,
+              as: "transaction",
+              required: true,
+              include: [{
+                model: orderModel,
+                as: "order",
+                where: {
+                  customerId,
+                  paymentStatus: "PAID",
+                },
+                required: true,
+              }],
+            }],
+          });
+          alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+        }
+
         flashSaleInfo = {
           flashPrice: item.flashPrice,
           flashSaleId: fs.id,
@@ -396,6 +422,8 @@ module.exports = {
           quota: item.quota,
           sold: item.sold,
           endDateFlashSale: fs.endDate,
+          maxBuyPerCustomer: item.maxBuyPerCustomer || 0,
+          alreadyBought: alreadyBought,
         };
       }
 
