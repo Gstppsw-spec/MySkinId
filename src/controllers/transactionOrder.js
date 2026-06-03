@@ -1216,4 +1216,16 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  async getCheckoutSummary(req, res) {
+    try {
+      const userId = req.user.id;
+      const result = await transactionOrder.getCheckoutSummary(req.body, userId);
+      if (!result.status)
+        return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

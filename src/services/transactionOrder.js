@@ -6065,4 +6065,377 @@ module.exports = {
       return { status: false, message: error.message, data: null };
     }
   },
+
+  async getCheckoutSummary(data, customerId) {
+    try {
+      await flashSaleService.syncStatuses();
+    } catch (e) {
+      console.error("Failed to sync flash sale statuses during checkout summary:", e);
+    }
+
+    try {
+      const { checkoutType, items, shippingOptions, voucherCode, voucherCodes } = data;
+      const codesToApply = Array.isArray(voucherCodes) ? voucherCodes : (voucherCode ? [voucherCode] : []);
+
+      let checkoutItems = [];
+
+      if (checkoutType === "cart" || !checkoutType) {
+        // Fetch selected items in customer cart
+        const selectedCartItems = await customerCart.findAll({
+          where: { customerId, isSelected: true },
+          include: [
+            { model: masterProduct, as: "product" },
+            { model: masterPackage, as: "package" },
+            { model: masterService, as: "service" },
+          ],
+        });
+
+        if (selectedCartItems.length === 0) {
+          throw new Error("No items selected in cart");
+        }
+
+        for (const item of selectedCartItems) {
+          let actualItem, type;
+          if (item.product) {
+            actualItem = item.product;
+            type = "product";
+          } else if (item.package) {
+            actualItem = item.package;
+            type = "package";
+          } else if (item.service) {
+            actualItem = item.service;
+            type = "service";
+          }
+
+          if (!actualItem) {
+            throw new Error("Item not found");
+          }
+
+          checkoutItems.push({
+            id: actualItem.id,
+            type: type,
+            name: actualItem.name,
+            qty: item.qty,
+            price: parseFloat(actualItem.price),
+            discountPercent: parseFloat(actualItem.discountPercent || 0),
+            weightGram: actualItem.weightGram || 0,
+            flashSaleItemId: item.flashSaleItemId,
+            locationId: item.locationId,
+          });
+        }
+      } else if (checkoutType === "direct") {
+        if (!items || items.length === 0) {
+          throw new Error("No items provided for checkout");
+        }
+
+        for (const item of items) {
+          let actualItem;
+          if (item.type === "product") {
+            actualItem = await masterProduct.findByPk(item.id);
+          } else if (item.type === "package") {
+            actualItem = await masterPackage.findByPk(item.id);
+          } else if (item.type === "service") {
+            actualItem = await masterService.findByPk(item.id);
+          }
+
+          if (!actualItem) {
+            throw new Error(`Item ${item.id} not found`);
+          }
+
+          checkoutItems.push({
+            id: actualItem.id,
+            type: item.type,
+            name: actualItem.name,
+            qty: item.qty || 1,
+            price: parseFloat(actualItem.price),
+            discountPercent: parseFloat(actualItem.discountPercent || 0),
+            weightGram: actualItem.weightGram || 0,
+            flashSaleItemId: item.flashSaleItemId,
+            locationId: item.locationId,
+          });
+        }
+      } else {
+        throw new Error("Invalid checkoutType");
+      }
+
+      // Group items by location and calculate price breakdown
+      const itemsByLocation = {};
+      let totalOrderAmount = 0;
+      const formattedItems = [];
+
+      for (const item of checkoutItems) {
+        let locationId = item.locationId;
+        let companyId = null;
+
+        if (locationId) {
+          const loc = await masterLocation.findByPk(locationId, { attributes: ["id", "companyId"] });
+          if (!loc) throw new Error(`Location ${locationId} not found`);
+          companyId = loc.companyId;
+        } else {
+          // Resolve locationId fallback
+          const pivotModel =
+            item.type === "product"
+              ? relationshipProductLocation
+              : item.type === "service"
+                ? relationshipServiceLocation
+                : relationshipPackageLocation;
+          const fkField =
+            item.type === "product"
+              ? "productId"
+              : item.type === "service"
+                ? "serviceId"
+                : "packageId";
+          const firstPivot = await pivotModel.findOne({
+            where: { [fkField]: item.id, isActive: true },
+            include: [{ model: masterLocation, as: "location", attributes: ["id", "companyId"] }],
+          });
+          if (!firstPivot || !firstPivot.location) {
+            throw new Error(`${item.name} tidak tersedia di lokasi manapun`);
+          }
+          locationId = firstPivot.locationId;
+          companyId = firstPivot.location.companyId;
+        }
+
+        if (!itemsByLocation[locationId]) {
+          itemsByLocation[locationId] = [];
+        }
+
+        let unitPrice = item.price;
+        let discountAmount = 0;
+        let flashSaleItemId = item.flashSaleItemId;
+
+        // Flash Sale Logic
+        if (flashSaleItemId) {
+          const fsItem = await flashSaleItem.findOne({
+            where: { id: flashSaleItemId },
+            include: [{ model: flashSale, as: "flashSale" }],
+          });
+
+          if (!fsItem) throw new Error("Flash sale item not found");
+
+          // Validate item matches the flash sale item
+          let isMatch = false;
+          if (item.type === "product" && fsItem.productId === item.id) isMatch = true;
+          else if (item.type === "package" && fsItem.packageId === item.id) isMatch = true;
+          else if (item.type === "service" && fsItem.serviceId === item.id) isMatch = true;
+
+          if (!isMatch) {
+            throw new Error("Item flash sale tidak sesuai dengan produk/paket/layanan yang dipilih");
+          }
+
+          if (fsItem.flashSale.status !== "ACTIVE") {
+            throw new Error("Promo flash sale sudah tidak aktif");
+          }
+
+          const now = new Date();
+          if (now < fsItem.flashSale.startDate) {
+            throw new Error("Promo flash sale belum dimulai");
+          }
+          if (now > fsItem.flashSale.endDate) {
+            throw new Error("Promo flash sale telah berakhir");
+          }
+
+          if (fsItem.quota - fsItem.sold < item.qty) {
+            throw new Error("Kuota promo flash sale telah habis");
+          }
+
+          // Max buy limit check
+          if (fsItem.maxBuyPerCustomer > 0) {
+            const itemsBought = await transactionItem.findAll({
+              where: { flashSaleItemId },
+              include: [{
+                model: transaction,
+                as: "transaction",
+                required: true,
+                include: [{
+                  model: order,
+                  as: "order",
+                  where: { customerId, paymentStatus: "PAID" },
+                  required: true,
+                }]
+              }]
+            });
+            const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+            if (alreadyBought + item.qty > fsItem.maxBuyPerCustomer) {
+              throw new Error(
+                `Maksimal pembelian untuk item ini adalah ${fsItem.maxBuyPerCustomer}. ` +
+                `Anda sudah membeli ${alreadyBought}. Anda mencoba membeli ${item.qty}.`
+              );
+            }
+          }
+
+          unitPrice = parseFloat(fsItem.flashPrice);
+          discountAmount = 0;
+        } else {
+          discountAmount = (unitPrice * item.discountPercent) / 100;
+        }
+
+        const totalPrice = (unitPrice - discountAmount) * item.qty;
+        const totalWeight = item.weightGram * item.qty;
+
+        const formattedItem = {
+          itemType: item.type,
+          itemId: item.id,
+          itemName: item.name,
+          companyId: companyId,
+          quantity: item.qty,
+          unitPrice: unitPrice,
+          discountAmount: discountAmount * item.qty,
+          totalPrice: totalPrice,
+          weight: item.weightGram,
+          totalWeight: totalWeight,
+          isShippingRequired: item.type === "product",
+          locationId: locationId,
+          flashSaleItemId: flashSaleItemId,
+          normalPrice: item.price,
+          isFlashSale: !!flashSaleItemId,
+        };
+
+        itemsByLocation[locationId].push(formattedItem);
+        formattedItems.push(formattedItem);
+        totalOrderAmount += totalPrice;
+      }
+
+      // Calculate Shipping Fees
+      const locationSummaries = [];
+      let totalShippingFee = 0;
+
+      for (const locationId in itemsByLocation) {
+        const items = itemsByLocation[locationId];
+        const shippingOpt = shippingOptions
+          ? shippingOptions.find((opt) => opt.locationId === locationId)
+          : null;
+
+        const location = await masterLocation.findByPk(locationId);
+        if (!location) throw new Error(`Location ${locationId} not found`);
+
+        let shippingFee = 0;
+
+        if (shippingOpt && items.some((i) => i.isShippingRequired)) {
+          let resolvedCustAddr = null;
+          if (shippingOpt.addressId) {
+            resolvedCustAddr = await customerAddress.findOne({
+              where: { id: shippingOpt.addressId, customerId },
+            });
+          }
+
+          const originParams = {};
+          if (shippingOpt.origin_area_id) {
+            originParams.origin_area_id = shippingOpt.origin_area_id;
+          } else if (location.biteshipAreaId) {
+            originParams.origin_area_id = location.biteshipAreaId;
+          }
+          if (location.latitude && location.longitude) {
+            originParams.origin_latitude = parseFloat(location.latitude);
+            originParams.origin_longitude = parseFloat(location.longitude);
+          }
+          if (!originParams.origin_area_id && !originParams.origin_latitude && location.postalCode) {
+            originParams.origin_postal_code = location.postalCode;
+          }
+
+          const destParams = {};
+          if (shippingOpt.destination_area_id) {
+            destParams.destination_area_id = shippingOpt.destination_area_id;
+          } else if (resolvedCustAddr && resolvedCustAddr.biteshipAreaId) {
+            destParams.destination_area_id = resolvedCustAddr.biteshipAreaId;
+          }
+          if (shippingOpt.destination_latitude && shippingOpt.destination_longitude) {
+            destParams.destination_latitude = parseFloat(shippingOpt.destination_latitude);
+            destParams.destination_longitude = parseFloat(shippingOpt.destination_longitude);
+          } else if (resolvedCustAddr && resolvedCustAddr.latitude && resolvedCustAddr.longitude) {
+            destParams.destination_latitude = parseFloat(resolvedCustAddr.latitude);
+            destParams.destination_longitude = parseFloat(resolvedCustAddr.longitude);
+          }
+          if (!destParams.destination_area_id && !destParams.destination_latitude) {
+            if (shippingOpt.destination_postal_code) {
+              destParams.destination_postal_code = shippingOpt.destination_postal_code;
+            } else if (resolvedCustAddr && resolvedCustAddr.postalCode) {
+              destParams.destination_postal_code = resolvedCustAddr.postalCode;
+            }
+          }
+
+          if (Object.keys(originParams).length > 0 && Object.keys(destParams).length > 0) {
+            const totalWeight = items.reduce((sum, i) => sum + (i.totalWeight || 0), 0);
+            const totalValue = items.reduce((sum, i) => sum + (i.totalPrice || 0), 0);
+
+            const ratesResponse = await biteshipService.getRates({
+              ...originParams,
+              ...destParams,
+              couriers: shippingOpt.courierCode,
+              items: [{ name: "Order Items", value: totalValue, weight: totalWeight, quantity: 1 }],
+            });
+
+            const pricing = ratesResponse.pricing || [];
+            const serviceRate = pricing.find(
+              (p) =>
+                p.courier_code === shippingOpt.courierCode &&
+                p.courier_service_code &&
+                p.courier_service_code.toUpperCase() === shippingOpt.courierService.toUpperCase()
+            );
+
+            if (!serviceRate) {
+              throw new Error(`Service ${shippingOpt.courierService} not available for ${shippingOpt.courierCode}`);
+            }
+
+            shippingFee = serviceRate.price || 0;
+          }
+        }
+
+        const subTotal = items.reduce((sum, i) => sum + i.totalPrice, 0);
+        locationSummaries.push({
+          locationId: locationId,
+          locationName: location.name,
+          subTotal: subTotal,
+          shippingFee: shippingFee,
+          grandTotal: subTotal + shippingFee,
+        });
+
+        totalShippingFee += shippingFee;
+      }
+
+      totalOrderAmount += totalShippingFee;
+      totalOrderAmount += SERVICE_FEE;
+
+      // Voucher Discount Calculation
+      let totalVoucherDiscount = 0;
+      if (codesToApply.length > 0) {
+        for (const vData of codesToApply) {
+          const vCode = typeof vData === "object" ? vData.code : vData;
+          const targetItemId = typeof vData === "object" ? vData.itemId : null;
+
+          const voucherValidation = await voucherService.validateVoucher(
+            vCode,
+            customerId,
+            formattedItems,
+            targetItemId
+          );
+
+          if (!voucherValidation.status) {
+            throw new Error(`Voucher error (${vCode}): ${voucherValidation.message}`);
+          }
+
+          totalVoucherDiscount += voucherValidation.data.discountAmount;
+        }
+
+        totalOrderAmount -= totalVoucherDiscount;
+        if (totalOrderAmount < 0) totalOrderAmount = 0;
+      }
+
+      return {
+        status: true,
+        message: "Checkout summary calculated successfully",
+        data: {
+          items: formattedItems,
+          locationSummaries: locationSummaries,
+          subTotal: formattedItems.reduce((sum, i) => sum + i.totalPrice, 0),
+          shippingFee: totalShippingFee,
+          serviceFee: SERVICE_FEE,
+          voucherDiscount: totalVoucherDiscount,
+          grandTotal: totalOrderAmount,
+        },
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
 };
