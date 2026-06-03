@@ -470,13 +470,15 @@ module.exports = {
           itemsByLocation[locationId] = [];
         }
 
-        let unitPrice = parseFloat(actualItem.price);
-        let discountAmount = 0;
         let flashSaleItemId = item.flashSaleItemId;
+        let fsItem = null;
+        let allowedFlashSaleQty = 0;
+        let normalQty = item.qty;
+        let isFlashSalePromo = false;
 
         // 🔹 Flash Sale Logic
         if (flashSaleItemId) {
-          const fsItem = await flashSaleItem.findOne({
+          fsItem = await flashSaleItem.findOne({
             where: { id: flashSaleItemId },
             include: [{ model: flashSale, as: "flashSale" }],
           });
@@ -504,16 +506,12 @@ module.exports = {
             throw new Error("Promo flash sale telah berakhir");
           }
 
-          if (fsItem.quota - fsItem.sold < item.qty) {
-            throw new Error("Kuota promo flash sale telah habis");
-          }
-
-          // NEW: Max buy per customer validation
+          // Calculate remaining quota and remaining customer limit
+          const remainingQuota = Math.max(0, fsItem.quota - fsItem.sold);
+          let remainingCustomerLimit = Infinity;
           if (fsItem.maxBuyPerCustomer > 0) {
             const itemsBought = await transactionItem.findAll({
-              where: {
-                flashSaleItemId: flashSaleItemId,
-              },
+              where: { flashSaleItemId },
               include: [{
                 model: transaction,
                 as: "transaction",
@@ -521,55 +519,73 @@ module.exports = {
                 include: [{
                   model: order,
                   as: "order", 
-                  where: { 
-                    customerId,
-                    paymentStatus: "PAID" 
-                  },
+                  where: { customerId, paymentStatus: "PAID" },
                   required: true,
                 }]
               }]
             });
-            
             const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
-            const totalAfterPurchase = alreadyBought + item.qty;
-            if (totalAfterPurchase > fsItem.maxBuyPerCustomer) {
-              throw new Error(
-                `Maksimal pembelian untuk item ini adalah ${fsItem.maxBuyPerCustomer}. ` +
-                `Anda sudah membeli ${alreadyBought}. Anda mencoba membeli ${item.qty}.`
-              );
-            }
+            remainingCustomerLimit = Math.max(0, fsItem.maxBuyPerCustomer - alreadyBought);
           }
 
-          unitPrice = parseFloat(fsItem.flashPrice);
-          discountAmount = 0;
-        } else {
-          const discountPercent = parseFloat(actualItem.discountPercent || 0);
-          discountAmount = (unitPrice * discountPercent) / 100;
+          allowedFlashSaleQty = Math.min(item.qty, remainingQuota, remainingCustomerLimit);
+          normalQty = item.qty - allowedFlashSaleQty;
+          isFlashSalePromo = true;
         }
-        // (Closing brace for 'if (flashSaleItemId)' logic is already there in the structure)
 
-        const totalPrice = (unitPrice - discountAmount) * item.qty;
         const unitWeight = actualItem.weightGram || 0;
-        const totalWeight = unitWeight * item.qty;
 
-        itemsByLocation[locationId].push({
-          itemType: type,
-          itemId: actualItem.id,
-          itemName: actualItem.name,
-          companyId: companyId,
-          quantity: item.qty,
-          unitPrice: unitPrice,
-          discountAmount: discountAmount * item.qty,
-          totalPrice: totalPrice,
-          weight: unitWeight,
-          totalWeight: totalWeight,
-          isShippingRequired: type === "product",
-          referenceType: type,
-          locationId: locationId,
-          flashSaleItemId: flashSaleItemId,
-        });
+        if (isFlashSalePromo && allowedFlashSaleQty > 0) {
+          const fsUnitPrice = parseFloat(fsItem.flashPrice);
+          const fsTotalPrice = fsUnitPrice * allowedFlashSaleQty;
+          const fsTotalWeight = unitWeight * allowedFlashSaleQty;
 
-        totalOrderAmount += totalPrice;
+          itemsByLocation[locationId].push({
+            itemType: type,
+            itemId: actualItem.id,
+            itemName: actualItem.name,
+            companyId: companyId,
+            quantity: allowedFlashSaleQty,
+            unitPrice: fsUnitPrice,
+            discountAmount: 0,
+            totalPrice: fsTotalPrice,
+            weight: unitWeight,
+            totalWeight: fsTotalWeight,
+            isShippingRequired: type === "product",
+            referenceType: type,
+            locationId: locationId,
+            flashSaleItemId: flashSaleItemId,
+          });
+
+          totalOrderAmount += fsTotalPrice;
+        }
+
+        if (normalQty > 0) {
+          const normalUnitPrice = parseFloat(actualItem.price);
+          const discountPercent = parseFloat(actualItem.discountPercent || 0);
+          const normalDiscountAmount = (normalUnitPrice * discountPercent) / 100;
+          const normalTotalPrice = (normalUnitPrice - normalDiscountAmount) * normalQty;
+          const normalTotalWeight = unitWeight * normalQty;
+
+          itemsByLocation[locationId].push({
+            itemType: type,
+            itemId: actualItem.id,
+            itemName: actualItem.name,
+            companyId: companyId,
+            quantity: normalQty,
+            unitPrice: normalUnitPrice,
+            discountAmount: normalDiscountAmount * normalQty,
+            totalPrice: normalTotalPrice,
+            weight: unitWeight,
+            totalWeight: normalTotalWeight,
+            isShippingRequired: type === "product",
+            referenceType: type,
+            locationId: locationId,
+            flashSaleItemId: null,
+          });
+
+          totalOrderAmount += normalTotalPrice;
+        }
       }
 
       // Calculate Shipping Fees and determine definitive totalOrderAmount
@@ -1086,13 +1102,15 @@ module.exports = {
           itemsByLocation[locationId] = [];
         }
 
-        let unitPrice = parseFloat(actualItem.price);
-        let discountAmount = 0;
         let flashSaleItemId = item.flashSaleItemId;
+        let fsItem = null;
+        let allowedFlashSaleQty = 0;
+        let normalQty = item.qty;
+        let isFlashSalePromo = false;
 
         // 🔹 Flash Sale Logic
         if (flashSaleItemId) {
-          const fsItem = await flashSaleItem.findOne({
+          fsItem = await flashSaleItem.findOne({
             where: { id: flashSaleItemId },
             include: [{ model: flashSale, as: "flashSale" }],
           });
@@ -1120,16 +1138,12 @@ module.exports = {
             throw new Error("Promo flash sale telah berakhir");
           }
 
-          if (fsItem.quota - fsItem.sold < item.qty) {
-            throw new Error("Kuota promo flash sale telah habis");
-          }
-
-          // NEW: Max buy per customer validation
+          // Calculate remaining quota and remaining customer limit
+          const remainingQuota = Math.max(0, fsItem.quota - fsItem.sold);
+          let remainingCustomerLimit = Infinity;
           if (fsItem.maxBuyPerCustomer > 0) {
             const itemsBought = await transactionItem.findAll({
-              where: {
-                flashSaleItemId: flashSaleItemId,
-              },
+              where: { flashSaleItemId },
               include: [{
                 model: transaction,
                 as: "transaction",
@@ -1137,53 +1151,71 @@ module.exports = {
                 include: [{
                   model: order,
                   as: "order", 
-                  where: { 
-                    customerId,
-                    paymentStatus: "PAID" 
-                  },
+                  where: { customerId, paymentStatus: "PAID" },
                   required: true,
                 }]
               }]
             });
-            
             const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
-            const totalAfterPurchase = alreadyBought + item.qty;
-            if (totalAfterPurchase > fsItem.maxBuyPerCustomer) {
-              throw new Error(
-                `Maksimal pembelian untuk item ini adalah ${fsItem.maxBuyPerCustomer}. ` +
-                `Anda sudah membeli ${alreadyBought}. Anda mencoba membeli ${item.qty}.`
-              );
-            }
+            remainingCustomerLimit = Math.max(0, fsItem.maxBuyPerCustomer - alreadyBought);
           }
 
-          unitPrice = parseFloat(fsItem.flashPrice);
-          discountAmount = 0;
-        } else {
-          const discountPercent = parseFloat(actualItem.discountPercent || 0);
-          discountAmount = (unitPrice * discountPercent) / 100;
+          allowedFlashSaleQty = Math.min(item.qty, remainingQuota, remainingCustomerLimit);
+          normalQty = item.qty - allowedFlashSaleQty;
+          isFlashSalePromo = true;
         }
 
-        const totalPrice = (unitPrice - discountAmount) * item.qty;
         const unitWeight = actualItem.weightGram || 0;
-        const totalWeight = unitWeight * item.qty;
 
-        itemsByLocation[locationId].push({
-          itemType: item.type,
-          itemId: actualItem.id,
-          itemName: actualItem.name,
-          companyId: companyId,
-          quantity: item.qty,
-          unitPrice: unitPrice,
-          discountAmount: discountAmount * item.qty,
-          totalPrice: totalPrice,
-          weight: unitWeight,
-          totalWeight: totalWeight,
-          isShippingRequired: item.type === "product",
-          locationId: locationId,
-          flashSaleItemId: flashSaleItemId,
-        });
+        if (isFlashSalePromo && allowedFlashSaleQty > 0) {
+          const fsUnitPrice = parseFloat(fsItem.flashPrice);
+          const fsTotalPrice = fsUnitPrice * allowedFlashSaleQty;
+          const fsTotalWeight = unitWeight * allowedFlashSaleQty;
 
-        totalOrderAmount += totalPrice;
+          itemsByLocation[locationId].push({
+            itemType: item.type,
+            itemId: actualItem.id,
+            itemName: actualItem.name,
+            companyId: companyId,
+            quantity: allowedFlashSaleQty,
+            unitPrice: fsUnitPrice,
+            discountAmount: 0,
+            totalPrice: fsTotalPrice,
+            weight: unitWeight,
+            totalWeight: fsTotalWeight,
+            isShippingRequired: item.type === "product",
+            locationId: locationId,
+            flashSaleItemId: flashSaleItemId,
+          });
+
+          totalOrderAmount += fsTotalPrice;
+        }
+
+        if (normalQty > 0) {
+          const normalUnitPrice = parseFloat(actualItem.price);
+          const discountPercent = parseFloat(actualItem.discountPercent || 0);
+          const normalDiscountAmount = (normalUnitPrice * discountPercent) / 100;
+          const normalTotalPrice = (normalUnitPrice - normalDiscountAmount) * normalQty;
+          const normalTotalWeight = unitWeight * normalQty;
+
+          itemsByLocation[locationId].push({
+            itemType: item.type,
+            itemId: actualItem.id,
+            itemName: actualItem.name,
+            companyId: companyId,
+            quantity: normalQty,
+            unitPrice: normalUnitPrice,
+            discountAmount: normalDiscountAmount * normalQty,
+            totalPrice: normalTotalPrice,
+            weight: unitWeight,
+            totalWeight: normalTotalWeight,
+            isShippingRequired: item.type === "product",
+            locationId: locationId,
+            flashSaleItemId: null,
+          });
+
+          totalOrderAmount += normalTotalPrice;
+        }
       }
 
       // Calculate Shipping Fees and determine definitive totalOrderAmount
@@ -6200,13 +6232,15 @@ module.exports = {
           itemsByLocation[locationId] = [];
         }
 
-        let unitPrice = item.price;
-        let discountAmount = 0;
         let flashSaleItemId = item.flashSaleItemId;
+        let fsItem = null;
+        let allowedFlashSaleQty = 0;
+        let normalQty = item.qty;
+        let isFlashSalePromo = false;
 
         // Flash Sale Logic
         if (flashSaleItemId) {
-          const fsItem = await flashSaleItem.findOne({
+          fsItem = await flashSaleItem.findOne({
             where: { id: flashSaleItemId },
             include: [{ model: flashSale, as: "flashSale" }],
           });
@@ -6235,11 +6269,9 @@ module.exports = {
             throw new Error("Promo flash sale telah berakhir");
           }
 
-          if (fsItem.quota - fsItem.sold < item.qty) {
-            throw new Error("Kuota promo flash sale telah habis");
-          }
-
-          // Max buy limit check
+          // Calculate remaining quota and remaining customer limit
+          const remainingQuota = Math.max(0, fsItem.quota - fsItem.sold);
+          let remainingCustomerLimit = Infinity;
           if (fsItem.maxBuyPerCustomer > 0) {
             const itemsBought = await transactionItem.findAll({
               where: { flashSaleItemId },
@@ -6256,44 +6288,70 @@ module.exports = {
               }]
             });
             const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
-            if (alreadyBought + item.qty > fsItem.maxBuyPerCustomer) {
-              throw new Error(
-                `Maksimal pembelian untuk item ini adalah ${fsItem.maxBuyPerCustomer}. ` +
-                `Anda sudah membeli ${alreadyBought}. Anda mencoba membeli ${item.qty}.`
-              );
-            }
+            remainingCustomerLimit = Math.max(0, fsItem.maxBuyPerCustomer - alreadyBought);
           }
 
-          unitPrice = parseFloat(fsItem.flashPrice);
-          discountAmount = 0;
-        } else {
-          discountAmount = (unitPrice * item.discountPercent) / 100;
+          allowedFlashSaleQty = Math.min(item.qty, remainingQuota, remainingCustomerLimit);
+          normalQty = item.qty - allowedFlashSaleQty;
+          isFlashSalePromo = true;
         }
 
-        const totalPrice = (unitPrice - discountAmount) * item.qty;
-        const totalWeight = item.weightGram * item.qty;
+        if (isFlashSalePromo && allowedFlashSaleQty > 0) {
+          const fsUnitPrice = parseFloat(fsItem.flashPrice);
+          const fsTotalPrice = fsUnitPrice * allowedFlashSaleQty;
+          const fsTotalWeight = item.weightGram * allowedFlashSaleQty;
 
-        const formattedItem = {
-          itemType: item.type,
-          itemId: item.id,
-          itemName: item.name,
-          companyId: companyId,
-          quantity: item.qty,
-          unitPrice: unitPrice,
-          discountAmount: discountAmount * item.qty,
-          totalPrice: totalPrice,
-          weight: item.weightGram,
-          totalWeight: totalWeight,
-          isShippingRequired: item.type === "product",
-          locationId: locationId,
-          flashSaleItemId: flashSaleItemId,
-          normalPrice: item.price,
-          isFlashSale: !!flashSaleItemId,
-        };
+          const fsFormatted = {
+            itemType: item.type,
+            itemId: item.id,
+            itemName: item.name,
+            companyId: companyId,
+            quantity: allowedFlashSaleQty,
+            unitPrice: fsUnitPrice,
+            discountAmount: 0,
+            totalPrice: fsTotalPrice,
+            weight: item.weightGram,
+            totalWeight: fsTotalWeight,
+            isShippingRequired: item.type === "product",
+            locationId: locationId,
+            flashSaleItemId: flashSaleItemId,
+            normalPrice: item.price,
+            isFlashSale: true,
+          };
 
-        itemsByLocation[locationId].push(formattedItem);
-        formattedItems.push(formattedItem);
-        totalOrderAmount += totalPrice;
+          itemsByLocation[locationId].push(fsFormatted);
+          formattedItems.push(fsFormatted);
+          totalOrderAmount += fsTotalPrice;
+        }
+
+        if (normalQty > 0) {
+          const normalUnitPrice = item.price;
+          const normalDiscountAmount = (normalUnitPrice * item.discountPercent) / 100;
+          const normalTotalPrice = (normalUnitPrice - normalDiscountAmount) * normalQty;
+          const normalTotalWeight = item.weightGram * normalQty;
+
+          const normalFormatted = {
+            itemType: item.type,
+            itemId: item.id,
+            itemName: item.name,
+            companyId: companyId,
+            quantity: normalQty,
+            unitPrice: normalUnitPrice,
+            discountAmount: normalDiscountAmount * normalQty,
+            totalPrice: normalTotalPrice,
+            weight: item.weightGram,
+            totalWeight: normalTotalWeight,
+            isShippingRequired: item.type === "product",
+            locationId: locationId,
+            flashSaleItemId: null,
+            normalPrice: item.price,
+            isFlashSale: false,
+          };
+
+          itemsByLocation[locationId].push(normalFormatted);
+          formattedItems.push(normalFormatted);
+          totalOrderAmount += normalTotalPrice;
+        }
       }
 
       // Calculate Shipping Fees
