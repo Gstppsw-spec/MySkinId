@@ -11,12 +11,19 @@ const {
 } = require("../models");
 const validateReference = require("../helpers/validateReference");
 const { sortPrimaryFirst } = require("../helpers/sortPrimaryImage");
+const flashSaleService = require("./flashSale.service");
 
 module.exports = {
   async getCustomerCart(customerId) {
     try {
       if (!customerId)
         return { status: false, message: "Customer tidak boleh kosong" };
+
+      try {
+        await flashSaleService.syncStatuses();
+      } catch (e) {
+        console.error("Failed to sync flash sale statuses during getCustomerCart:", e);
+      }
 
       const customerCarts = await customerCart.findAll({
         where: { customerId },

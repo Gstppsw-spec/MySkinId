@@ -48,6 +48,7 @@ const NotificationService = require("./notification.service");
 const xenditPlatformService = require("./xenditPlatform.service");
 const voucherService = require("./voucher.service");
 const referralService = require("./referral.service");
+const flashSaleService = require("./flashSale.service");
 
 const SERVICE_FEE = 4500;
 
@@ -389,6 +390,11 @@ module.exports = {
   },
 
   async checkoutFromCart(data, customerId) {
+    try {
+      await flashSaleService.syncStatuses();
+    } catch (e) {
+      console.error("Failed to sync flash sale statuses during checkout:", e);
+    }
     const t = await sequelize.transaction();
     try {
       const { paymentMethod, shippingOptions, voucherCode, voucherCodes } = data;
@@ -487,60 +493,55 @@ module.exports = {
             throw new Error("Item flash sale tidak sesuai dengan produk/paket/layanan yang dipilih");
           }
           if (fsItem.flashSale.status !== "ACTIVE") {
-            flashSaleItemId = null;
+            throw new Error("Promo flash sale sudah tidak aktif");
           }
 
           const now = new Date();
-          if (
-            now < fsItem.flashSale.startDate ||
-            now > fsItem.flashSale.endDate
-          ) {
-            flashSaleItemId = null;
+          if (now < fsItem.flashSale.startDate) {
+            throw new Error("Promo flash sale belum dimulai");
+          }
+          if (now > fsItem.flashSale.endDate) {
+            throw new Error("Promo flash sale telah berakhir");
           }
 
-          if (flashSaleItemId && fsItem.quota - fsItem.sold < item.qty) {
-            flashSaleItemId = null;
+          if (fsItem.quota - fsItem.sold < item.qty) {
+            throw new Error("Kuota promo flash sale telah habis");
           }
 
-          if (flashSaleItemId) {
-            // NEW: Max buy per customer validation
-            if (fsItem.maxBuyPerCustomer > 0) {
-              const itemsBought = await transactionItem.findAll({
-                where: {
-                  flashSaleItemId: flashSaleItemId,
-                },
+          // NEW: Max buy per customer validation
+          if (fsItem.maxBuyPerCustomer > 0) {
+            const itemsBought = await transactionItem.findAll({
+              where: {
+                flashSaleItemId: flashSaleItemId,
+              },
+              include: [{
+                model: transaction,
+                as: "transaction",
+                required: true,
                 include: [{
-                  model: transaction,
-                  as: "transaction",
+                  model: order,
+                  as: "order", 
+                  where: { 
+                    customerId,
+                    paymentStatus: "PAID" 
+                  },
                   required: true,
-                  include: [{
-                    model: order,
-                    as: "order", 
-                    where: { 
-                      customerId,
-                      paymentStatus: "PAID" 
-                    },
-                    required: true,
-                  }]
                 }]
-              });
-              
-              const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
-              const totalAfterPurchase = alreadyBought + item.qty;
-              if (totalAfterPurchase > fsItem.maxBuyPerCustomer) {
-                throw new Error(
-                  `Maksimal pembelian untuk item ini adalah ${fsItem.maxBuyPerCustomer}. ` +
-                  `Anda sudah membeli ${alreadyBought}. Anda mencoba membeli ${item.qty}.`
-                );
-              }
+              }]
+            });
+            
+            const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+            const totalAfterPurchase = alreadyBought + item.qty;
+            if (totalAfterPurchase > fsItem.maxBuyPerCustomer) {
+              throw new Error(
+                `Maksimal pembelian untuk item ini adalah ${fsItem.maxBuyPerCustomer}. ` +
+                `Anda sudah membeli ${alreadyBought}. Anda mencoba membeli ${item.qty}.`
+              );
             }
-
-            unitPrice = parseFloat(fsItem.flashPrice);
-            discountAmount = 0;
-          } else {
-            const discountPercent = parseFloat(actualItem.discountPercent || 0);
-            discountAmount = (unitPrice * discountPercent) / 100;
           }
+
+          unitPrice = parseFloat(fsItem.flashPrice);
+          discountAmount = 0;
         } else {
           const discountPercent = parseFloat(actualItem.discountPercent || 0);
           discountAmount = (unitPrice * discountPercent) / 100;
@@ -1021,6 +1022,11 @@ module.exports = {
   },
 
   async directCheckout(data, customerId) {
+    try {
+      await flashSaleService.syncStatuses();
+    } catch (e) {
+      console.error("Failed to sync flash sale statuses during direct checkout:", e);
+    }
     const t = await sequelize.transaction();
     try {
       const { items, paymentMethod, shippingOptions, voucherCode, voucherCodes } = data;
@@ -1103,28 +1109,55 @@ module.exports = {
             throw new Error("Item flash sale tidak sesuai dengan produk/paket/layanan yang dipilih");
           }
           if (fsItem.flashSale.status !== "ACTIVE") {
-            flashSaleItemId = null;
+            throw new Error("Promo flash sale sudah tidak aktif");
           }
 
           const now = new Date();
-          if (
-            now < fsItem.flashSale.startDate ||
-            now > fsItem.flashSale.endDate
-          ) {
-            flashSaleItemId = null;
+          if (now < fsItem.flashSale.startDate) {
+            throw new Error("Promo flash sale belum dimulai");
+          }
+          if (now > fsItem.flashSale.endDate) {
+            throw new Error("Promo flash sale telah berakhir");
           }
 
-          if (flashSaleItemId && fsItem.quota - fsItem.sold < item.qty) {
-            flashSaleItemId = null;
+          if (fsItem.quota - fsItem.sold < item.qty) {
+            throw new Error("Kuota promo flash sale telah habis");
           }
 
-          if (flashSaleItemId) {
-            unitPrice = parseFloat(fsItem.flashPrice);
-            discountAmount = 0;
-          } else {
-            const discountPercent = parseFloat(actualItem.discountPercent || 0);
-            discountAmount = (unitPrice * discountPercent) / 100;
+          // NEW: Max buy per customer validation
+          if (fsItem.maxBuyPerCustomer > 0) {
+            const itemsBought = await transactionItem.findAll({
+              where: {
+                flashSaleItemId: flashSaleItemId,
+              },
+              include: [{
+                model: transaction,
+                as: "transaction",
+                required: true,
+                include: [{
+                  model: order,
+                  as: "order", 
+                  where: { 
+                    customerId,
+                    paymentStatus: "PAID" 
+                  },
+                  required: true,
+                }]
+              }]
+            });
+            
+            const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+            const totalAfterPurchase = alreadyBought + item.qty;
+            if (totalAfterPurchase > fsItem.maxBuyPerCustomer) {
+              throw new Error(
+                `Maksimal pembelian untuk item ini adalah ${fsItem.maxBuyPerCustomer}. ` +
+                `Anda sudah membeli ${alreadyBought}. Anda mencoba membeli ${item.qty}.`
+              );
+            }
           }
+
+          unitPrice = parseFloat(fsItem.flashPrice);
+          discountAmount = 0;
         } else {
           const discountPercent = parseFloat(actualItem.discountPercent || 0);
           discountAmount = (unitPrice * discountPercent) / 100;
