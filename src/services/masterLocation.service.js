@@ -612,6 +612,13 @@ class MasterLocationService {
             as: "images",
             attributes: ["id", "imageUrl"],
           },
+          {
+            model: masterCompany,
+            as: "company",
+            where: { isVerified: true },
+            attributes: [],
+            required: true,
+          },
         ],
         order: [["createdAt", "DESC"]],
         attributes: ["id", "name"],
@@ -790,7 +797,16 @@ class MasterLocationService {
     long = null
   ) {
     try {
-      const include = [{ model: masterLocationImage, as: "images" }];
+      const include = [
+        { model: masterLocationImage, as: "images" },
+        {
+          model: masterCompany,
+          as: "company",
+          where: { isVerified: true },
+          attributes: [],
+          required: true,
+        }
+      ];
 
       if (customerId) {
         include.push({
@@ -872,7 +888,16 @@ class MasterLocationService {
     sortBy = "recommendation"
   ) {
     try {
-      const include = [{ model: masterLocationImage, as: "images" }];
+      const include = [
+        { model: masterLocationImage, as: "images" },
+        {
+          model: masterCompany,
+          as: "company",
+          where: { isVerified: true },
+          attributes: [],
+          required: true,
+        }
+      ];
 
       if (customerId) {
         include.push({
@@ -1014,7 +1039,16 @@ class MasterLocationService {
             }
           ]
         },
-        include: [{ model: masterLocationImage, as: "images", separate: true }],
+        include: [
+          { model: masterLocationImage, as: "images", separate: true },
+          {
+            model: masterCompany,
+            as: "company",
+            where: { isVerified: true },
+            attributes: [],
+            required: true,
+          }
+        ],
         distinct: true,
         limit,
         offset,
@@ -1080,6 +1114,13 @@ class MasterLocationService {
               endDate: { [Op.gte]: now }
             },
             attributes: [] // We only need it for filtering here
+          },
+          {
+            model: masterCompany,
+            as: "company",
+            where: { isVerified: true },
+            attributes: [],
+            required: true,
           }
         ],
         distinct: true,
