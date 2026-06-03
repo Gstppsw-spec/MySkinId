@@ -476,6 +476,16 @@ module.exports = {
           });
 
           if (!fsItem) throw new Error("Flash sale item not found");
+
+          // Validate item matches the flash sale item
+          let isMatch = false;
+          if (type === "product" && fsItem.productId === actualItem.id) isMatch = true;
+          else if (type === "package" && fsItem.packageId === actualItem.id) isMatch = true;
+          else if (type === "service" && fsItem.serviceId === actualItem.id) isMatch = true;
+
+          if (!isMatch) {
+            throw new Error("Item flash sale tidak sesuai dengan produk/paket/layanan yang dipilih");
+          }
           if (fsItem.flashSale.status !== "ACTIVE") {
             flashSaleItemId = null;
           }
@@ -1082,6 +1092,16 @@ module.exports = {
           });
 
           if (!fsItem) throw new Error("Flash sale item not found");
+
+          // Validate item matches the flash sale item
+          let isMatch = false;
+          if (item.type === "product" && fsItem.productId === actualItem.id) isMatch = true;
+          else if (item.type === "package" && fsItem.packageId === actualItem.id) isMatch = true;
+          else if (item.type === "service" && fsItem.serviceId === actualItem.id) isMatch = true;
+
+          if (!isMatch) {
+            throw new Error("Item flash sale tidak sesuai dengan produk/paket/layanan yang dipilih");
+          }
           if (fsItem.flashSale.status !== "ACTIVE") {
             flashSaleItemId = null;
           }

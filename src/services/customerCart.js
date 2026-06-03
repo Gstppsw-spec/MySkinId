@@ -280,9 +280,17 @@ module.exports = {
           return { status: false, message: "Flash sale item tidak ditemukan" };
         }
         
-        const isMatch = refferenceType === "product" ? fsItem.productId === refferenceId : fsItem.packageId === refferenceId;
+        let isMatch = false;
+        if (refferenceType === "product") {
+          isMatch = fsItem.productId === refferenceId;
+        } else if (refferenceType === "package") {
+          isMatch = fsItem.packageId === refferenceId;
+        } else if (refferenceType === "service") {
+          isMatch = fsItem.serviceId === refferenceId;
+        }
+        
         if (!isMatch) {
-          return { status: false, message: "Item flash sale tidak sesuai dengan produk/paket yang dipilih" };
+          return { status: false, message: "Item flash sale tidak sesuai dengan produk/paket/layanan yang dipilih" };
         }
       }
 
