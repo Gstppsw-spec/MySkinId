@@ -128,12 +128,16 @@ module.exports = {
         let finalPrice = 0;
         let maxBuyPerCustomer = 0;
         let alreadyBought = 0;
+        let quota = 0;
+        let sold = 0;
 
         if (cart.flashSaleItemId && cart.flashSaleItem) {
           const fsItem = cart.flashSaleItem;
           const fs = fsItem.flashSale;
           const now = new Date();
           maxBuyPerCustomer = fsItem.maxBuyPerCustomer || 0;
+          quota = fsItem.quota || 0;
+          sold = fsItem.sold || 0;
 
           if (fs && fs.status === "ACTIVE" && now >= fs.startDate && now <= fs.endDate && (fsItem.quota - fsItem.sold) > 0) {
             isPromoActive = true;
@@ -193,6 +197,8 @@ module.exports = {
             flashSaleItemId: cart.flashSaleItemId,
             maxBuyPerCustomer,
             alreadyBought,
+            quota,
+            sold,
             promoError,
           });
         }
@@ -218,6 +224,8 @@ module.exports = {
             flashSaleItemId: cart.flashSaleItemId,
             maxBuyPerCustomer,
             alreadyBought,
+            quota,
+            sold,
             promoError,
           });
         }
@@ -244,6 +252,8 @@ module.exports = {
             flashSaleItemId: cart.flashSaleItemId,
             maxBuyPerCustomer,
             alreadyBought,
+            quota,
+            sold,
             promoError,
           });
         }
