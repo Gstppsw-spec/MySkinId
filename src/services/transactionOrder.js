@@ -2475,6 +2475,11 @@ module.exports = {
     );
     const t = await sequelize.transaction();
     try {
+      // Track state for post-commit actions (socket emit + background tasks)
+      let _postCommitAction = null;
+      let _postCommitOrderData = null;
+      let _postCommitFailedStatus = null;
+
       // Security: Verify Xendit Callback Token
       const localToken = process.env.XENDIT_CALLBACK_TOKEN;
       if (localToken && callbackTokenHeader !== localToken) {
@@ -2565,93 +2570,26 @@ module.exports = {
 
           await orderData.update({ paymentStatus: "PAID" }, { transaction: t });
 
+          // Track for post-commit socket emit + background tasks
+          _postCommitAction = "PAID";
+          _postCommitOrderData = orderData;
+
           // Update all transactions in this order to PAID
           for (const trx of orderData.transactions) {
             await trx.update({ orderStatus: "PAID" }, { transaction: t });
           }
 
-          // Fetch actual MDR fee from Xendit
-          let mdrFee = 0;
-          try {
-            const xenditTrx = await xenditPlatformService.getTransactionDetail(_external_id);
-            if (xenditTrx.status && xenditTrx.data) {
-              mdrFee = parseFloat(xenditTrx.data.fee_amount || 0);
-              console.log(`[XenditCallback] Captured MDR Fee for ${_external_id}: ${mdrFee}`);
-            }
-          } catch (feeErr) {
-            console.error(`[XenditCallback] Error fetching MDR fee for ${_external_id}:`, feeErr.message);
-          }
-
-          // Update payment record with detailed info and MDR
+          // Update payment record (MDR fee will be fetched in background after commit)
           await orderPayment.update(
             {
               paymentStatus: "SUCCESS",
               gatewayResponse: payload,
               paymentMethod: _payment_channel || orderData.paymentMethod,
-              mdrFee: mdrFee,
             },
             { where: { orderId: orderData.id }, transaction: t },
           );
 
-          // Notify frontend via WebSocket
-          socketInstance.emitPaymentUpdate(orderData.orderNumber, "PAID", {
-            orderId: orderData.id,
-            paymentChannel: _payment_channel,
-          });
-
-          // 🔹 SKIP Notifications for Ads and Topups
-          const isAdsOrTopupOrQuota =
-            orderData.orderNumber.startsWith("ORD-ADS-") ||
-            orderData.orderNumber.startsWith("ORD-TOPUP-") ||
-            orderData.orderNumber.startsWith("ORD-QUOTA-");
-
-          if (!isAdsOrTopupOrQuota) {
-            // Push notification: payment success
-            const firstTrxId = orderData.transactions.length > 0 ? orderData.transactions[0].id : null;
-            await pushNotificationService.sendPushNotification(
-              orderData.customerId,
-              "customer",
-              {
-                title: "Pembayaran Berhasil ✅",
-                body: `Pesanan ${orderData.orderNumber} telah berhasil dibayar.`,
-                data: {
-                  type: "payment",
-                  orderId: orderData.id,
-                  trxId: firstTrxId || "",
-                  orderNumber: orderData.orderNumber,
-                },
-              }
-            );
-
-            // === SEND ADMIN NOTIFICATION ===
-            for (const trx of orderData.transactions) {
-              try {
-                const loc = await masterLocation.findByPk(trx.locationId);
-                if (loc && loc.companyId) {
-                  await NotificationService.createNotification({
-                    companyId: loc.companyId,
-                    locationId: loc.id,
-                    title: "Transaksi Baru ✅",
-                    body: `Ada pesanan baru ${orderData.orderNumber} senilai ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(trx.grandTotal)} untuk outlet ${loc.name}.`,
-                    category: "Transaction",
-                    type: "TRANSACTION_SUCCESS",
-                    referenceId: trx.id,
-                    referenceType: "transaction",
-                  });
-                }
-              } catch (adminNotifErr) {
-                console.error("[TransactionOrder] Admin Notification Error:", adminNotifErr.message);
-              }
-            }
-          }
-
-          // === REFERRAL POINT CREDIT ===
-          try {
-            await referralService.creditReferralPoints(orderData.id, t);
-          } catch (refErr) {
-            console.error("[Referral] Error crediting points:", refErr.message);
-            // Non-blocking: don't fail payment callback due to referral error
-          }
+          // 🔹 Notifications, referral, and MDR fetch moved to post-commit background
 
           // Activate vouchers linked to this order's transactions
           const transactionIds = orderData.transactions.map((trx) => trx.id);
@@ -2706,9 +2644,7 @@ module.exports = {
                 );
               }
 
-              // Handle Ads activation
-              const adsService = require("./ads.service");
-              await adsService.activatePurchase(orderData.id);
+              // Ads activation moved to post-commit background
 
               // 🔹 Handle Ads Design Request status update
               try {
@@ -2783,48 +2719,7 @@ module.exports = {
           // 🔹 Voucher subsidy is NO LONGER credited at PAID time.
           // It will be credited by the settlement cron when VOUCHER_SETTLEMENT or PRODUCT_SETTLEMENT is executed.
 
-          // 🔹 Create PENDING_SETTLEMENT for all transferable items (3-day settlement clock starts now)
-          try {
-            const xenditPlatformService = require("./xenditPlatform.service");
-            const allTrxItems = await transactionItem.findAll({
-              where: { transactionId: transactionIds },
-              include: [{ model: transaction, as: "transaction" }],
-            });
-
-            for (const item of allTrxItems) {
-              // For voucher items (service/package with voucherCode)
-              if (item.voucherCode && (item.itemType === "service" || item.itemType === "package")) {
-                const transferResult = await xenditPlatformService.transferToMerchant({
-                  locationId: item.transaction.locationId,
-                  amount: parseFloat(item.totalPrice),
-                  transferType: "VOUCHER_SETTLEMENT",
-                  transactionId: item.transaction.id,
-                  transactionItemId: item.id,
-                  orderId: item.transaction.orderId,
-                });
-                if (!transferResult.status) {
-                  console.warn(`[XenditCallback] Voucher settlement record skipped: ${transferResult.message}`);
-                }
-              }
-
-              // For product items (physical goods that need delivery check)
-              if (item.itemType === "product") {
-                const transferResult = await xenditPlatformService.transferToMerchant({
-                  locationId: item.transaction.locationId,
-                  amount: parseFloat(item.totalPrice),
-                  transferType: "PRODUCT_SETTLEMENT",
-                  transactionId: item.transaction.id,
-                  transactionItemId: item.id,
-                  orderId: item.transaction.orderId,
-                });
-                if (!transferResult.status) {
-                  console.warn(`[XenditCallback] Product settlement record skipped: ${transferResult.message}`);
-                }
-              }
-            }
-          } catch (settlementErr) {
-            console.error("[XenditCallback] Settlement recording error:", settlementErr.message);
-          }
+          // 🔹 Settlement records creation moved to post-commit background
         }
       } else if (_status === "EXPIRED" || _status === "FAILED") {
         let orderData = await order.findOne({
@@ -2860,30 +2755,185 @@ module.exports = {
             { where: { orderId: orderData.id }, transaction: t },
           );
 
-          // Notify frontend via WebSocket
-          socketInstance.emitPaymentUpdate(orderData.orderNumber, _status, {
-            orderId: orderData.id,
-          });
-
-          // Push notification: payment failed/expired
-          pushNotificationService.sendPushNotification(
-            orderData.customerId,
-            "customer",
-            {
-              title: "Pembayaran Gagal ❌",
-              body: `Pembayaran untuk pesanan ${orderData.orderNumber} ${_status === "EXPIRED" ? "telah kedaluwarsa" : "gagal diproses"}.`,
-              data: {
-                type: "payment",
-                orderId: orderData.id,
-                orderNumber: orderData.orderNumber,
-                paymentStatus: _status,
-              },
-            }
-          );
+          // 🔹 Track for post-commit socket + push notification
+          _postCommitAction = "FAILED";
+          _postCommitOrderData = orderData;
+          _postCommitFailedStatus = _status;
         }
       }
 
       await t.commit();
+
+      // ============================================================
+      // POST-COMMIT: Socket emit (immediate) + Background tasks
+      // ============================================================
+      if (_postCommitAction === "PAID" && _postCommitOrderData) {
+        // Notify frontend IMMEDIATELY after commit so UI updates fast
+        socketInstance.emitPaymentUpdate(_postCommitOrderData.orderNumber, "PAID", {
+          orderId: _postCommitOrderData.id,
+          paymentChannel: _payment_channel,
+        });
+
+        // Run non-critical tasks in background (don't block Xendit response)
+        const bgOrderData = _postCommitOrderData;
+        const bgExternalId = _external_id;
+        const bgTransactionIds = bgOrderData.transactions.map((trx) => trx.id);
+        setImmediate(async () => {
+          try {
+            // 1. Fetch & update MDR fee from Xendit API
+            try {
+              const xenditTrx = await xenditPlatformService.getTransactionDetail(bgExternalId);
+              if (xenditTrx.status && xenditTrx.data) {
+                const mdrFee = parseFloat(xenditTrx.data.fee_amount || 0);
+                await orderPayment.update(
+                  { mdrFee },
+                  { where: { orderId: bgOrderData.id } },
+                );
+                console.log(`[XenditCallback:BG] Captured MDR Fee for ${bgExternalId}: ${mdrFee}`);
+              }
+            } catch (feeErr) {
+              console.error(`[XenditCallback:BG] Error fetching MDR fee for ${bgExternalId}:`, feeErr.message);
+            }
+
+            // 2. Push notification + Admin notifications
+            const isAdsOrTopupOrQuota =
+              bgOrderData.orderNumber.startsWith("ORD-ADS-") ||
+              bgOrderData.orderNumber.startsWith("ORD-TOPUP-") ||
+              bgOrderData.orderNumber.startsWith("ORD-QUOTA-");
+
+            if (!isAdsOrTopupOrQuota) {
+              const firstTrxId = bgOrderData.transactions.length > 0 ? bgOrderData.transactions[0].id : null;
+              try {
+                await pushNotificationService.sendPushNotification(
+                  bgOrderData.customerId,
+                  "customer",
+                  {
+                    title: "Pembayaran Berhasil ✅",
+                    body: `Pesanan ${bgOrderData.orderNumber} telah berhasil dibayar.`,
+                    data: {
+                      type: "payment",
+                      orderId: bgOrderData.id,
+                      trxId: firstTrxId || "",
+                      orderNumber: bgOrderData.orderNumber,
+                    },
+                  }
+                );
+              } catch (pushErr) {
+                console.error("[XenditCallback:BG] Push notification error:", pushErr.message);
+              }
+
+              for (const trx of bgOrderData.transactions) {
+                try {
+                  const loc = await masterLocation.findByPk(trx.locationId);
+                  if (loc && loc.companyId) {
+                    await NotificationService.createNotification({
+                      companyId: loc.companyId,
+                      locationId: loc.id,
+                      title: "Transaksi Baru ✅",
+                      body: `Ada pesanan baru ${bgOrderData.orderNumber} senilai ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(trx.grandTotal)} untuk outlet ${loc.name}.`,
+                      category: "Transaction",
+                      type: "TRANSACTION_SUCCESS",
+                      referenceId: trx.id,
+                      referenceType: "transaction",
+                    });
+                  }
+                } catch (adminNotifErr) {
+                  console.error("[XenditCallback:BG] Admin Notification Error:", adminNotifErr.message);
+                }
+              }
+            }
+
+            // 3. Referral point credit
+            try {
+              await referralService.creditReferralPoints(bgOrderData.id);
+            } catch (refErr) {
+              console.error("[XenditCallback:BG] Referral credit error:", refErr.message);
+            }
+
+            // 4. Ads activation
+            try {
+              const adsService = require("./ads.service");
+              await adsService.activatePurchase(bgOrderData.id);
+            } catch (adsErr) {
+              console.error("[XenditCallback:BG] Ads activation error:", adsErr.message);
+            }
+
+            // 5. Create PENDING_SETTLEMENT records
+            try {
+              const xenditPlatformSvc = require("./xenditPlatform.service");
+              const allTrxItems = await transactionItem.findAll({
+                where: { transactionId: bgTransactionIds },
+                include: [{ model: transaction, as: "transaction" }],
+              });
+
+              for (const item of allTrxItems) {
+                if (item.voucherCode && (item.itemType === "service" || item.itemType === "package")) {
+                  const transferResult = await xenditPlatformSvc.transferToMerchant({
+                    locationId: item.transaction.locationId,
+                    amount: parseFloat(item.totalPrice),
+                    transferType: "VOUCHER_SETTLEMENT",
+                    transactionId: item.transaction.id,
+                    transactionItemId: item.id,
+                    orderId: item.transaction.orderId,
+                  });
+                  if (!transferResult.status) {
+                    console.warn(`[XenditCallback:BG] Voucher settlement skipped: ${transferResult.message}`);
+                  }
+                }
+                if (item.itemType === "product") {
+                  const transferResult = await xenditPlatformSvc.transferToMerchant({
+                    locationId: item.transaction.locationId,
+                    amount: parseFloat(item.totalPrice),
+                    transferType: "PRODUCT_SETTLEMENT",
+                    transactionId: item.transaction.id,
+                    transactionItemId: item.id,
+                    orderId: item.transaction.orderId,
+                  });
+                  if (!transferResult.status) {
+                    console.warn(`[XenditCallback:BG] Product settlement skipped: ${transferResult.message}`);
+                  }
+                }
+              }
+            } catch (settlementErr) {
+              console.error("[XenditCallback:BG] Settlement recording error:", settlementErr.message);
+            }
+
+            console.log(`[XenditCallback:BG] All background tasks completed for ${bgExternalId}`);
+          } catch (bgErr) {
+            console.error("[XenditCallback:BG] Background processing error:", bgErr.message);
+          }
+        });
+      } else if (_postCommitAction === "FAILED" && _postCommitOrderData) {
+        // Notify frontend immediately
+        socketInstance.emitPaymentUpdate(_postCommitOrderData.orderNumber, _postCommitFailedStatus, {
+          orderId: _postCommitOrderData.id,
+        });
+
+        // Push notification in background
+        const bgFailedOrder = _postCommitOrderData;
+        const bgFailedStatus = _postCommitFailedStatus;
+        setImmediate(async () => {
+          try {
+            await pushNotificationService.sendPushNotification(
+              bgFailedOrder.customerId,
+              "customer",
+              {
+                title: "Pembayaran Gagal ❌",
+                body: `Pembayaran untuk pesanan ${bgFailedOrder.orderNumber} ${bgFailedStatus === "EXPIRED" ? "telah kedaluwarsa" : "gagal diproses"}.`,
+                data: {
+                  type: "payment",
+                  orderId: bgFailedOrder.id,
+                  orderNumber: bgFailedOrder.orderNumber,
+                  paymentStatus: bgFailedStatus,
+                },
+              }
+            );
+          } catch (pushErr) {
+            console.error("[XenditCallback:BG] Failed payment push notification error:", pushErr.message);
+          }
+        });
+      }
+
       return { status: true, message: "Callback processed successfully" };
     } catch (error) {
       await t.rollback();
