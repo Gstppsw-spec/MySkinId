@@ -719,5 +719,92 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
+  /**
+   * Super Admin: Send manual notification to customers regarding a flash sale.
+   */
+  async sendFlashSaleCustomerNotification(flashSaleId, { target = "ALL", title, body }) {
+    try {
+      const fs = await flashSale.findByPk(flashSaleId);
+      if (!fs) return { status: false, message: "Flash sale not found" };
+
+      let customerIds = [];
+
+      if (target === "CART_REFERENCED") {
+        // Find customers who have items from this flash sale in their cart
+        const items = await flashSaleItem.findAll({
+          where: { flashSaleId },
+          attributes: ["id"],
+        });
+
+        const flashSaleItemIds = items.map(i => i.id);
+
+        if (flashSaleItemIds.length === 0) {
+          return { status: false, message: "No items registered in this flash sale yet" };
+        }
+
+        const { customerCart } = require("../models");
+        const carts = await customerCart.findAll({
+          where: {
+            flashSaleItemId: { [Op.in]: flashSaleItemIds },
+          },
+          attributes: ["customerId"],
+        });
+
+        customerIds = Array.from(new Set(carts.map(c => c.customerId).filter(Boolean)));
+
+        if (customerIds.length === 0) {
+          return { status: false, message: "No customers have this flash sale's items in their cart" };
+        }
+      } else {
+        // Default target: ALL active customers
+        const { masterCustomer } = require("../models");
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true },
+          attributes: ["id"],
+        });
+
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      }
+
+      if (customerIds.length === 0) {
+        return { status: false, message: "No active customers found to notify" };
+      }
+
+      const finalTitle = title || `Flash Sale Spesial: ${fs.title}!`;
+      const finalBody = body || `Halo! Nikmati promo flash sale "${fs.title}" dengan harga spesial hari ini. Jangan sampai kelewatan!`;
+
+      // Require notification service dynamically to prevent circular dependencies
+      const NotificationService = require("./notification.service");
+
+      const sendPromises = customerIds.map(customerId =>
+        NotificationService.createNotification({
+          userId: customerId, // Stores customerId as userId in masterNotification
+          recipientType: "customer", // Tell pushNotificationService to find tokens for customerId
+          title: finalTitle,
+          body: finalBody,
+          category: "Promotion",
+          type: "FLASH_SALE_CUSTOMER",
+          referenceId: fs.id,
+          referenceType: "flashSale",
+        })
+      );
+
+      await Promise.all(sendPromises);
+
+      return {
+        status: true,
+        message: `Berhasil mengirimkan notifikasi ke ${customerIds.length} customer`,
+        data: {
+          target,
+          notifiedCustomerCount: customerIds.length,
+          customerIds,
+        },
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] sendFlashSaleCustomerNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
 };
 

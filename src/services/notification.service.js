@@ -27,6 +27,7 @@ class NotificationService {
         type,
         referenceId,
         referenceType,
+        recipientType = "user",
       } = data;
 
       const notification = await masterNotification.create({
@@ -44,8 +45,8 @@ class NotificationService {
 
       // Recipient logic
       if (userId) {
-        // Targeted at a specific user
-        await pushNotificationService.sendPushNotification(userId, "user", {
+        // Targeted at a specific user or customer
+        await pushNotificationService.sendPushNotification(userId, recipientType, {
           title,
           body,
           data: {

@@ -952,12 +952,16 @@ module.exports = {
     }
   },
 
-  async getByLocationId(customerId, locationId, isCustomer) {
+  async getByLocationId(customerId, locationId, isCustomer, name) {
     try {
       const where = {
         isActive: true,
         isVerified: true
       };
+
+      if (name) {
+        where.name = { [Op.like]: `%${name}%` };
+      }
 
       const include = [
         {

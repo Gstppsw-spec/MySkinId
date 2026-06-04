@@ -127,6 +127,18 @@ module.exports = {
     }
   },
 
+  async sendFlashSaleCustomerNotification(req, res) {
+    try {
+      const { id } = req.params;
+      const { target, title, body } = req.body;
+      const result = await flashSaleService.sendFlashSaleCustomerNotification(id, { target, title, body });
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   // ── Customer ────────────────────────────────
 
   async getActive(req, res) {

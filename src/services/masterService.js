@@ -807,12 +807,16 @@ module.exports = {
     }
   },
 
-  async getByLocationId(locationId, customerId, isCustomer) {
+  async getByLocationId(locationId, customerId, isCustomer, name) {
     try {
       const where = {
         isActive: true,
         isVerified: true
       };
+
+      if (name) {
+        where.name = { [Op.like]: `%${name}%` };
+      }
 
       const service = await masterService.findAll({
         where,

@@ -69,4 +69,12 @@ router.post(
   flashSaleController.sendFlashSaleNotification
 );
 
+// ── Super Admin — Send manual notification to customers ───────────
+router.post(
+  "/:id/notify-customer",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  flashSaleController.sendFlashSaleCustomerNotification
+);
+
 module.exports = router;

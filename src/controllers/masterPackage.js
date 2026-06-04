@@ -120,12 +120,13 @@ module.exports = {
   async getByLocationId(req, res) {
     try {
       const { locationId } = req.params;
-      const { customerId, isCustomer } = req.query;
+      const { customerId, isCustomer, name } = req.query;
 
       const result = await packageService.getByLocationId(
         customerId,
         locationId,
         isCustomer,
+        name,
       );
       if (!result.status)
         return response.error(res, result.message, result.data);
