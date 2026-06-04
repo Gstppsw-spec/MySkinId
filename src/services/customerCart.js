@@ -301,6 +301,7 @@ module.exports = {
         }
       }
 
+      // 1. Exact match (same item + same flashSaleItemId + same location) → just increment qty
       let cart = await customerCart.findOne({
         where: { 
           refferenceId, 
@@ -322,6 +323,30 @@ module.exports = {
         };
       }
 
+      // 2. Same item + same location but DIFFERENT flashSaleItemId → update existing entry (prevent duplicate)
+      const existingCart = await customerCart.findOne({
+        where: { 
+          refferenceId, 
+          customerId, 
+          refferenceType, 
+          locationId: locationId || null
+        },
+      });
+
+      if (existingCart) {
+        existingCart.qty += 1;
+        // Update flashSaleItemId to the latest one (flash sale takes priority, or clear it)
+        existingCart.flashSaleItemId = flashSaleItemId || null;
+        await existingCart.save();
+
+        return {
+          status: true,
+          message: "Qty berhasil ditambahkan",
+          data: existingCart,
+        };
+      }
+
+      // 3. No existing entry → create new cart item
       const newCustomerCart = await customerCart.create({
         refferenceId,
         customerId,
@@ -502,6 +527,38 @@ module.exports = {
           ? "Semua cart product berhasil di-select"
           : "Semua cart product berhasil di-unselect",
         data: { isSelected: newSelectedValue },
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Super Admin: Clear flashSaleItemId from cart items.
+   * - If flashSaleItemId is provided: clear only carts with that specific flash sale item
+   * - If no flashSaleItemId: clear ALL flash sale associations from all carts
+   */
+  async clearFlashSaleFromCarts(flashSaleItemId = null) {
+    try {
+      const { Op } = require("sequelize");
+
+      const where = {
+        flashSaleItemId: { [Op.ne]: null },
+      };
+
+      if (flashSaleItemId) {
+        where.flashSaleItemId = flashSaleItemId;
+      }
+
+      const [affectedCount] = await customerCart.update(
+        { flashSaleItemId: null },
+        { where },
+      );
+
+      return {
+        status: true,
+        message: `Flash sale berhasil dihapus dari ${affectedCount} item keranjang`,
+        data: { affectedCount },
       };
     } catch (error) {
       return { status: false, message: error.message };

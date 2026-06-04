@@ -53,4 +53,20 @@ router.delete(
   flashSaleController.removeItem
 );
 
+// ── Super Admin — Bulk delete items ───────────
+router.post(
+  "/items/bulk-delete",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  flashSaleController.removeItems
+);
+
+// ── Super Admin — Send manual notification to outlets ───────────
+router.post(
+  "/:id/notify",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  flashSaleController.sendFlashSaleNotification
+);
+
 module.exports = router;

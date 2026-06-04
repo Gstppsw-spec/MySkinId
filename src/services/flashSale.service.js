@@ -514,7 +514,55 @@ module.exports = {
       if (!item) return { status: false, message: "Flash sale item not found" };
 
       await item.destroy();
+
+      // Clean up cart entries referencing this flash sale item
+      const { customerCart } = require("../models");
+      await customerCart.update(
+        { flashSaleItemId: null },
+        { where: { flashSaleItemId: itemId } },
+      );
+
       return { status: true, message: "Item removed successfully", data: { id: itemId } };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Hapus multiple items dari flash sale (Super Admin — bulk delete).
+   * @param {string[]} itemIds - Array of flashSaleItem IDs to remove
+   */
+  async removeItems(itemIds) {
+    try {
+      if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+        return { status: false, message: "itemIds array is required" };
+      }
+
+      const items = await flashSaleItem.findAll({
+        where: { id: { [Op.in]: itemIds } },
+      });
+
+      if (items.length === 0) {
+        return { status: false, message: "No flash sale items found" };
+      }
+
+      const foundIds = items.map((i) => i.id);
+      await flashSaleItem.destroy({
+        where: { id: { [Op.in]: foundIds } },
+      });
+
+      // Clean up cart entries referencing these flash sale items
+      const { customerCart } = require("../models");
+      await customerCart.update(
+        { flashSaleItemId: null },
+        { where: { flashSaleItemId: { [Op.in]: foundIds } } },
+      );
+
+      return {
+        status: true,
+        message: `${foundIds.length} item berhasil dihapus dari flash sale`,
+        data: { deletedCount: foundIds.length, deletedIds: foundIds },
+      };
     } catch (error) {
       return { status: false, message: error.message };
     }
@@ -587,4 +635,89 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
+  /**
+   * Super Admin: Send manual notification to outlets/companies regarding a flash sale.
+   */
+  async sendFlashSaleNotification(flashSaleId, { target = "ALL", title, body }) {
+    try {
+      const fs = await flashSale.findByPk(flashSaleId);
+      if (!fs) return { status: false, message: "Flash sale not found" };
+
+      let companyIds = [];
+
+      if (target === "PARTICIPATING") {
+        // Find companies of locations that have registered items for this flash sale
+        const items = await flashSaleItem.findAll({
+          where: { flashSaleId },
+          include: [
+            {
+              model: masterLocation,
+              as: "location",
+              attributes: ["companyId"],
+            },
+          ],
+        });
+
+        const uniqueCompanyIds = new Set();
+        for (const item of items) {
+          if (item.location && item.location.companyId) {
+            uniqueCompanyIds.add(item.location.companyId);
+          }
+        }
+        companyIds = Array.from(uniqueCompanyIds);
+
+        if (companyIds.length === 0) {
+          return { status: false, message: "No outlets are participating in this flash sale yet" };
+        }
+      } else {
+        // Default target: ALL active companies
+        const companies = await relationshipUserCompany.findAll({
+          where: { isactive: true },
+          attributes: ["companyId"],
+          raw: true,
+        });
+
+        companyIds = Array.from(new Set(companies.map(c => c.companyId).filter(Boolean)));
+      }
+
+      if (companyIds.length === 0) {
+        return { status: false, message: "No active companies found to notify" };
+      }
+
+      const finalTitle = title || `Informasi Flash Sale: ${fs.title}`;
+      const finalBody = body || `Halo! Ada info penting mengenai flash sale "${fs.title}". Silakan periksa detailnya.`;
+
+      // Require notification service dynamically to prevent circular dependencies
+      const NotificationService = require("./notification.service");
+
+      const sendPromises = companyIds.map(companyId =>
+        NotificationService.createNotification({
+          companyId,
+          title: finalTitle,
+          body: finalBody,
+          category: "Promotion",
+          type: "FLASH_SALE_MANUAL",
+          referenceId: fs.id,
+          referenceType: "flashSale",
+        })
+      );
+
+      await Promise.all(sendPromises);
+
+      return {
+        status: true,
+        message: `Berhasil mengirimkan notifikasi ke ${companyIds.length} perusahaan`,
+        data: {
+          target,
+          notifiedCompanyCount: companyIds.length,
+          companyIds,
+        },
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] sendFlashSaleNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
 };
+

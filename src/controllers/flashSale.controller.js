@@ -104,6 +104,29 @@ module.exports = {
     }
   },
 
+  async removeItems(req, res) {
+    try {
+      const { itemIds } = req.body;
+      const result = await flashSaleService.removeItems(itemIds);
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async sendFlashSaleNotification(req, res) {
+    try {
+      const { id } = req.params;
+      const { target, title, body } = req.body;
+      const result = await flashSaleService.sendFlashSaleNotification(id, { target, title, body });
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   // ── Customer ────────────────────────────────
 
   async getActive(req, res) {

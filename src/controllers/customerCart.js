@@ -104,4 +104,15 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  async clearFlashSaleFromCarts(req, res) {
+    try {
+      const { flashSaleItemId } = req.body;
+      const result = await customerCart.clearFlashSaleFromCarts(flashSaleItemId || null);
+      if (!result.status) return response.error(res, result.message);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

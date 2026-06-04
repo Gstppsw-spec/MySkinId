@@ -4,6 +4,7 @@ const router = express.Router();
 const customerCart = require("../../controllers/customerCart");
 
 const { verifyToken } = require("../../middlewares/authMiddleware");
+const { allowRoles } = require("../../middlewares/roleMiddleware");
 
 // All routes require authentication
 router.use(verifyToken);
@@ -21,6 +22,13 @@ router.put("/select/:cartId", customerCart.selectCustomerCart);
 router.put(
   "/select-all",
   customerCart.selectAllCustomerCartByRefferenceType
+);
+
+// ── Super Admin — Clear flash sale from carts ──
+router.post(
+  "/clear-flash-sale",
+  allowRoles("SUPER_ADMIN"),
+  customerCart.clearFlashSaleFromCarts
 );
 
 module.exports = router;
