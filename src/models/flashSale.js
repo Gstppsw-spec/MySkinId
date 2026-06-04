@@ -10,6 +10,12 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
       });
+      flashSale.hasMany(models.scheduledNotification, {
+        foreignKey: "flashSaleId",
+        as: "scheduledNotifications",
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
     }
   }
 

@@ -77,4 +77,19 @@ router.post(
   flashSaleController.sendFlashSaleCustomerNotification
 );
 
+// ── Super Admin — Manage scheduled customer notifications ───────────
+router.get(
+  "/:id/scheduled-notifications",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  flashSaleController.getScheduledNotifications
+);
+
+router.delete(
+  "/:id/scheduled-notifications/:notificationId",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  flashSaleController.deleteScheduledNotification
+);
+
 module.exports = router;

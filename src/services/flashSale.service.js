@@ -812,5 +812,82 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
+  async createScheduledNotification(flashSaleId, { target = "ALL", title, body, scheduledAt, repeatDaily }) {
+    try {
+      const fs = await flashSale.findByPk(flashSaleId);
+      if (!fs) return { status: false, message: "Flash sale not found" };
+
+      if (!scheduledAt) {
+        return { status: false, message: "Waktu jadwal pengiriman harus diisi" };
+      }
+
+      const parsedDate = new Date(scheduledAt);
+      if (isNaN(parsedDate.getTime())) {
+        return { status: false, message: "Format tanggal tidak valid" };
+      }
+      if (parsedDate <= new Date()) {
+        return { status: false, message: "Waktu jadwal pengiriman harus di masa depan" };
+      }
+
+      const { scheduledNotification } = require("../models");
+      const notif = await scheduledNotification.create({
+        flashSaleId,
+        title,
+        body,
+        target,
+        status: repeatDaily ? "ACTIVE" : "PENDING",
+        scheduledAt: parsedDate,
+        repeatDaily: !!repeatDaily,
+      });
+
+      return {
+        status: true,
+        message: "Berhasil menjadwalkan notifikasi",
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] createScheduledNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
+
+  async getScheduledNotifications(flashSaleId) {
+    try {
+      const { scheduledNotification } = require("../models");
+      const list = await scheduledNotification.findAll({
+        where: { flashSaleId },
+        order: [["createdAt", "DESC"]],
+      });
+
+      return {
+        status: true,
+        message: "Berhasil mengambil daftar jadwal notifikasi",
+        data: list,
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] getScheduledNotifications Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
+
+  async deleteScheduledNotification(id) {
+    try {
+      const { scheduledNotification } = require("../models");
+      const notif = await scheduledNotification.findByPk(id);
+      if (!notif) return { status: false, message: "Jadwal notifikasi tidak ditemukan" };
+
+      await notif.destroy();
+
+      return {
+        status: true,
+        message: "Berhasil membatalkan dan menghapus jadwal notifikasi",
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] deleteScheduledNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
 };
 
