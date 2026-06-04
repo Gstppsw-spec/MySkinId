@@ -854,11 +854,60 @@ class MasterLocationService {
 
       if (plain.images) plain.images = sortPrimaryFirst(plain.images);
 
+      // Get counts for products, services, and packages
+      const {
+        relationshipProductLocation,
+        relationshipServiceLocation,
+        relationshipPackageLocation,
+        masterProduct,
+        masterService,
+        masterPackage,
+      } = require("../models");
+
+      const [productCount, serviceCount, packageCount] = await Promise.all([
+        relationshipProductLocation.count({
+          where: { locationId: id, isActive: true },
+          include: [
+            {
+              model: masterProduct,
+              as: "product",
+              where: { isActive: true, isVerified: true },
+              required: true,
+            },
+          ],
+        }),
+        relationshipServiceLocation.count({
+          where: { locationId: id, isActive: true },
+          include: [
+            {
+              model: masterService,
+              as: "service",
+              where: { isActive: true, isVerified: true },
+              required: true,
+            },
+          ],
+        }),
+        relationshipPackageLocation.count({
+          where: { locationId: id, isActive: true },
+          include: [
+            {
+              model: masterPackage,
+              as: "package",
+              where: { isActive: true, isVerified: true },
+              required: true,
+            },
+          ],
+        }),
+      ]);
+
       const responseData = {
         ...plain,
         isPremium: isPremiumValid,
         isFavorite: plain.favorites?.length > 0 || false,
         distance: distance,
+        productCount,
+        serviceCount,
+        packageCount,
         favorites: undefined,
       };
 
