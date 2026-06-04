@@ -28,6 +28,7 @@ class NotificationService {
         referenceId,
         referenceType,
         recipientType = "user",
+        meta = {},
       } = data;
 
       const notification = await masterNotification.create({
@@ -55,6 +56,7 @@ class NotificationService {
             type,
             referenceId: referenceId || "",
             referenceType: referenceType || "",
+            ...meta,
           },
         });
       } else if (companyId) {
@@ -74,6 +76,7 @@ class NotificationService {
               type,
               referenceId: referenceId || "",
               referenceType: referenceType || "",
+              ...meta,
             },
           })
         );
@@ -274,6 +277,9 @@ class NotificationService {
               type: "FLASH_SALE_DAILY",
               referenceId: sale.saleId,
               referenceType: "flashSale",
+              meta: {
+                status: sale.status,
+              },
             });
         }
       }

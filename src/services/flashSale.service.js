@@ -700,6 +700,9 @@ module.exports = {
           type: "FLASH_SALE_MANUAL",
           referenceId: fs.id,
           referenceType: "flashSale",
+          meta: {
+            status: fs.status,
+          },
         })
       );
 
@@ -787,6 +790,9 @@ module.exports = {
           type: "FLASH_SALE_CUSTOMER",
           referenceId: fs.id,
           referenceType: "flashSale",
+          meta: {
+            status: fs.status,
+          },
         })
       );
 
