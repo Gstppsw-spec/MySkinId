@@ -36,8 +36,13 @@ module.exports = {
         allowNull: false,
         defaultValue: "ALL",
       },
+      sentCount: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
       status: {
-        type: Sequelize.ENUM("PENDING", "SENT", "FAILED", "ACTIVE"),
+        type: Sequelize.ENUM("PENDING", "SENT", "FAILED", "ACTIVE", "INACTIVE"),
         allowNull: false,
         defaultValue: "PENDING",
       },

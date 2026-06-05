@@ -13,11 +13,13 @@ async function sendNotificationDirectly(notif) {
     let type = "GENERAL_BROADCAST";
     let meta = { clickRoute: notif.clickRoute || "" };
 
+    const { masterCustomer } = require("../models");
+
     if (notif.flashSaleId) {
       const fs = await flashSale.findByPk(notif.flashSaleId);
       if (!fs) {
         console.warn(`[ScheduledNotificationCron] Flash sale ${notif.flashSaleId} not found for notification ${notif.id}. Skipping.`);
-        return;
+        return 0;
       }
       referenceId = fs.id;
       referenceType = "flashSale";
@@ -38,25 +40,57 @@ async function sendNotificationDirectly(notif) {
           });
           customerIds = Array.from(new Set(carts.map(c => c.customerId).filter(Boolean)));
         }
+      } else if (notif.target === "FREELANCE") {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true, isFreelance: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      } else if (notif.target.includes("@")) {
+        const customer = await masterCustomer.findOne({
+          where: { email: notif.target.trim(), isActive: true },
+          attributes: ["id"],
+        });
+        if (customer) customerIds = [customer.id];
       } else {
-        const customers = await require("../models").masterCustomer.findAll({
+        const customers = await masterCustomer.findAll({
           where: { isActive: true },
           attributes: ["id"],
         });
         customerIds = customers.map(c => c.id).filter(Boolean);
       }
     } else {
-      // General notification broadcast targeting all active customers
-      const customers = await require("../models").masterCustomer.findAll({
-        where: { isActive: true },
-        attributes: ["id"],
-      });
-      customerIds = customers.map(c => c.id).filter(Boolean);
+      // General notification broadcast targeting based on target option
+      if (notif.target === "ALL") {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      } else if (notif.target === "FREELANCE") {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true, isFreelance: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      } else if (notif.target.includes("@")) {
+        const customer = await masterCustomer.findOne({
+          where: { email: notif.target.trim(), isActive: true },
+          attributes: ["id"],
+        });
+        if (customer) customerIds = [customer.id];
+      } else {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      }
     }
 
     if (customerIds.length === 0) {
       console.log(`[ScheduledNotificationCron] No customers found to notify for notification ${notif.id}.`);
-      return;
+      return 0;
     }
 
     const NotificationService = require("../services/notification.service");
@@ -76,6 +110,7 @@ async function sendNotificationDirectly(notif) {
 
     await Promise.all(sendPromises);
     console.log(`[ScheduledNotificationCron] Successfully sent scheduled notification ${notif.id} to ${customerIds.length} customers.`);
+    return customerIds.length;
   } catch (err) {
     console.error(`[ScheduledNotificationCron] Error sending notification ${notif.id}:`, err.message);
     throw err;
@@ -107,8 +142,8 @@ function initScheduledNotificationCron() {
       for (const notif of pendingOneOffs) {
         console.log(`[ScheduledNotificationCron] Processing pending one-off notification ${notif.id}...`);
         try {
-          await sendNotificationDirectly(notif);
-          await notif.update({ status: "SENT", lastSentAt: new Date() });
+          const sentCount = await sendNotificationDirectly(notif);
+          await notif.update({ status: "SENT", lastSentAt: new Date(), sentCount });
         } catch (error) {
           console.error(`[ScheduledNotificationCron] One-off notification ${notif.id} failed:`, error.message);
           await notif.update({ status: "FAILED" });
@@ -143,8 +178,8 @@ function initScheduledNotificationCron() {
           if (now >= schedTimeToday) {
             console.log(`[ScheduledNotificationCron] Processing daily repeating notification ${notif.id}...`);
             try {
-              await sendNotificationDirectly(notif);
-              await notif.update({ lastSentAt: new Date() });
+              const sentCount = await sendNotificationDirectly(notif);
+              await notif.update({ lastSentAt: new Date(), sentCount });
             } catch (error) {
               console.error(`[ScheduledNotificationCron] Daily repeating notification ${notif.id} failed:`, error.message);
             }

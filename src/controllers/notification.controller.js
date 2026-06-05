@@ -128,6 +128,16 @@ class NotificationController {
       return res.status(500).json({ status: false, message: error.message });
     }
   }
+
+  async toggleScheduledNotification(req, res) {
+    try {
+      const { notificationId } = req.params;
+      const result = await NotificationService.toggleScheduledNotification(notificationId);
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  }
 }
 
 module.exports = new NotificationController();

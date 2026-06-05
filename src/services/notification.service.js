@@ -293,17 +293,50 @@ class NotificationService {
 
   async sendGeneralBroadcastImmediate({ title, body, clickRoute, target = "ALL" }) {
     try {
-      const { masterCustomer } = require("../models");
-      const customers = await masterCustomer.findAll({
-        where: { isActive: true },
-        attributes: ["id"],
-      });
+      const { masterCustomer, scheduledNotification } = require("../models");
+      let customerIds = [];
 
-      const customerIds = customers.map(c => c.id).filter(Boolean);
+      if (target === "ALL") {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      } else if (target === "FREELANCE") {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true, isFreelance: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      } else if (target.includes("@")) {
+        const customer = await masterCustomer.findOne({
+          where: { email: target.trim(), isActive: true },
+          attributes: ["id"],
+        });
+        if (customer) customerIds = [customer.id];
+      } else {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      }
 
       if (customerIds.length === 0) {
         return { status: false, message: "No active customers found to notify" };
       }
+
+      // Create entry in scheduledNotification first as a record of this broadcast history
+      const notifRecord = await scheduledNotification.create({
+        title,
+        body,
+        clickRoute: clickRoute || null,
+        target,
+        sentCount: customerIds.length,
+        status: "SENT",
+        scheduledAt: new Date(),
+        lastSentAt: new Date(),
+      });
 
       const meta = { clickRoute: clickRoute || "" };
 
@@ -326,7 +359,7 @@ class NotificationService {
       return {
         status: true,
         message: `Berhasil mengirimkan broadcast ke ${customerIds.length} customer`,
-        data: { notifiedCustomerCount: customerIds.length },
+        data: notifRecord,
       };
     } catch (error) {
       console.error("[NotificationService] sendGeneralBroadcastImmediate Error:", error.message);
@@ -348,12 +381,26 @@ class NotificationService {
         return { status: false, message: "Waktu jadwal pengiriman harus di masa depan" };
       }
 
-      const { scheduledNotification } = require("../models");
+      const { scheduledNotification, masterCustomer } = require("../models");
+
+      // Count potential recipients at this moment
+      let potentialCount = 0;
+      if (target === "ALL") {
+        potentialCount = await masterCustomer.count({ where: { isActive: true } });
+      } else if (target === "FREELANCE") {
+        potentialCount = await masterCustomer.count({ where: { isActive: true, isFreelance: true } });
+      } else if (target.includes("@")) {
+        potentialCount = await masterCustomer.count({ where: { email: target.trim(), isActive: true } });
+      } else {
+        potentialCount = await masterCustomer.count({ where: { isActive: true } });
+      }
+
       const notif = await scheduledNotification.create({
         title,
         body,
         clickRoute: clickRoute || null,
         target,
+        sentCount: potentialCount,
         status: repeatDaily ? "ACTIVE" : "PENDING",
         scheduledAt: parsedDate,
         repeatDaily: !!repeatDaily,
@@ -404,6 +451,30 @@ class NotificationService {
       };
     } catch (error) {
       console.error("[NotificationService] deleteScheduledGeneralNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  }
+
+  async toggleScheduledNotification(id) {
+    try {
+      const { scheduledNotification } = require("../models");
+      const notif = await scheduledNotification.findByPk(id);
+      if (!notif) return { status: false, message: "Jadwal notifikasi tidak ditemukan" };
+
+      if (notif.status !== "ACTIVE" && notif.status !== "INACTIVE") {
+        return { status: false, message: "Hanya notifikasi terjadwal berulang yang dapat diaktifkan/nonaktifkan" };
+      }
+
+      const newStatus = notif.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+      await notif.update({ status: newStatus });
+
+      return {
+        status: true,
+        message: `Notifikasi berhasil ${newStatus === "ACTIVE" ? "diaktifkan" : "dinonaktifkan"}`,
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[NotificationService] toggleScheduledNotification Error:", error.message);
       return { status: false, message: error.message };
     }
   }

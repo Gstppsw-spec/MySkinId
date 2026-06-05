@@ -31,4 +31,11 @@ router.delete(
   NotificationController.deleteScheduledGeneralNotification
 );
 
+router.put(
+  "/scheduled/:notificationId/toggle",
+  authMiddleware.verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  NotificationController.toggleScheduledNotification
+);
+
 module.exports = router;
