@@ -28,6 +28,7 @@ class NotificationService {
         referenceId,
         referenceType,
         recipientType = "user",
+        meta = {},
       } = data;
 
       const notification = await masterNotification.create({
@@ -55,6 +56,7 @@ class NotificationService {
             type,
             referenceId: referenceId || "",
             referenceType: referenceType || "",
+            ...meta,
           },
         });
       } else if (companyId) {
@@ -74,6 +76,7 @@ class NotificationService {
               type,
               referenceId: referenceId || "",
               referenceType: referenceType || "",
+              ...meta,
             },
           })
         );
@@ -274,6 +277,9 @@ class NotificationService {
               type: "FLASH_SALE_DAILY",
               referenceId: sale.saleId,
               referenceType: "flashSale",
+              meta: {
+                status: sale.status,
+              },
             });
         }
       }
@@ -281,6 +287,194 @@ class NotificationService {
       return { status: true, message: `Dispatched daily flash sale notifications to ${companySales.size} companies` };
     } catch (error) {
       console.error("[NotificationService] Flash Sale Daily Cron Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  }
+
+  async sendGeneralBroadcastImmediate({ title, body, clickRoute, target = "ALL" }) {
+    try {
+      const { masterCustomer, scheduledNotification } = require("../models");
+      let customerIds = [];
+
+      if (target === "ALL") {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      } else if (target === "FREELANCE") {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true, isFreelance: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      } else if (target.includes("@")) {
+        const customer = await masterCustomer.findOne({
+          where: { email: target.trim(), isActive: true },
+          attributes: ["id"],
+        });
+        if (customer) customerIds = [customer.id];
+      } else {
+        const customers = await masterCustomer.findAll({
+          where: { isActive: true },
+          attributes: ["id"],
+        });
+        customerIds = customers.map(c => c.id).filter(Boolean);
+      }
+
+      if (customerIds.length === 0) {
+        return { status: false, message: "No active customers found to notify" };
+      }
+
+      // Create entry in scheduledNotification first as a record of this broadcast history
+      const notifRecord = await scheduledNotification.create({
+        title,
+        body,
+        clickRoute: clickRoute || null,
+        target,
+        sentCount: customerIds.length,
+        status: "SENT",
+        scheduledAt: new Date(),
+        lastSentAt: new Date(),
+      });
+
+      const meta = { clickRoute: clickRoute || "" };
+
+      const sendPromises = customerIds.map(customerId =>
+        this.createNotification({
+          userId: customerId,
+          recipientType: "customer",
+          title,
+          body,
+          category: "Promotion",
+          type: "GENERAL_BROADCAST",
+          referenceId: null,
+          referenceType: null,
+          meta,
+        })
+      );
+
+      await Promise.all(sendPromises);
+
+      return {
+        status: true,
+        message: `Berhasil mengirimkan broadcast ke ${customerIds.length} customer`,
+        data: notifRecord,
+      };
+    } catch (error) {
+      console.error("[NotificationService] sendGeneralBroadcastImmediate Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  }
+
+  async createScheduledGeneralNotification({ title, body, clickRoute, scheduledAt, repeatDaily, target = "ALL" }) {
+    try {
+      if (!scheduledAt) {
+        return { status: false, message: "Waktu jadwal pengiriman harus diisi" };
+      }
+
+      const parsedDate = new Date(scheduledAt);
+      if (isNaN(parsedDate.getTime())) {
+        return { status: false, message: "Format tanggal tidak valid" };
+      }
+      if (parsedDate <= new Date()) {
+        return { status: false, message: "Waktu jadwal pengiriman harus di masa depan" };
+      }
+
+      const { scheduledNotification, masterCustomer } = require("../models");
+
+      // Count potential recipients at this moment
+      let potentialCount = 0;
+      if (target === "ALL") {
+        potentialCount = await masterCustomer.count({ where: { isActive: true } });
+      } else if (target === "FREELANCE") {
+        potentialCount = await masterCustomer.count({ where: { isActive: true, isFreelance: true } });
+      } else if (target.includes("@")) {
+        potentialCount = await masterCustomer.count({ where: { email: target.trim(), isActive: true } });
+      } else {
+        potentialCount = await masterCustomer.count({ where: { isActive: true } });
+      }
+
+      const notif = await scheduledNotification.create({
+        title,
+        body,
+        clickRoute: clickRoute || null,
+        target,
+        sentCount: potentialCount,
+        status: repeatDaily ? "ACTIVE" : "PENDING",
+        scheduledAt: parsedDate,
+        repeatDaily: !!repeatDaily,
+      });
+
+      return {
+        status: true,
+        message: "Berhasil menjadwalkan notifikasi umum",
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[NotificationService] createScheduledGeneralNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  }
+
+  async getScheduledGeneralNotifications() {
+    try {
+      const { scheduledNotification } = require("../models");
+      const list = await scheduledNotification.findAll({
+        where: { flashSaleId: null },
+        order: [["createdAt", "DESC"]],
+      });
+
+      return {
+        status: true,
+        message: "Berhasil mengambil daftar jadwal notifikasi umum",
+        data: list,
+      };
+    } catch (error) {
+      console.error("[NotificationService] getScheduledGeneralNotifications Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  }
+
+  async deleteScheduledGeneralNotification(id) {
+    try {
+      const { scheduledNotification } = require("../models");
+      const notif = await scheduledNotification.findByPk(id);
+      if (!notif) return { status: false, message: "Jadwal notifikasi tidak ditemukan" };
+
+      await notif.destroy();
+
+      return {
+        status: true,
+        message: "Berhasil membatalkan dan menghapus jadwal notifikasi umum",
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[NotificationService] deleteScheduledGeneralNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  }
+
+  async toggleScheduledNotification(id) {
+    try {
+      const { scheduledNotification } = require("../models");
+      const notif = await scheduledNotification.findByPk(id);
+      if (!notif) return { status: false, message: "Jadwal notifikasi tidak ditemukan" };
+
+      if (notif.status !== "ACTIVE" && notif.status !== "INACTIVE") {
+        return { status: false, message: "Hanya notifikasi terjadwal berulang yang dapat diaktifkan/nonaktifkan" };
+      }
+
+      const newStatus = notif.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+      await notif.update({ status: newStatus });
+
+      return {
+        status: true,
+        message: `Notifikasi berhasil ${newStatus === "ACTIVE" ? "diaktifkan" : "dinonaktifkan"}`,
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[NotificationService] toggleScheduledNotification Error:", error.message);
       return { status: false, message: error.message };
     }
   }

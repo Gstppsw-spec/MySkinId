@@ -104,6 +104,17 @@ module.exports = {
     }
   },
 
+  async updateItem(req, res) {
+    try {
+      const { itemId } = req.params;
+      const result = await flashSaleService.updateItem(itemId, req.body);
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async removeItems(req, res) {
     try {
       const { itemIds } = req.body;
@@ -130,8 +141,43 @@ module.exports = {
   async sendFlashSaleCustomerNotification(req, res) {
     try {
       const { id } = req.params;
-      const { target, title, body } = req.body;
-      const result = await flashSaleService.sendFlashSaleCustomerNotification(id, { target, title, body });
+      const { target, title, body, scheduledAt, repeatDaily } = req.body;
+      
+      let result;
+      if (scheduledAt) {
+        result = await flashSaleService.createScheduledNotification(id, {
+          target,
+          title,
+          body,
+          scheduledAt,
+          repeatDaily: !!repeatDaily,
+        });
+      } else {
+        result = await flashSaleService.sendFlashSaleCustomerNotification(id, { target, title, body });
+      }
+
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getScheduledNotifications(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await flashSaleService.getScheduledNotifications(id);
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async deleteScheduledNotification(req, res) {
+    try {
+      const { notificationId } = req.params;
+      const result = await flashSaleService.deleteScheduledNotification(notificationId);
       if (!result.status) return response.error(res, result.message, result.data);
       return response.success(res, result.message, result.data);
     } catch (error) {

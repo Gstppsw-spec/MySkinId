@@ -483,54 +483,61 @@ module.exports = {
             include: [{ model: flashSale, as: "flashSale" }],
           });
 
-          if (!fsItem) throw new Error("Flash sale item not found");
+          let shouldClear = false;
+          if (!fsItem || !fsItem.flashSale) {
+            shouldClear = true;
+          } else {
+            // Validate item matches the flash sale item
+            let isMatch = false;
+            if (type === "product" && fsItem.productId === actualItem.id) isMatch = true;
+            else if (type === "package" && fsItem.packageId === actualItem.id) isMatch = true;
+            else if (type === "service" && fsItem.serviceId === actualItem.id) isMatch = true;
 
-          // Validate item matches the flash sale item
-          let isMatch = false;
-          if (type === "product" && fsItem.productId === actualItem.id) isMatch = true;
-          else if (type === "package" && fsItem.packageId === actualItem.id) isMatch = true;
-          else if (type === "service" && fsItem.serviceId === actualItem.id) isMatch = true;
-
-          if (!isMatch) {
-            throw new Error("Item flash sale tidak sesuai dengan produk/paket/layanan yang dipilih");
-          }
-          if (fsItem.flashSale.status !== "ACTIVE") {
-            throw new Error("Promo flash sale sudah tidak aktif");
-          }
-
-          const now = new Date();
-          if (now < fsItem.flashSale.startDate) {
-            throw new Error("Promo flash sale belum dimulai");
-          }
-          if (now > fsItem.flashSale.endDate) {
-            throw new Error("Promo flash sale telah berakhir");
+            if (!isMatch) {
+              shouldClear = true;
+            } else if (fsItem.flashSale.status !== "ACTIVE") {
+              shouldClear = true;
+            } else {
+              const now = new Date();
+              if (now < fsItem.flashSale.startDate || now > fsItem.flashSale.endDate || (fsItem.quota - fsItem.sold) <= 0) {
+                shouldClear = true;
+              }
+            }
           }
 
-          // Calculate remaining quota and remaining customer limit
-          const remainingQuota = Math.max(0, fsItem.quota - fsItem.sold);
-          let remainingCustomerLimit = Infinity;
-          if (fsItem.maxBuyPerCustomer > 0) {
-            const itemsBought = await transactionItem.findAll({
-              where: { flashSaleItemId },
-              include: [{
-                model: transaction,
-                as: "transaction",
-                required: true,
+          if (shouldClear) {
+            await item.update({ flashSaleItemId: null }, { transaction: t });
+            flashSaleItemId = null;
+            isFlashSalePromo = false;
+            allowedFlashSaleQty = 0;
+            normalQty = item.qty;
+          } else {
+            // Calculate remaining quota and remaining customer limit
+            const remainingQuota = Math.max(0, fsItem.quota - fsItem.sold);
+            let remainingCustomerLimit = Infinity;
+            if (fsItem.maxBuyPerCustomer > 0) {
+              const itemsBought = await transactionItem.findAll({
+                where: { flashSaleItemId },
                 include: [{
-                  model: order,
-                  as: "order", 
-                  where: { customerId, paymentStatus: "PAID" },
+                  model: transaction,
+                  as: "transaction",
                   required: true,
+                  include: [{
+                    model: order,
+                    as: "order", 
+                    where: { customerId, paymentStatus: "PAID" },
+                    required: true,
+                  }]
                 }]
-              }]
-            });
-            const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
-            remainingCustomerLimit = Math.max(0, fsItem.maxBuyPerCustomer - alreadyBought);
-          }
+              });
+              const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+              remainingCustomerLimit = Math.max(0, fsItem.maxBuyPerCustomer - alreadyBought);
+            }
 
-          allowedFlashSaleQty = Math.min(item.qty, remainingQuota, remainingCustomerLimit);
-          normalQty = item.qty - allowedFlashSaleQty;
-          isFlashSalePromo = true;
+            allowedFlashSaleQty = Math.min(item.qty, remainingQuota, remainingCustomerLimit);
+            normalQty = item.qty - allowedFlashSaleQty;
+            isFlashSalePromo = true;
+          }
         }
 
         const unitWeight = actualItem.weightGram || 0;
@@ -6203,6 +6210,7 @@ module.exports = {
             weightGram: actualItem.weightGram || 0,
             flashSaleItemId: item.flashSaleItemId,
             locationId: item.locationId,
+            cartItemInstance: item,
           });
         }
       } else if (checkoutType === "direct") {
@@ -6295,55 +6303,67 @@ module.exports = {
             include: [{ model: flashSale, as: "flashSale" }],
           });
 
-          if (!fsItem) throw new Error("Flash sale item not found");
+          let shouldClear = false;
+          if (!fsItem || !fsItem.flashSale) {
+            shouldClear = true;
+          } else {
+            // Validate item matches the flash sale item
+            let isMatch = false;
+            if (item.type === "product" && fsItem.productId === item.id) isMatch = true;
+            else if (item.type === "package" && fsItem.packageId === item.id) isMatch = true;
+            else if (item.type === "service" && fsItem.serviceId === item.id) isMatch = true;
 
-          // Validate item matches the flash sale item
-          let isMatch = false;
-          if (item.type === "product" && fsItem.productId === item.id) isMatch = true;
-          else if (item.type === "package" && fsItem.packageId === item.id) isMatch = true;
-          else if (item.type === "service" && fsItem.serviceId === item.id) isMatch = true;
-
-          if (!isMatch) {
-            throw new Error("Item flash sale tidak sesuai dengan produk/paket/layanan yang dipilih");
+            if (!isMatch) {
+              shouldClear = true;
+            } else if (fsItem.flashSale.status !== "ACTIVE") {
+              shouldClear = true;
+            } else {
+              const now = new Date();
+              if (now < fsItem.flashSale.startDate || now > fsItem.flashSale.endDate || (fsItem.quota - fsItem.sold) <= 0) {
+                shouldClear = true;
+              }
+            }
           }
 
-          if (fsItem.flashSale.status !== "ACTIVE") {
-            throw new Error("Promo flash sale sudah tidak aktif");
-          }
-
-          const now = new Date();
-          if (now < fsItem.flashSale.startDate) {
-            throw new Error("Promo flash sale belum dimulai");
-          }
-          if (now > fsItem.flashSale.endDate) {
-            throw new Error("Promo flash sale telah berakhir");
-          }
-
-          // Calculate remaining quota and remaining customer limit
-          const remainingQuota = Math.max(0, fsItem.quota - fsItem.sold);
-          let remainingCustomerLimit = Infinity;
-          if (fsItem.maxBuyPerCustomer > 0) {
-            const itemsBought = await transactionItem.findAll({
-              where: { flashSaleItemId },
-              include: [{
-                model: transaction,
-                as: "transaction",
-                required: true,
+          if (shouldClear) {
+            if (item.cartItemInstance) {
+              try {
+                await item.cartItemInstance.update({ flashSaleItemId: null });
+              } catch (e) {
+                console.error("Failed to clear flashSaleItemId in database cart during checkout summary:", e);
+              }
+            }
+            flashSaleItemId = null;
+            isFlashSalePromo = false;
+            allowedFlashSaleQty = 0;
+            normalQty = item.qty;
+          } else {
+            // Calculate remaining quota and remaining customer limit
+            const remainingQuota = Math.max(0, fsItem.quota - fsItem.sold);
+            let remainingCustomerLimit = Infinity;
+            if (fsItem.maxBuyPerCustomer > 0) {
+              const itemsBought = await transactionItem.findAll({
+                where: { flashSaleItemId },
                 include: [{
-                  model: order,
-                  as: "order",
-                  where: { customerId, paymentStatus: "PAID" },
+                  model: transaction,
+                  as: "transaction",
                   required: true,
+                  include: [{
+                    model: order,
+                    as: "order",
+                    where: { customerId, paymentStatus: "PAID" },
+                    required: true,
+                  }]
                 }]
-              }]
-            });
-            const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
-            remainingCustomerLimit = Math.max(0, fsItem.maxBuyPerCustomer - alreadyBought);
-          }
+              });
+              const alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+              remainingCustomerLimit = Math.max(0, fsItem.maxBuyPerCustomer - alreadyBought);
+            }
 
-          allowedFlashSaleQty = Math.min(item.qty, remainingQuota, remainingCustomerLimit);
-          normalQty = item.qty - allowedFlashSaleQty;
-          isFlashSalePromo = true;
+            allowedFlashSaleQty = Math.min(item.qty, remainingQuota, remainingCustomerLimit);
+            normalQty = item.qty - allowedFlashSaleQty;
+            isFlashSalePromo = true;
+          }
         }
 
         if (isFlashSalePromo && allowedFlashSaleQty > 0) {

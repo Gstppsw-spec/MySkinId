@@ -126,7 +126,7 @@ module.exports = {
   async create(data) {
     try {
       console.log(data);
-      const { title, startDate, endDate } = data;
+      const { title, startDate, endDate, priceSetBy, flashPrice } = data;
       if (!title || title.trim() === "") throw new Error("title is required");
       if (!startDate || !endDate) throw new Error("startDate and endDate are required");
 
@@ -139,11 +139,30 @@ module.exports = {
       if (now >= start && now < end) initialStatus = "ACTIVE";
       if (now >= end) initialStatus = "ENDED";
 
+      // Validate priceSetBy
+      const validPriceSetBy = ["SUPER_ADMIN", "MITRA"];
+      const finalPriceSetBy = validPriceSetBy.includes(priceSetBy) ? priceSetBy : "SUPER_ADMIN";
+
+      // Validate flashPrice (required when priceSetBy is SUPER_ADMIN)
+      let finalFlashPrice = null;
+      if (finalPriceSetBy === "SUPER_ADMIN") {
+        if (flashPrice === undefined || flashPrice === null) {
+          throw new Error("flashPrice is required when priceSetBy is SUPER_ADMIN");
+        }
+        const parsed = parseFloat(flashPrice);
+        if (isNaN(parsed) || parsed < 0) {
+          throw new Error("flashPrice must be a valid positive number");
+        }
+        finalFlashPrice = parsed;
+      }
+
       const fs = await flashSale.create({
         title,
         startDate: start,
         endDate: end,
         status: initialStatus,
+        priceSetBy: finalPriceSetBy,
+        flashPrice: finalFlashPrice,
       });
       return { status: true, message: "Flash sale created", data: fs };
     } catch (error) {
@@ -243,7 +262,7 @@ module.exports = {
       const existing = await flashSale.findByPk(id);
       if (!existing) return { status: false, message: "Flash sale not found" };
 
-      const { title, startDate, endDate, status } = data;
+      const { title, startDate, endDate, status, priceSetBy, flashPrice } = data;
 
       if (title !== undefined) existing.title = title;
       if (startDate !== undefined) existing.startDate = new Date(startDate);
@@ -251,6 +270,34 @@ module.exports = {
 
       if (status) {
         existing.status = status;
+      }
+
+      // Update priceSetBy if provided
+      if (priceSetBy !== undefined) {
+        const validPriceSetBy = ["SUPER_ADMIN", "MITRA"];
+        if (validPriceSetBy.includes(priceSetBy)) {
+          existing.priceSetBy = priceSetBy;
+        }
+      }
+
+      // Update flashPrice if provided
+      if (flashPrice !== undefined) {
+        const parsed = parseFloat(flashPrice);
+        if (!isNaN(parsed) && parsed >= 0) {
+          existing.flashPrice = parsed;
+          if (existing.priceSetBy === "SUPER_ADMIN") {
+            await flashSaleItem.update(
+              { flashPrice: parsed },
+              { where: { flashSaleId: id } }
+            );
+          }
+        }
+      } else if (priceSetBy === "SUPER_ADMIN" && existing.flashPrice !== null) {
+        // If priceSetBy is changed to SUPER_ADMIN, propagate the existing event-level flashPrice to all items
+        await flashSaleItem.update(
+          { flashPrice: existing.flashPrice },
+          { where: { flashSaleId: id } }
+        );
       }
 
       // Recalculate/Enforce status based on dates if start date is in the future or event has ended
@@ -452,7 +499,7 @@ module.exports = {
           productId: itemType === "PRODUCT" ? productId : null,
           packageId: itemType === "PACKAGE" ? packageId : null,
           serviceId: itemType === "SERVICE" ? serviceId : null,
-          flashPrice: flashPrice || 0,
+          flashPrice: fs.priceSetBy === "SUPER_ADMIN" ? (fs.flashPrice || 0) : (roleCode === "SUPER_ADMIN" ? (flashPrice || 0) : (flashPrice || 0)),
           quota: quota || 0,
           sold: 0,
           maxBuyPerCustomer: maxBuyPerCustomer || 0
@@ -562,6 +609,52 @@ module.exports = {
         status: true,
         message: `${foundIds.length} item berhasil dihapus dari flash sale`,
         data: { deletedCount: foundIds.length, deletedIds: foundIds },
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Update fields (seperti flashPrice, quota, maxBuyPerCustomer) untuk flash sale item (Super Admin).
+   */
+  async updateItem(itemId, data) {
+    try {
+      const item = await flashSaleItem.findByPk(itemId);
+      if (!item) return { status: false, message: "Flash sale item not found" };
+
+      const { flashPrice, quota, maxBuyPerCustomer } = data;
+
+      if (flashPrice !== undefined) {
+        const parsedPrice = parseFloat(flashPrice);
+        if (isNaN(parsedPrice) || parsedPrice < 0) {
+          return { status: false, message: "flashPrice must be a valid positive number" };
+        }
+        item.flashPrice = parsedPrice;
+      }
+
+      if (quota !== undefined) {
+        const parsedQuota = parseInt(quota, 10);
+        if (isNaN(parsedQuota) || parsedQuota < 0) {
+          return { status: false, message: "quota must be a valid positive integer" };
+        }
+        item.quota = parsedQuota;
+      }
+
+      if (maxBuyPerCustomer !== undefined) {
+        const parsedMaxBuy = parseInt(maxBuyPerCustomer, 10);
+        if (isNaN(parsedMaxBuy) || parsedMaxBuy < 0) {
+          return { status: false, message: "maxBuyPerCustomer must be a valid positive integer" };
+        }
+        item.maxBuyPerCustomer = parsedMaxBuy;
+      }
+
+      await item.save();
+
+      return {
+        status: true,
+        message: "Flash sale item updated successfully",
+        data: item,
       };
     } catch (error) {
       return { status: false, message: error.message };
@@ -700,6 +793,9 @@ module.exports = {
           type: "FLASH_SALE_MANUAL",
           referenceId: fs.id,
           referenceType: "flashSale",
+          meta: {
+            status: fs.status,
+          },
         })
       );
 
@@ -787,6 +883,9 @@ module.exports = {
           type: "FLASH_SALE_CUSTOMER",
           referenceId: fs.id,
           referenceType: "flashSale",
+          meta: {
+            status: fs.status,
+          },
         })
       );
 
@@ -803,6 +902,83 @@ module.exports = {
       };
     } catch (error) {
       console.error("[FlashSaleService] sendFlashSaleCustomerNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
+
+  async createScheduledNotification(flashSaleId, { target = "ALL", title, body, scheduledAt, repeatDaily }) {
+    try {
+      const fs = await flashSale.findByPk(flashSaleId);
+      if (!fs) return { status: false, message: "Flash sale not found" };
+
+      if (!scheduledAt) {
+        return { status: false, message: "Waktu jadwal pengiriman harus diisi" };
+      }
+
+      const parsedDate = new Date(scheduledAt);
+      if (isNaN(parsedDate.getTime())) {
+        return { status: false, message: "Format tanggal tidak valid" };
+      }
+      if (parsedDate <= new Date()) {
+        return { status: false, message: "Waktu jadwal pengiriman harus di masa depan" };
+      }
+
+      const { scheduledNotification } = require("../models");
+      const notif = await scheduledNotification.create({
+        flashSaleId,
+        title,
+        body,
+        target,
+        status: repeatDaily ? "ACTIVE" : "PENDING",
+        scheduledAt: parsedDate,
+        repeatDaily: !!repeatDaily,
+      });
+
+      return {
+        status: true,
+        message: "Berhasil menjadwalkan notifikasi",
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] createScheduledNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
+
+  async getScheduledNotifications(flashSaleId) {
+    try {
+      const { scheduledNotification } = require("../models");
+      const list = await scheduledNotification.findAll({
+        where: { flashSaleId },
+        order: [["createdAt", "DESC"]],
+      });
+
+      return {
+        status: true,
+        message: "Berhasil mengambil daftar jadwal notifikasi",
+        data: list,
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] getScheduledNotifications Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
+
+  async deleteScheduledNotification(id) {
+    try {
+      const { scheduledNotification } = require("../models");
+      const notif = await scheduledNotification.findByPk(id);
+      if (!notif) return { status: false, message: "Jadwal notifikasi tidak ditemukan" };
+
+      await notif.destroy();
+
+      return {
+        status: true,
+        message: "Berhasil membatalkan dan menghapus jadwal notifikasi",
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] deleteScheduledNotification Error:", error.message);
       return { status: false, message: error.message };
     }
   },

@@ -80,6 +80,64 @@ class NotificationController {
       return res.status(500).json({ status: false, message: error.message });
     }
   }
+
+  async sendGeneralBroadcast(req, res) {
+    try {
+      const { title, body, clickRoute, scheduledAt, repeatDaily, target } = req.body;
+
+      let result;
+      if (scheduledAt) {
+        result = await NotificationService.createScheduledGeneralNotification({
+          title,
+          body,
+          clickRoute,
+          scheduledAt,
+          repeatDaily: !!repeatDaily,
+          target: target || "ALL"
+        });
+      } else {
+        result = await NotificationService.sendGeneralBroadcastImmediate({
+          title,
+          body,
+          clickRoute,
+          target: target || "ALL"
+        });
+      }
+
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  }
+
+  async getScheduledGeneralNotifications(req, res) {
+    try {
+      const result = await NotificationService.getScheduledGeneralNotifications();
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  }
+
+  async deleteScheduledGeneralNotification(req, res) {
+    try {
+      const { notificationId } = req.params;
+      const result = await NotificationService.deleteScheduledGeneralNotification(notificationId);
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  }
+
+  async toggleScheduledNotification(req, res) {
+    try {
+      const { notificationId } = req.params;
+      const result = await NotificationService.toggleScheduledNotification(notificationId);
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  }
 }
 
 module.exports = new NotificationController();

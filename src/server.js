@@ -48,6 +48,7 @@ const initGoogleRatingCron = require("./cron/googleRatingCron");
 const initFlashSaleCron = require("./cron/flashSaleCron");
 const initSettlementCron = require("./cron/settlementCron");
 const initConsultationAutoCloseCron = require("./cron/consultationAutoCloseCron");
+const { initScheduledNotificationCron } = require("./cron/scheduledNotificationCron");
 
 // Social media routes
 const postRoute = require("./routes/social/post.route");
@@ -136,6 +137,7 @@ initGoogleRatingCron();
 initFlashSaleCron();
 initSettlementCron();
 initConsultationAutoCloseCron();
+initScheduledNotificationCron();
 
 // const io = new Server(server, { cors: { origin: "*" } });
 

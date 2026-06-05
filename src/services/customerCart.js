@@ -138,45 +138,62 @@ module.exports = {
         let quota = 0;
         let sold = 0;
 
-        if (cart.flashSaleItemId && cart.flashSaleItem) {
+        if (cart.flashSaleItemId) {
           const fsItem = cart.flashSaleItem;
-          const fs = fsItem.flashSale;
+          const fs = fsItem ? fsItem.flashSale : null;
           const now = new Date();
-          maxBuyPerCustomer = fsItem.maxBuyPerCustomer || 0;
-          quota = fsItem.quota || 0;
-          sold = fsItem.sold || 0;
+          let shouldClear = false;
 
-          if (fs && fs.status === "ACTIVE" && now >= fs.startDate && now <= fs.endDate && (fsItem.quota - fsItem.sold) > 0) {
-            isPromoActive = true;
+          if (!fsItem || !fs) {
+            shouldClear = true;
           } else {
-            if (!fs || fs.status !== "ACTIVE") promoError = "Promo is no longer active";
-            else if (now < fs.startDate) promoError = "Promo has not started";
-            else if (now > fs.endDate) promoError = "Promo has ended";
-            else if ((fsItem.quota - fsItem.sold) <= 0) promoError = "Promo quota is full";
+            maxBuyPerCustomer = fsItem.maxBuyPerCustomer || 0;
+            quota = fsItem.quota || 0;
+            sold = fsItem.sold || 0;
+
+            if (fs.status === "ACTIVE" && now >= fs.startDate && now <= fs.endDate && (fsItem.quota - fsItem.sold) > 0) {
+              isPromoActive = true;
+            } else {
+              if (fs.status !== "ACTIVE" || now > fs.endDate || (fsItem.quota - fsItem.sold) <= 0) {
+                shouldClear = true;
+              } else if (now < fs.startDate) {
+                promoError = "Promo has not started";
+              }
+            }
           }
 
-          if (maxBuyPerCustomer > 0) {
-            const { transactionItem: trxItemModel, transaction: trxModel, order: orderModel } = require("../models");
-            const itemsBought = await trxItemModel.findAll({
-              where: {
-                flashSaleItemId: cart.flashSaleItemId,
-              },
-              include: [{
-                model: trxModel,
-                as: "transaction",
-                required: true,
+          if (shouldClear) {
+            try {
+              await customerCart.update({ flashSaleItemId: null }, { where: { id: cart.id } });
+            } catch (e) {
+              console.error("Failed to clear flashSaleItemId in database for cart ID " + cart.id, e);
+            }
+            cart.flashSaleItemId = null;
+            cart.flashSaleItem = null;
+          } else if (isPromoActive) {
+            if (maxBuyPerCustomer > 0) {
+              const { transactionItem: trxItemModel, transaction: trxModel, order: orderModel } = require("../models");
+              const itemsBought = await trxItemModel.findAll({
+                where: {
+                  flashSaleItemId: cart.flashSaleItemId,
+                },
                 include: [{
-                  model: orderModel,
-                  as: "order", 
-                  where: { 
-                    customerId,
-                    paymentStatus: "PAID" 
-                  },
+                  model: trxModel,
+                  as: "transaction",
                   required: true,
+                  include: [{
+                    model: orderModel,
+                    as: "order", 
+                    where: { 
+                      customerId,
+                      paymentStatus: "PAID" 
+                    },
+                    required: true,
+                  }]
                 }]
-              }]
-            });
-            alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+              });
+              alreadyBought = itemsBought.reduce((sum, i) => sum + (i.quantity || 0), 0);
+            }
           }
         }
 

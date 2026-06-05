@@ -10,6 +10,12 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
       });
+      flashSale.hasMany(models.scheduledNotification, {
+        foreignKey: "flashSaleId",
+        as: "scheduledNotifications",
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
     }
   }
 
@@ -36,6 +42,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("UPCOMING", "ACTIVE", "ENDED"),
         allowNull: false,
         defaultValue: "UPCOMING",
+      },
+      priceSetBy: {
+        type: DataTypes.ENUM("SUPER_ADMIN", "MITRA"),
+        allowNull: false,
+        defaultValue: "SUPER_ADMIN",
+      },
+      flashPrice: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true,
+        defaultValue: null,
       },
     },
     {
