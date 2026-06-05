@@ -6651,7 +6651,17 @@ module.exports = {
 
         // Determine Tipe
         let tipe = "Treatment";
-        if (trx.locationId === null || trx.items.some(i => i.itemType === "CONSULTATION_QUOTA" || i.itemType === "consultation")) {
+        if (trx.items && trx.items.some(i => 
+          i.itemType === "ADS_PREMIUM_BADGE" || 
+          i.itemType === "ADS_DESIGN" || 
+          i.itemType === "ADS_BANNER" || 
+          i.itemType === "AD_BALANCE_TOPUP" || 
+          i.itemType === "premium_badge" || 
+          (i.itemType && i.itemType.toUpperCase().includes("ADS")) || 
+          (i.itemType && i.itemType.toUpperCase().startsWith("AD_"))
+        )) {
+          tipe = "Iklan";
+        } else if (trx.locationId === null || trx.items.some(i => i.itemType === "CONSULTATION_QUOTA" || i.itemType === "consultation")) {
           tipe = "Konsultasi";
         } else if (trx.items.some(i => i.itemType === "product" || i.itemType === "PRODUCT")) {
           tipe = "Produk";
@@ -6661,7 +6671,7 @@ module.exports = {
         let pendapatanMySkin = 0;
         let bagiHasilMitra = 0;
 
-        if (trx.locationId === null) {
+        if (trx.locationId === null || tipe === "Iklan") {
           pendapatanMySkin = subtotal;
           bagiHasilMitra = 0;
         } else {
@@ -6679,7 +6689,16 @@ module.exports = {
           bagiHasilMitra = subtotal - pendapatanMySkin;
         }
 
-        const feeApp = Math.round(subtotal * 0.10);
+        const feeApp = (
+          subtotal > 0 &&
+          trx.order &&
+          trx.order.orderNumber &&
+          trx.order.orderNumber.startsWith("ORD-") &&
+          !trx.order.orderNumber.startsWith("ORD-PREM-") &&
+          !trx.order.orderNumber.startsWith("ORD-ADS-") &&
+          !trx.order.orderNumber.startsWith("ORD-TOPUP-") &&
+          !trx.order.orderNumber.startsWith("ORD-QUOTA-")
+        ) ? 4500 : 0;
 
         totalTransaksiSum += subtotal;
         if (tipe === "Konsultasi") {
@@ -6741,9 +6760,12 @@ module.exports = {
 
   async exportPlatformIncomeReport(filters) {
     try {
+      const { format, ...restFilters } = filters;
+      const exportFormat = (format || "pdf").toLowerCase();
+
       // Get all matching transactions using the same report logic (unpaginated)
       const reportResult = await this.getPlatformIncomeReport({
-        ...filters,
+        ...restFilters,
         page: 1,
         pageSize: 1000000 // effectively all
       });
@@ -6754,6 +6776,11 @@ module.exports = {
 
       const { summary, list } = reportResult.data;
 
+      if (exportFormat === "pdf") {
+        return await this._generatePlatformIncomePDF(summary, list);
+      }
+
+      // Fallback/Default: Excel
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet("Income Report");
 
@@ -6817,6 +6844,108 @@ module.exports = {
     }
   },
 
+  async _generatePlatformIncomePDF(summary, list) {
+    try {
+      return new Promise((resolve, reject) => {
+        const doc = new PDFDocument({ margin: 20, size: "A4", layout: "landscape" });
+        let buffers = [];
+        doc.on("data", buffers.push.bind(buffers));
+        doc.on("end", () => {
+          let pdfData = Buffer.concat(buffers);
+          resolve({
+            status: true,
+            data: pdfData,
+            filename: `myskin_income_report_${Date.now()}.pdf`,
+            contentType: "application/pdf",
+          });
+        });
+
+        doc.fontSize(16).text("MySkin Platform - Laporan Pendapatan (Income Report)", { align: "center" });
+        doc.moveDown();
+
+        const tableTop = 70;
+        const colX = [30, 50, 180, 265, 330, 460, 540, 620, 700, 770];
+        const headers = [
+          "No",
+          "Transaction ID",
+          "Tanggal",
+          "Tipe",
+          "Outlet",
+          "Total Trans.",
+          "Hasil Mitra",
+          "Hasil MySkin",
+          "Fee App",
+          "Status"
+        ];
+
+        doc.fontSize(9).font("Helvetica-Bold");
+        headers.forEach((h, i) => doc.text(h, colX[i], tableTop));
+
+        doc
+          .moveTo(30, tableTop + 15)
+          .lineTo(810, tableTop + 15)
+          .stroke();
+
+        let currentY = tableTop + 25;
+        doc.font("Helvetica");
+
+        list.forEach((item, index) => {
+          if (currentY > 500) {
+            doc.addPage();
+            currentY = 40;
+            
+            doc.fontSize(9).font("Helvetica-Bold");
+            headers.forEach((h, i) => doc.text(h, colX[i], currentY));
+            doc
+              .moveTo(30, currentY + 15)
+              .lineTo(810, currentY + 15)
+              .stroke();
+            currentY += 25;
+            doc.font("Helvetica");
+          }
+
+          doc.fontSize(8);
+          doc.text(index + 1, colX[0], currentY);
+          doc.text(item.transactionNumber, colX[1], currentY, { width: 125 });
+          
+          const dateStr = item.date ? new Date(item.date).toISOString().replace("T", " ").substring(0, 10) : "N/A";
+          doc.text(dateStr, colX[2], currentY);
+          doc.text(item.tipe, colX[3], currentY);
+          doc.text(item.outletName || "N/A", colX[4], currentY, { width: 125 });
+          doc.text(item.totalTransaksi.toLocaleString("id-ID"), colX[5], currentY);
+          doc.text(item.bagiHasilMitra.toLocaleString("id-ID"), colX[6], currentY);
+          doc.text(item.pendapatanMySkin.toLocaleString("id-ID"), colX[7], currentY);
+          doc.text(item.feeApp.toLocaleString("id-ID"), colX[8], currentY);
+          doc.text(item.status || "N/A", colX[9], currentY);
+
+          currentY += 20;
+        });
+
+        if (currentY > 500) {
+          doc.addPage();
+          currentY = 40;
+        }
+
+        doc
+          .moveTo(30, currentY)
+          .lineTo(810, currentY)
+          .stroke();
+          
+        currentY += 10;
+        doc.fontSize(9).font("Helvetica-Bold");
+        doc.text("TOTAL", colX[1], currentY);
+        doc.text(summary.totalTransaksi.toLocaleString("id-ID"), colX[5], currentY);
+        doc.text(summary.totalBagiHasilMitra.toLocaleString("id-ID"), colX[6], currentY);
+        doc.text(summary.totalPendapatanMySkin.toLocaleString("id-ID"), colX[7], currentY);
+        doc.text(summary.totalFeeApp.toLocaleString("id-ID"), colX[8], currentY);
+
+        doc.end();
+      });
+    } catch (error) {
+      throw error;
+    }
+  },
+
   async getPlatformIncomeReportDetail(transactionId) {
     try {
       const { masterCompany } = require("../models");
@@ -6870,7 +6999,17 @@ module.exports = {
 
       // Determine Tipe
       let tipe = "Treatment";
-      if (trx.locationId === null || trx.items.some(i => i.itemType === "CONSULTATION_QUOTA" || i.itemType === "consultation")) {
+      if (trx.items && trx.items.some(i => 
+        i.itemType === "ADS_PREMIUM_BADGE" || 
+        i.itemType === "ADS_DESIGN" || 
+        i.itemType === "ADS_BANNER" || 
+        i.itemType === "AD_BALANCE_TOPUP" || 
+        i.itemType === "premium_badge" || 
+        (i.itemType && i.itemType.toUpperCase().includes("ADS")) || 
+        (i.itemType && i.itemType.toUpperCase().startsWith("AD_"))
+      )) {
+        tipe = "Iklan";
+      } else if (trx.locationId === null || trx.items.some(i => i.itemType === "CONSULTATION_QUOTA" || i.itemType === "consultation")) {
         tipe = "Konsultasi";
       } else if (trx.items.some(i => i.itemType === "product" || i.itemType === "PRODUCT")) {
         tipe = "Produk";
@@ -6881,7 +7020,7 @@ module.exports = {
       let bagiHasilMitra = 0;
       let platformFeePercent = 0;
 
-      if (trx.locationId === null) {
+      if (trx.locationId === null || tipe === "Iklan") {
         pendapatanMySkin = subtotal;
         bagiHasilMitra = 0;
         platformFeePercent = 100;
@@ -6901,7 +7040,16 @@ module.exports = {
         bagiHasilMitra = subtotal - pendapatanMySkin;
       }
 
-      const feeApp = Math.round(subtotal * 0.10);
+      const feeApp = (
+        subtotal > 0 &&
+        trx.order &&
+        trx.order.orderNumber &&
+        trx.order.orderNumber.startsWith("ORD-") &&
+        !trx.order.orderNumber.startsWith("ORD-PREM-") &&
+        !trx.order.orderNumber.startsWith("ORD-ADS-") &&
+        !trx.order.orderNumber.startsWith("ORD-TOPUP-") &&
+        !trx.order.orderNumber.startsWith("ORD-QUOTA-")
+      ) ? 4500 : 0;
 
       const data = {
         id: trx.id,

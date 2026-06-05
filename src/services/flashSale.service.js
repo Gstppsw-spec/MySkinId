@@ -533,8 +533,15 @@ module.exports = {
       const fs = await flashSale.findByPk(flashSaleId);
       if (!fs) return { status: false, message: "Flash sale not found" };
 
+      const locationIds = typeof locationId === "string" && locationId.includes(",")
+        ? locationId.split(",").map(id => id.trim())
+        : (Array.isArray(locationId) ? locationId : [locationId]);
+
       const items = await flashSaleItem.findAll({
-        where: { flashSaleId, locationId },
+        where: { 
+          flashSaleId, 
+          locationId: { [Op.in]: locationIds } 
+        },
         include: itemIncludes,
       });
 

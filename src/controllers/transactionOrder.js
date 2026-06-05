@@ -1265,12 +1265,13 @@ module.exports = {
 
   async exportPlatformIncomeReport(req, res) {
     try {
-      const { search, startDate, endDate } = req.query;
+      const { search, startDate, endDate, format } = req.query;
 
       const result = await transactionOrder.exportPlatformIncomeReport({
         search,
         startDate,
         endDate,
+        format,
       });
 
       if (!result.status) {
