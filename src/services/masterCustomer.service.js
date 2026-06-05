@@ -1180,7 +1180,7 @@ class masterCustomerService {
       });
       const freelancerIds = allFreelancers.map(f => f.id);
 
-      const totalReferredByAllFreelancers = freelancerIds.length > 0 
+      const totalReferredByAllFreelancers = freelancerIds.length > 0
         ? await masterCustomer.count({ where: { referredBy: { [Op.in]: freelancerIds } } })
         : 0;
 

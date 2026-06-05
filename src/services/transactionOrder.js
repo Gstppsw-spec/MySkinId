@@ -6566,4 +6566,377 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
+  async getPlatformIncomeReport({ search, startDate, endDate, page = 1, pageSize = 100 }) {
+    try {
+      const { masterCompany } = require("../models");
+      const whereClause = {
+        orderStatus: { [Op.in]: ["PAID", "SHIPPED", "DELIVERED", "COMPLETED"] },
+      };
+
+      if (startDate && endDate) {
+        whereClause.createdAt = {
+          [Op.between]: [new Date(startDate), new Date(endDate)],
+        };
+      } else if (startDate) {
+        whereClause.createdAt = { [Op.gte]: new Date(startDate) };
+      } else if (endDate) {
+        whereClause.createdAt = { [Op.lte]: new Date(endDate) };
+      }
+
+      if (search && search.trim() !== "") {
+        const searchLike = `%${search}%`;
+        const orConditions = [
+          { transactionNumber: { [Op.like]: searchLike } },
+          { "$order.customer.name$": { [Op.like]: searchLike } }
+        ];
+
+        orConditions.push({ "$location.name$": { [Op.like]: searchLike } });
+
+        if (search.toLowerCase().includes("platform") || search.toLowerCase().includes("myskin")) {
+          orConditions.push({ locationId: null });
+        }
+
+        orConditions.push({ "$items.itemName$": { [Op.like]: searchLike } });
+
+        const searchLower = search.toLowerCase();
+        if (searchLower.includes("produk") || searchLower.includes("product")) {
+          orConditions.push({ "$items.itemType$": { [Op.in]: ["product", "PRODUCT"] } });
+        }
+        if (searchLower.includes("treatment") || searchLower.includes("service") || searchLower.includes("package")) {
+          orConditions.push({ "$items.itemType$": { [Op.in]: ["service", "SERVICE", "package", "PACKAGE"] } });
+        }
+        if (searchLower.includes("konsultasi") || searchLower.includes("consultation")) {
+          orConditions.push({ "$items.itemType$": { [Op.in]: ["CONSULTATION_QUOTA", "consultation"] } });
+          orConditions.push({ locationId: null });
+        }
+
+        whereClause[Op.or] = orConditions;
+      }
+
+      // Fetch all matching records to compute sum aggregates
+      const allMatching = await transaction.findAll({
+        where: whereClause,
+        include: [
+          {
+            model: order,
+            as: "order",
+            include: [{ model: masterCustomer, as: "customer", attributes: ["name", "email"] }]
+          },
+          { model: transactionItem, as: "items" },
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["name", "id", "companyId"],
+            include: [
+              {
+                model: masterCompany,
+                as: "company",
+                attributes: ["createdAt", "platformFee"]
+              }
+            ]
+          }
+        ],
+        order: [["createdAt", "DESC"]]
+      });
+
+      let totalTransaksiSum = 0;
+      let totalKonsultasiSum = 0;
+      let totalBagiHasilMitraSum = 0;
+      let totalPendapatanMySkinSum = 0;
+      let totalFeeAppSum = 0;
+
+      const mappedList = allMatching.map(trx => {
+        const subtotal = parseFloat(trx.subTotal || trx.grandTotal || 0);
+
+        // Determine Tipe
+        let tipe = "Treatment";
+        if (trx.locationId === null || trx.items.some(i => i.itemType === "CONSULTATION_QUOTA" || i.itemType === "consultation")) {
+          tipe = "Konsultasi";
+        } else if (trx.items.some(i => i.itemType === "product" || i.itemType === "PRODUCT")) {
+          tipe = "Produk";
+        }
+
+        // Calculate Splits
+        let pendapatanMySkin = 0;
+        let bagiHasilMitra = 0;
+
+        if (trx.locationId === null) {
+          pendapatanMySkin = subtotal;
+          bagiHasilMitra = 0;
+        } else {
+          const companyCreatedAt = trx.location?.company?.createdAt;
+          const companyPlatformFee = trx.location?.company?.platformFee;
+          let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+
+          if (companyPlatformFee !== null && companyPlatformFee !== undefined) {
+            platformFeePercent = parseFloat(companyPlatformFee);
+          } else if (companyCreatedAt && new Date(companyCreatedAt) >= new Date("2026-05-01T00:00:00Z")) {
+            platformFeePercent = 4;
+          }
+
+          pendapatanMySkin = Math.round((subtotal * platformFeePercent) / 100);
+          bagiHasilMitra = subtotal - pendapatanMySkin;
+        }
+
+        const feeApp = Math.round(subtotal * 0.10);
+
+        totalTransaksiSum += subtotal;
+        if (tipe === "Konsultasi") {
+          totalKonsultasiSum += subtotal;
+        }
+        totalBagiHasilMitraSum += bagiHasilMitra;
+        totalPendapatanMySkinSum += pendapatanMySkin;
+        totalFeeAppSum += feeApp;
+
+        return {
+          id: trx.id,
+          transactionNumber: trx.transactionNumber,
+          date: trx.createdAt,
+          tipe,
+          outletName: trx.location ? trx.location.name : "MySkin Platform",
+          totalTransaksi: subtotal,
+          bagiHasilMitra,
+          pendapatanMySkin,
+          feeApp,
+          status: trx.orderStatus,
+          customer: {
+            name: trx.order?.customer?.name || "N/A",
+            email: trx.order?.customer?.email || "N/A"
+          },
+          items: trx.items.map(i => ({
+            name: i.itemName,
+            itemType: i.itemType,
+            quantity: i.quantity,
+            unitPrice: parseFloat(i.unitPrice),
+            totalPrice: parseFloat(i.totalPrice)
+          }))
+        };
+      });
+
+      const totalCount = mappedList.length;
+      const limit = parseInt(pageSize);
+      const offset = (parseInt(page) - 1) * limit;
+      const paginatedList = mappedList.slice(offset, offset + limit);
+
+      return {
+        status: true,
+        message: "Income report fetched successfully",
+        data: {
+          summary: {
+            totalTransaksi: totalTransaksiSum,
+            totalKonsultasi: totalKonsultasiSum,
+            totalBagiHasilMitra: totalBagiHasilMitraSum,
+            totalPendapatanMySkin: totalPendapatanMySkinSum,
+            totalFeeApp: totalFeeAppSum,
+            totalCount
+          },
+          list: paginatedList
+        }
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async exportPlatformIncomeReport(filters) {
+    try {
+      // Get all matching transactions using the same report logic (unpaginated)
+      const reportResult = await this.getPlatformIncomeReport({
+        ...filters,
+        page: 1,
+        pageSize: 1000000 // effectively all
+      });
+
+      if (!reportResult.status) {
+        throw new Error(reportResult.message);
+      }
+
+      const { summary, list } = reportResult.data;
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Income Report");
+
+      worksheet.columns = [
+        { header: "No", key: "no", width: 5 },
+        { header: "Transaction ID", key: "transactionNumber", width: 25 },
+        { header: "Tanggal", key: "date", width: 20 },
+        { header: "Tipe", key: "tipe", width: 15 },
+        { header: "Outlet", key: "outletName", width: 30 },
+        { header: "Total Transaksi", key: "totalTransaksi", width: 18 },
+        { header: "Bagi Hasil Mitra", key: "bagiHasilMitra", width: 18 },
+        { header: "Pendapatan MySkin", key: "pendapatanMySkin", width: 18 },
+        { header: "Fee App", key: "feeApp", width: 15 },
+        { header: "Status", key: "status", width: 12 },
+      ];
+
+      list.forEach((item, index) => {
+        worksheet.addRow({
+          no: index + 1,
+          transactionNumber: item.transactionNumber,
+          date: item.date ? new Date(item.date).toISOString().replace("T", " ").substring(0, 19) : "N/A",
+          tipe: item.tipe,
+          outletName: item.outletName,
+          totalTransaksi: item.totalTransaksi,
+          bagiHasilMitra: item.bagiHasilMitra,
+          pendapatanMySkin: item.pendapatanMySkin,
+          feeApp: item.feeApp,
+          status: item.status,
+        });
+      });
+
+      // Add a summary row at the end
+      worksheet.addRow([]);
+      worksheet.addRow({
+        no: "",
+        transactionNumber: "TOTAL",
+        date: "",
+        tipe: "",
+        outletName: "",
+        totalTransaksi: summary.totalTransaksi,
+        bagiHasilMitra: summary.totalBagiHasilMitra,
+        pendapatanMySkin: summary.totalPendapatanMySkin,
+        feeApp: summary.totalFeeApp,
+        status: "",
+      });
+
+      // Format headers and total row
+      worksheet.getRow(1).font = { bold: true };
+      const totalRowIndex = list.length + 3;
+      worksheet.getRow(totalRowIndex).font = { bold: true };
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      return {
+        status: true,
+        data: buffer,
+        filename: `myskin_income_report_${Date.now()}.xlsx`,
+        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  async getPlatformIncomeReportDetail(transactionId) {
+    try {
+      const { masterCompany } = require("../models");
+      const trx = await transaction.findOne({
+        where: { id: transactionId },
+        include: [
+          {
+            model: order,
+            as: "order",
+            include: [
+              {
+                model: masterCustomer,
+                as: "customer",
+                attributes: ["id", "name", "email", "phoneNumber", "profileImageUrl"],
+              },
+              {
+                model: orderPayment,
+                as: "payments",
+                attributes: ["paymentMethod", "paymentStatus", "amount", "mdrFee"],
+              },
+            ],
+          },
+          {
+            model: transactionShipping,
+            as: "shipping",
+          },
+          {
+            model: transactionItem,
+            as: "items",
+          },
+          {
+            model: masterLocation,
+            as: "location",
+            attributes: ["id", "name", "phone", "companyId"],
+            include: [
+              {
+                model: masterCompany,
+                as: "company",
+                attributes: ["createdAt", "platformFee"]
+              }
+            ]
+          },
+        ],
+      });
+
+      if (!trx) {
+        throw new Error("Transaction not found");
+      }
+
+      const subtotal = parseFloat(trx.subTotal || trx.grandTotal || 0);
+
+      // Determine Tipe
+      let tipe = "Treatment";
+      if (trx.locationId === null || trx.items.some(i => i.itemType === "CONSULTATION_QUOTA" || i.itemType === "consultation")) {
+        tipe = "Konsultasi";
+      } else if (trx.items.some(i => i.itemType === "product" || i.itemType === "PRODUCT")) {
+        tipe = "Produk";
+      }
+
+      // Calculate Splits
+      let pendapatanMySkin = 0;
+      let bagiHasilMitra = 0;
+      let platformFeePercent = 0;
+
+      if (trx.locationId === null) {
+        pendapatanMySkin = subtotal;
+        bagiHasilMitra = 0;
+        platformFeePercent = 100;
+      } else {
+        const companyCreatedAt = trx.location?.company?.createdAt;
+        const companyPlatformFee = trx.location?.company?.platformFee;
+        let feePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+
+        if (companyPlatformFee !== null && companyPlatformFee !== undefined) {
+          feePercent = parseFloat(companyPlatformFee);
+        } else if (companyCreatedAt && new Date(companyCreatedAt) >= new Date("2026-05-01T00:00:00Z")) {
+          feePercent = 4;
+        }
+
+        platformFeePercent = feePercent;
+        pendapatanMySkin = Math.round((subtotal * feePercent) / 100);
+        bagiHasilMitra = subtotal - pendapatanMySkin;
+      }
+
+      const feeApp = Math.round(subtotal * 0.10);
+
+      const data = {
+        id: trx.id,
+        transactionNumber: trx.transactionNumber,
+        date: trx.createdAt,
+        tipe,
+        outletName: trx.location ? trx.location.name : "MySkin Platform",
+        customer: {
+          name: trx.order?.customer?.name || "N/A",
+          email: trx.order?.customer?.email || "N/A"
+        },
+        financials: {
+          totalTransaksi: subtotal,
+          bagiHasilMitra,
+          bagiHasilMitraPercent: 100 - platformFeePercent,
+          bagiHasilMySkin: pendapatanMySkin,
+          bagiHasilMySkinPercent: platformFeePercent,
+          feeApp
+        },
+        items: trx.items.map(i => ({
+          name: i.itemName,
+          itemType: i.itemType,
+          quantity: i.quantity,
+          unitPrice: parseFloat(i.unitPrice),
+          totalPrice: parseFloat(i.totalPrice)
+        }))
+      };
+
+      return {
+        status: true,
+        message: "Transaction income detail fetched successfully",
+        data
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
 };
