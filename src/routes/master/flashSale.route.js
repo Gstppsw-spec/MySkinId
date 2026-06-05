@@ -53,6 +53,13 @@ router.delete(
   flashSaleController.removeItem
 );
 
+router.put(
+  "/items/:itemId",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  flashSaleController.updateItem
+);
+
 // ── Super Admin — Bulk delete items ───────────
 router.post(
   "/items/bulk-delete",

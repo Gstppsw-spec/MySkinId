@@ -452,7 +452,7 @@ module.exports = {
           productId: itemType === "PRODUCT" ? productId : null,
           packageId: itemType === "PACKAGE" ? packageId : null,
           serviceId: itemType === "SERVICE" ? serviceId : null,
-          flashPrice: flashPrice || 0,
+          flashPrice: roleCode === "SUPER_ADMIN" ? (flashPrice || 0) : 0,
           quota: quota || 0,
           sold: 0,
           maxBuyPerCustomer: maxBuyPerCustomer || 0
@@ -562,6 +562,52 @@ module.exports = {
         status: true,
         message: `${foundIds.length} item berhasil dihapus dari flash sale`,
         data: { deletedCount: foundIds.length, deletedIds: foundIds },
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Update fields (seperti flashPrice, quota, maxBuyPerCustomer) untuk flash sale item (Super Admin).
+   */
+  async updateItem(itemId, data) {
+    try {
+      const item = await flashSaleItem.findByPk(itemId);
+      if (!item) return { status: false, message: "Flash sale item not found" };
+
+      const { flashPrice, quota, maxBuyPerCustomer } = data;
+
+      if (flashPrice !== undefined) {
+        const parsedPrice = parseFloat(flashPrice);
+        if (isNaN(parsedPrice) || parsedPrice < 0) {
+          return { status: false, message: "flashPrice must be a valid positive number" };
+        }
+        item.flashPrice = parsedPrice;
+      }
+
+      if (quota !== undefined) {
+        const parsedQuota = parseInt(quota, 10);
+        if (isNaN(parsedQuota) || parsedQuota < 0) {
+          return { status: false, message: "quota must be a valid positive integer" };
+        }
+        item.quota = parsedQuota;
+      }
+
+      if (maxBuyPerCustomer !== undefined) {
+        const parsedMaxBuy = parseInt(maxBuyPerCustomer, 10);
+        if (isNaN(parsedMaxBuy) || parsedMaxBuy < 0) {
+          return { status: false, message: "maxBuyPerCustomer must be a valid positive integer" };
+        }
+        item.maxBuyPerCustomer = parsedMaxBuy;
+      }
+
+      await item.save();
+
+      return {
+        status: true,
+        message: "Flash sale item updated successfully",
+        data: item,
       };
     } catch (error) {
       return { status: false, message: error.message };

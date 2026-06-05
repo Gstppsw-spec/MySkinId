@@ -104,6 +104,17 @@ module.exports = {
     }
   },
 
+  async updateItem(req, res) {
+    try {
+      const { itemId } = req.params;
+      const result = await flashSaleService.updateItem(itemId, req.body);
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   async removeItems(req, res) {
     try {
       const { itemIds } = req.body;
