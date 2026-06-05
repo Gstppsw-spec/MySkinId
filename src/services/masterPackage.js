@@ -932,6 +932,10 @@ module.exports = {
 
   async getByLocationId(customerId, locationId, isCustomer, name) {
     try {
+      const locationIds = typeof locationId === "string" && locationId.includes(",")
+        ? locationId.split(",").map(id => id.trim())
+        : (Array.isArray(locationId) ? locationId : [locationId]);
+
       const where = {
         isActive: true,
         isVerified: true
@@ -945,7 +949,7 @@ module.exports = {
         {
           model: masterLocation,
           as: "locations",
-          where: { id: locationId },
+          where: { id: locationIds },
           through: {
             attributes: ["isActive"],
             ...(isCustomer == 1 || isCustomer == "1" ? { where: { isActive: true } } : {}),

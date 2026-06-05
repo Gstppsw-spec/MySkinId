@@ -347,165 +347,174 @@ module.exports = {
   async registerItems(flashSaleId, data, user = {}) {
     const t = await sequelize.transaction();
     try {
-      const { locationId, items } = data;
+      const { locationId, locationIds, items } = data;
       const { roleCode, id: userId } = user;
 
       const fs = await flashSale.findByPk(flashSaleId);
       if (!fs) throw new Error("Flash sale not found");
 
-      if (!locationId) throw new Error("locationId is required");
-      if (!items || !Array.isArray(items) || items.length === 0) throw new Error("items array is required");
-
-      // For COMPANY_ADMIN, we need to know the target company
-      let targetCompanyId = null;
-      if (roleCode === "COMPANY_ADMIN") {
-        const loc = await masterLocation.findByPk(locationId, { attributes: ["companyId"], transaction: t });
-        if (!loc) throw new Error("Target outlet not found");
-        targetCompanyId = loc.companyId;
+      // Normalize locations to an array of targetLocationIds
+      let targetLocationIds = [];
+      if (locationIds && Array.isArray(locationIds) && locationIds.length > 0) {
+        targetLocationIds = locationIds;
+      } else if (locationId) {
+        targetLocationIds = [locationId];
+      } else {
+        throw new Error("locationId or locationIds is required");
       }
 
+      if (!items || !Array.isArray(items) || items.length === 0) throw new Error("items array is required");
+
       const results = [];
-      for (const item of items) {
-        const { itemType, productId, packageId, serviceId, flashPrice, quota, maxBuyPerCustomer } = item;
+      for (const locId of targetLocationIds) {
+        // For COMPANY_ADMIN, we need to know the target company
+        let targetCompanyId = null;
+        if (roleCode === "COMPANY_ADMIN") {
+          const loc = await masterLocation.findByPk(locId, { attributes: ["companyId"], transaction: t });
+          if (!loc) throw new Error(`Target outlet ${locId} not found`);
+          targetCompanyId = loc.companyId;
+        }
 
-        if (!itemType || !["PRODUCT", "PACKAGE", "SERVICE"].includes(itemType)) throw new Error("itemType must be PRODUCT, PACKAGE, or SERVICE");
-        
-        // Ownership Validation
-        if (roleCode !== "SUPER_ADMIN") {
-          if (itemType === "PRODUCT") {
-            if (!productId) throw new Error("productId is required for PRODUCT type");
-            
-            const isLinked = await relationshipProductLocation.findOne({
-              where: { productId, locationId, isActive: true },
-              transaction: t
-            });
-            
-            if (!isLinked) {
-              // Fallback for COMPANY_ADMIN: Check if product belongs to any outlet of the same company
-              if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
-                const belongsToCompany = await relationshipProductLocation.findOne({
-                  where: { productId, isActive: true },
-                  include: [{
-                    model: masterLocation,
-                    as: "location",
-                    where: { companyId: targetCompanyId },
-                    attributes: ["id"]
-                  }],
-                  transaction: t
-                });
+        for (const item of items) {
+          const { itemType, productId, packageId, serviceId, flashPrice, quota, maxBuyPerCustomer } = item;
 
-                if (!belongsToCompany) {
-                  throw new Error(`Product ${productId} does not belong to your company's outlets`);
+          if (!itemType || !["PRODUCT", "PACKAGE", "SERVICE"].includes(itemType)) throw new Error("itemType must be PRODUCT, PACKAGE, or SERVICE");
+          
+          // Ownership Validation
+          if (roleCode !== "SUPER_ADMIN") {
+            if (itemType === "PRODUCT") {
+              if (!productId) throw new Error("productId is required for PRODUCT type");
+              
+              const isLinked = await relationshipProductLocation.findOne({
+                where: { productId, locationId: locId, isActive: true },
+                transaction: t
+              });
+              
+              if (!isLinked) {
+                // Fallback for COMPANY_ADMIN: Check if product belongs to any outlet of the same company
+                if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
+                  const belongsToCompany = await relationshipProductLocation.findOne({
+                    where: { productId, isActive: true },
+                    include: [{
+                      model: masterLocation,
+                      as: "location",
+                      where: { companyId: targetCompanyId },
+                      attributes: ["id"]
+                    }],
+                    transaction: t
+                  });
+
+                  if (!belongsToCompany) {
+                    throw new Error(`Product ${productId} does not belong to your company's outlets`);
+                  }
+                } else {
+                  throw new Error(`Product ${productId} does not belong to outlet ${locId} or is not active`);
                 }
-                
-                // Optional: Auto-link to target outlet if needed, but for now just allow registration
-              } else {
-                throw new Error(`Product ${productId} does not belong to outlet ${locationId} or is not active`);
               }
-            }
-          } else if (itemType === "PACKAGE") {
-            if (!packageId) throw new Error("packageId is required for PACKAGE type");
-            
-            const isLinked = await relationshipPackageLocation.findOne({
-              where: { packageId, locationId, isActive: true },
-              transaction: t
-            });
-            
-            if (!isLinked) {
-              if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
-                const belongsToCompany = await relationshipPackageLocation.findOne({
-                  where: { packageId, isActive: true },
-                  include: [{
-                    model: masterLocation,
-                    as: "location",
-                    where: { companyId: targetCompanyId },
-                    attributes: ["id"]
-                  }],
-                  transaction: t
-                });
+            } else if (itemType === "PACKAGE") {
+              if (!packageId) throw new Error("packageId is required for PACKAGE type");
+              
+              const isLinked = await relationshipPackageLocation.findOne({
+                where: { packageId, locationId: locId, isActive: true },
+                transaction: t
+              });
+              
+              if (!isLinked) {
+                if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
+                  const belongsToCompany = await relationshipPackageLocation.findOne({
+                    where: { packageId, isActive: true },
+                    include: [{
+                      model: masterLocation,
+                      as: "location",
+                      where: { companyId: targetCompanyId },
+                      attributes: ["id"]
+                    }],
+                    transaction: t
+                  });
 
-                if (!belongsToCompany) {
-                  throw new Error(`Package ${packageId} does not belong to your company's outlets`);
+                  if (!belongsToCompany) {
+                    throw new Error(`Package ${packageId} does not belong to your company's outlets`);
+                  }
+                } else {
+                  throw new Error(`Package ${packageId} does not belong to outlet ${locId} or is not active`);
                 }
-              } else {
-                throw new Error(`Package ${packageId} does not belong to outlet ${locationId} or is not active`);
               }
-            }
-          } else if (itemType === "SERVICE") {
-            if (!serviceId) throw new Error("serviceId is required for SERVICE type");
-            
-            const isLinked = await relationshipServiceLocation.findOne({
-              where: { serviceId, locationId, isActive: true },
-              transaction: t
-            });
-            
-            if (!isLinked) {
-              if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
-                const belongsToCompany = await relationshipServiceLocation.findOne({
-                  where: { serviceId, isActive: true },
-                  include: [{
-                    model: masterLocation,
-                    as: "location",
-                    where: { companyId: targetCompanyId },
-                    attributes: ["id"]
-                  }],
-                  transaction: t
-                });
+            } else if (itemType === "SERVICE") {
+              if (!serviceId) throw new Error("serviceId is required for SERVICE type");
+              
+              const isLinked = await relationshipServiceLocation.findOne({
+                where: { serviceId, locationId: locId, isActive: true },
+                transaction: t
+              });
+              
+              if (!isLinked) {
+                if (roleCode === "COMPANY_ADMIN" && targetCompanyId) {
+                  const belongsToCompany = await relationshipServiceLocation.findOne({
+                    where: { serviceId, isActive: true },
+                    include: [{
+                      model: masterLocation,
+                      as: "location",
+                      where: { companyId: targetCompanyId },
+                      attributes: ["id"]
+                    }],
+                    transaction: t
+                  });
 
-                if (!belongsToCompany) {
-                  throw new Error(`Service ${serviceId} does not belong to your company's outlets`);
+                  if (!belongsToCompany) {
+                    throw new Error(`Service ${serviceId} does not belong to your company's outlets`);
+                  }
+                } else {
+                  throw new Error(`Service ${serviceId} does not belong to outlet ${locId} or is not active`);
                 }
-              } else {
-                throw new Error(`Service ${serviceId} does not belong to outlet ${locationId} or is not active`);
               }
             }
           }
-        }
 
-        // Cek duplikasi di jam flash sale yang sama
-        const overlappingFs = await flashSale.findAll({
-          where: {
-            status: { [Op.in]: ["UPCOMING", "ACTIVE"] },
-            [Op.and]: [
-              { startDate: { [Op.lt]: fs.endDate } },
-              { endDate: { [Op.gt]: fs.startDate } }
-            ]
-          },
-          transaction: t
-        });
-        const fsIds = overlappingFs.map(f => f.id);
-        if (!fsIds.includes(flashSaleId)) fsIds.push(flashSaleId);
+          // Cek duplikasi di jam flash sale yang sama
+          const overlappingFs = await flashSale.findAll({
+            where: {
+              status: { [Op.in]: ["UPCOMING", "ACTIVE"] },
+              [Op.and]: [
+                { startDate: { [Op.lt]: fs.endDate } },
+                { endDate: { [Op.gt]: fs.startDate } }
+              ]
+            },
+            transaction: t
+          });
+          const fsIds = overlappingFs.map(f => f.id);
+          if (!fsIds.includes(flashSaleId)) fsIds.push(flashSaleId);
 
-        const isDuplicate = await flashSaleItem.findOne({
-          where: {
-            flashSaleId: { [Op.in]: fsIds },
-            locationId,
+          const isDuplicate = await flashSaleItem.findOne({
+            where: {
+              flashSaleId: { [Op.in]: fsIds },
+              locationId: locId,
+              itemType,
+              productId: itemType === "PRODUCT" ? productId : null,
+              packageId: itemType === "PACKAGE" ? packageId : null,
+              serviceId: itemType === "SERVICE" ? serviceId : null,
+            },
+            transaction: t
+          });
+
+          if (isDuplicate) {
+            throw new Error(`Produk/Paket sudah terdaftar di Flash Sale pada waktu yang sama.`);
+          }
+
+          const newItem = await flashSaleItem.create({
+            flashSaleId,
+            locationId: locId,
             itemType,
             productId: itemType === "PRODUCT" ? productId : null,
             packageId: itemType === "PACKAGE" ? packageId : null,
             serviceId: itemType === "SERVICE" ? serviceId : null,
-          },
-          transaction: t
-        });
+            flashPrice: fs.priceSetBy === "SUPER_ADMIN" ? (fs.flashPrice || 0) : (roleCode === "SUPER_ADMIN" ? (flashPrice || 0) : (flashPrice || 0)),
+            quota: quota || 0,
+            sold: 0,
+            maxBuyPerCustomer: maxBuyPerCustomer || 0
+          }, { transaction: t });
 
-        if (isDuplicate) {
-          throw new Error(`Produk/Paket sudah terdaftar di Flash Sale pada waktu yang sama.`);
+          results.push(newItem);
         }
-
-        const newItem = await flashSaleItem.create({
-          flashSaleId,
-          locationId,
-          itemType,
-          productId: itemType === "PRODUCT" ? productId : null,
-          packageId: itemType === "PACKAGE" ? packageId : null,
-          serviceId: itemType === "SERVICE" ? serviceId : null,
-          flashPrice: fs.priceSetBy === "SUPER_ADMIN" ? (fs.flashPrice || 0) : (roleCode === "SUPER_ADMIN" ? (flashPrice || 0) : (flashPrice || 0)),
-          quota: quota || 0,
-          sold: 0,
-          maxBuyPerCustomer: maxBuyPerCustomer || 0
-        }, { transaction: t });
-
-        results.push(newItem);
       }
 
       await t.commit();
