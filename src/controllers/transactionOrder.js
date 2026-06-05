@@ -1228,4 +1228,77 @@ module.exports = {
       return response.serverError(res, error);
     }
   },
+
+  async getPlatformIncomeReport(req, res) {
+    try {
+      const { search, startDate, endDate, page = 1, pageSize = 100 } = req.query;
+
+      const result = await transactionOrder.getPlatformIncomeReport({
+        search,
+        startDate,
+        endDate,
+        page,
+        pageSize,
+      });
+
+      if (!result.status) return response.error(res, result.message);
+
+      const { summary, list } = result.data;
+
+      return res.status(200).json({
+        success: true,
+        message: result.message,
+        data: {
+          summary,
+          list
+        },
+        pagination: formatPagination(
+          summary.totalCount,
+          parseInt(page),
+          parseInt(pageSize),
+        )
+      });
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async exportPlatformIncomeReport(req, res) {
+    try {
+      const { search, startDate, endDate } = req.query;
+
+      const result = await transactionOrder.exportPlatformIncomeReport({
+        search,
+        startDate,
+        endDate,
+      });
+
+      if (!result.status) {
+        return response.error(res, result.message);
+      }
+
+      res.setHeader("Content-Type", result.contentType);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${result.filename}`,
+      );
+
+      return res.send(result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
+  async getPlatformIncomeReportDetail(req, res) {
+    try {
+      const { transactionId } = req.params;
+      const result = await transactionOrder.getPlatformIncomeReportDetail(transactionId);
+
+      if (!result.status) return response.error(res, result.message);
+
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
 };

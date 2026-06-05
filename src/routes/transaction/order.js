@@ -126,6 +126,22 @@ router.get(
   transactionOrder.getFinancialReport,
 );
 
+router.get(
+  "/platform/income-report",
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
+  transactionOrder.getPlatformIncomeReport,
+);
+router.get(
+  "/platform/income-report/export",
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
+  transactionOrder.exportPlatformIncomeReport,
+);
+router.get(
+  "/platform/income-report/detail/:transactionId",
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
+  transactionOrder.getPlatformIncomeReportDetail,
+);
+
 // Platform Transfers
 router.get(
   "/transfers/:orderId",
