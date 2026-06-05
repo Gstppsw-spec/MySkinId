@@ -126,7 +126,7 @@ module.exports = {
   async create(data) {
     try {
       console.log(data);
-      const { title, startDate, endDate } = data;
+      const { title, startDate, endDate, priceSetBy, flashPrice } = data;
       if (!title || title.trim() === "") throw new Error("title is required");
       if (!startDate || !endDate) throw new Error("startDate and endDate are required");
 
@@ -139,11 +139,30 @@ module.exports = {
       if (now >= start && now < end) initialStatus = "ACTIVE";
       if (now >= end) initialStatus = "ENDED";
 
+      // Validate priceSetBy
+      const validPriceSetBy = ["SUPER_ADMIN", "MITRA"];
+      const finalPriceSetBy = validPriceSetBy.includes(priceSetBy) ? priceSetBy : "SUPER_ADMIN";
+
+      // Validate flashPrice (required when priceSetBy is SUPER_ADMIN)
+      let finalFlashPrice = null;
+      if (finalPriceSetBy === "SUPER_ADMIN") {
+        if (flashPrice === undefined || flashPrice === null) {
+          throw new Error("flashPrice is required when priceSetBy is SUPER_ADMIN");
+        }
+        const parsed = parseFloat(flashPrice);
+        if (isNaN(parsed) || parsed < 0) {
+          throw new Error("flashPrice must be a valid positive number");
+        }
+        finalFlashPrice = parsed;
+      }
+
       const fs = await flashSale.create({
         title,
         startDate: start,
         endDate: end,
         status: initialStatus,
+        priceSetBy: finalPriceSetBy,
+        flashPrice: finalFlashPrice,
       });
       return { status: true, message: "Flash sale created", data: fs };
     } catch (error) {
@@ -243,7 +262,7 @@ module.exports = {
       const existing = await flashSale.findByPk(id);
       if (!existing) return { status: false, message: "Flash sale not found" };
 
-      const { title, startDate, endDate, status } = data;
+      const { title, startDate, endDate, status, priceSetBy, flashPrice } = data;
 
       if (title !== undefined) existing.title = title;
       if (startDate !== undefined) existing.startDate = new Date(startDate);
@@ -251,6 +270,34 @@ module.exports = {
 
       if (status) {
         existing.status = status;
+      }
+
+      // Update priceSetBy if provided
+      if (priceSetBy !== undefined) {
+        const validPriceSetBy = ["SUPER_ADMIN", "MITRA"];
+        if (validPriceSetBy.includes(priceSetBy)) {
+          existing.priceSetBy = priceSetBy;
+        }
+      }
+
+      // Update flashPrice if provided
+      if (flashPrice !== undefined) {
+        const parsed = parseFloat(flashPrice);
+        if (!isNaN(parsed) && parsed >= 0) {
+          existing.flashPrice = parsed;
+          if (existing.priceSetBy === "SUPER_ADMIN") {
+            await flashSaleItem.update(
+              { flashPrice: parsed },
+              { where: { flashSaleId: id } }
+            );
+          }
+        }
+      } else if (priceSetBy === "SUPER_ADMIN" && existing.flashPrice !== null) {
+        // If priceSetBy is changed to SUPER_ADMIN, propagate the existing event-level flashPrice to all items
+        await flashSaleItem.update(
+          { flashPrice: existing.flashPrice },
+          { where: { flashSaleId: id } }
+        );
       }
 
       // Recalculate/Enforce status based on dates if start date is in the future or event has ended
@@ -452,7 +499,7 @@ module.exports = {
           productId: itemType === "PRODUCT" ? productId : null,
           packageId: itemType === "PACKAGE" ? packageId : null,
           serviceId: itemType === "SERVICE" ? serviceId : null,
-          flashPrice: roleCode === "SUPER_ADMIN" ? (flashPrice || 0) : 0,
+          flashPrice: fs.priceSetBy === "SUPER_ADMIN" ? (fs.flashPrice || 0) : (roleCode === "SUPER_ADMIN" ? (flashPrice || 0) : (flashPrice || 0)),
           quota: quota || 0,
           sold: 0,
           maxBuyPerCustomer: maxBuyPerCustomer || 0

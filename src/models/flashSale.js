@@ -43,6 +43,16 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "UPCOMING",
       },
+      priceSetBy: {
+        type: DataTypes.ENUM("SUPER_ADMIN", "MITRA"),
+        allowNull: false,
+        defaultValue: "SUPER_ADMIN",
+      },
+      flashPrice: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true,
+        defaultValue: null,
+      },
     },
     {
       sequelize,
