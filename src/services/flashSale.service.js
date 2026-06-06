@@ -654,6 +654,9 @@ module.exports = {
         if (isNaN(parsedQuota) || parsedQuota < 0) {
           return { status: false, message: "quota must be a valid positive integer" };
         }
+        if (parsedQuota < item.sold) {
+          return { status: false, message: `quota cannot be less than the already sold quantity (${item.sold})` };
+        }
         item.quota = parsedQuota;
       }
 
