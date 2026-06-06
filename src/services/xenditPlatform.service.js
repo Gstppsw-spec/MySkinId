@@ -116,12 +116,15 @@ module.exports = {
         
         const platformFee = Math.round((amount * platformFeePercent) / 100);
 
-        // Fetch actual MDR fee from orderPayment to deduct proportionally
+        // Fetch actual MDR fee from orderPayment to deduct proportionally and check for voucher usage
         let mdrShare = 0;
+        let itemVoucherDiscount = 0;
         try {
-            const [orderData, paymentData] = await Promise.all([
+            const { VoucherUsage, transactionItem, transaction } = require("../models");
+            const [orderData, paymentData, voucherUsage] = await Promise.all([
                 order.findByPk(orderId),
-                orderPayment.findOne({ where: { orderId, paymentStatus: "SUCCESS" } })
+                orderPayment.findOne({ where: { orderId, paymentStatus: "SUCCESS" } }),
+                VoucherUsage.findOne({ where: { orderId } })
             ]);
 
             if (orderData && paymentData && paymentData.mdrFee > 0) {
@@ -131,11 +134,35 @@ module.exports = {
                 mdrShare = Math.round((amount / totalAmount) * totalMdr);
                 console.log(`[XenditPlatform] Calculated proportional MDR for ${reference}: ${mdrShare} (from total ${totalMdr})`);
             }
+
+            if (voucherUsage && parseFloat(voucherUsage.discountAmount) > 0) {
+                // Find all transaction items under this order to compute the proportion
+                const allItems = await transactionItem.findAll({
+                    include: [
+                        {
+                            model: transaction,
+                            as: "transaction",
+                            where: { orderId }
+                        }
+                    ]
+                });
+
+                const totalOrderAmountBeforeDiscount = allItems.reduce(
+                    (sum, item) => sum + parseFloat(item.totalPrice || 0),
+                    0
+                );
+
+                if (totalOrderAmountBeforeDiscount > 0) {
+                    const proportion = amount / totalOrderAmountBeforeDiscount;
+                    itemVoucherDiscount = Math.round(proportion * parseFloat(voucherUsage.discountAmount));
+                    console.log(`[XenditPlatform] Calculated proportional voucher discount for ${reference}: ${itemVoucherDiscount} (proportion: ${proportion})`);
+                }
+            }
         } catch (feeErr) {
-            console.error(`[XenditPlatform] Error calculating proportional MDR:`, feeErr.message);
+            console.error(`[XenditPlatform] Error calculating proportional MDR or voucher discount:`, feeErr.message);
         }
 
-        const transferAmount = amount - platformFee - mdrShare;
+        const transferAmount = amount - itemVoucherDiscount - platformFee - mdrShare;
 
         if (transferAmount <= 0) {
             console.warn(`[XenditPlatform] Transfer amount is zero or negative for reference ${reference}`);
@@ -273,29 +300,35 @@ module.exports = {
         }
     },
 
-    /**
-     * Execute a pending settlement transfer.
-     */
     async executePendingTransfer(transferId) {
-        const transfer = await platformTransfer.findByPk(transferId);
-
-        if (!transfer) {
-            return { status: false, message: "Transfer record not found" };
-        }
-
-        if (transfer.status !== "PENDING_SETTLEMENT") {
-            return { status: false, message: "Transfer is not in PENDING_SETTLEMENT status" };
-        }
-
-        const platformUserId = process.env.XENDIT_PLATFORM_USER_ID;
-        if (!platformUserId) {
-            return { status: false, message: "Platform user ID not configured" };
-        }
-
+        const t = await sequelize.transaction();
         try {
+            const transfer = await platformTransfer.findByPk(transferId, {
+                transaction: t,
+                lock: true,
+            });
+
+            if (!transfer) {
+                await t.rollback();
+                return { status: false, message: "Transfer record not found" };
+            }
+
+            if (transfer.status !== "PENDING_SETTLEMENT") {
+                await t.rollback();
+                return { status: false, message: "Transfer is not in PENDING_SETTLEMENT status" };
+            }
+
+            const platformUserId = process.env.XENDIT_PLATFORM_USER_ID;
+            if (!platformUserId) {
+                await t.rollback();
+                return { status: false, message: "Platform user ID not configured" };
+            }
+
             // Fetch companyId from location
             const { masterLocation } = require("../models");
-            const location = await masterLocation.findByPk(transfer.locationId);
+            const location = await masterLocation.findByPk(transfer.locationId, {
+                transaction: t,
+            });
             if (!location) {
                 throw new Error(`Location ${transfer.locationId} not found`);
             }
@@ -307,7 +340,8 @@ module.exports = {
                 parseFloat(transfer.amount),
                 transfer.transferType || "ITEM_DELIVERED",
                 transfer.orderId,
-                `Settlement for ${transfer.transferType} (Ref: ${transfer.reference})`
+                `Settlement for ${transfer.transferType} (Ref: ${transfer.reference})`,
+                t
             );
 
             if (!balanceResult.status) {
@@ -318,19 +352,34 @@ module.exports = {
                 status: "SUCCESS",
                 xenditTransferId: `LOCAL-${transfer.reference}`,
                 xenditResponse: { message: "Transferred to local DB balance via Cron" },
-            });
+            }, { transaction: t });
 
+            await t.commit();
             console.log(`[XenditPlatform] Pending Transfer SUCCESS: ${transfer.reference}`);
             return { status: true, message: "Transfer successful (Added to DB Balance)", data: transfer.toJSON() };
         } catch (error) {
+            if (t) {
+                try {
+                    await t.rollback();
+                } catch (rollbackErr) {
+                    console.error("Rollback failed in executePendingTransfer:", rollbackErr.message);
+                }
+            }
             const detail = error.response ? JSON.stringify(error.response.data) : error.message;
-            console.error(`[XenditPlatform] Pending Transfer FAILED: ${transfer.reference}:`, detail);
+            console.error(`[XenditPlatform] Pending Transfer FAILED: ${transferId}:`, detail);
 
-            await transfer.update({
-                status: "FAILED",
-                errorMessage: detail,
-                xenditResponse: error.response ? error.response.data : null,
-            });
+            try {
+                const transferToUpdate = await platformTransfer.findByPk(transferId);
+                if (transferToUpdate) {
+                    await transferToUpdate.update({
+                        status: "FAILED",
+                        errorMessage: detail,
+                        xenditResponse: error.response ? error.response.data : null,
+                    });
+                }
+            } catch (updateErr) {
+                console.error("Failed to update status to FAILED:", updateErr.message);
+            }
 
             return { status: false, message: `Transfer failed: ${detail}` };
         }

@@ -951,15 +951,34 @@ module.exports = {
      CREDIT MYSKIN SUBSIDY TO ADS BALANCE
      Called when payment status becomes PAID.
      ═══════════════════════════════════════════════════ */
-  async creditVoucherSubsidy(orderId) {
+  async creditVoucherSubsidy(orderId, externalTransaction = null) {
+    const { CompanyAdsBalanceHistory } = require("../models");
+    const t = externalTransaction || await sequelize.transaction();
     try {
+      // Check if subsidy was already credited inside the transaction using a lock
+      const alreadyCredited = await CompanyAdsBalanceHistory.findOne({
+        where: { referenceId: orderId, type: "VOUCHER_SUBSIDY" },
+        transaction: t,
+        lock: true
+      });
+
+      if (alreadyCredited) {
+        if (!externalTransaction) await t.commit();
+        return { status: true, message: "Voucher subsidy already credited" };
+      }
+
       const usage = await VoucherUsage.findOne({
         where: { orderId },
         include: [{ model: Voucher, as: "voucher" }],
+        transaction: t
       });
 
-      if (!usage) return { status: true, message: "No voucher usage for this order" };
+      if (!usage) {
+        if (!externalTransaction) await t.commit();
+        return { status: true, message: "No voucher usage for this order" };
+      }
       if (parseFloat(usage.myskinSubsidy) <= 0) {
+        if (!externalTransaction) await t.commit();
         return { status: true, message: "No MySkin subsidy to credit" };
       }
 
@@ -978,6 +997,7 @@ module.exports = {
               limit: 1,
             },
           ],
+          transaction: t
         });
 
         if (orderRecord && orderRecord.transactions && orderRecord.transactions.length > 0) {
@@ -985,6 +1005,7 @@ module.exports = {
           if (locationId) {
             const location = await masterLocation.findByPk(locationId, {
               attributes: ["companyId"],
+              transaction: t
             });
             if (location) targetCompanyId = location.companyId;
           }
@@ -993,6 +1014,7 @@ module.exports = {
 
       if (!targetCompanyId) {
         console.warn(`[VoucherSubsidy] Cannot determine company for order ${orderId}`);
+        if (!externalTransaction) await t.commit();
         return { status: false, message: "Cannot determine target company for subsidy" };
       }
 
@@ -1002,11 +1024,20 @@ module.exports = {
         parseFloat(usage.myskinSubsidy),
         "VOUCHER_SUBSIDY",
         orderId,
-        `Voucher subsidy from MySkin (voucher: ${voucher.code}, order: ${orderId})`
+        `Voucher subsidy from MySkin (voucher: ${voucher.code}, order: ${orderId})`,
+        t
       );
 
+      if (!externalTransaction) await t.commit();
       return result;
     } catch (error) {
+      if (!externalTransaction && t) {
+        try {
+          await t.rollback();
+        } catch (rollbackErr) {
+          console.error("Rollback failed in creditVoucherSubsidy:", rollbackErr.message);
+        }
+      }
       console.error("[VoucherSubsidy] Error:", error.message);
       return { status: false, message: error.message };
     }

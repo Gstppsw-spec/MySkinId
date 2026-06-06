@@ -79,12 +79,12 @@ module.exports = {
   /**
    * Add balance (Topup or Grant)
    */
-  async addBalance(companyId, amount, type = "TOPUP", referenceId = null, description = null) {
+  async addBalance(companyId, amount, type = "TOPUP", referenceId = null, description = null, externalTransaction = null) {
     if (!companyId) {
       return { status: false, message: "companyId is required for balance update" };
     }
 
-    const t = await sequelize.transaction();
+    const t = externalTransaction || await sequelize.transaction();
     try {
       let balanceRecord = await CompanyAdsBalance.findOne({
         where: { companyId: companyId },
@@ -119,10 +119,10 @@ module.exports = {
         description: description || `${type} of ${amount}`
       }, { transaction: t });
 
-      await t.commit();
+      if (!externalTransaction) await t.commit();
       return { status: true, message: "Balance added successfully", data: balanceRecord };
     } catch (error) {
-      if (t) await t.rollback();
+      if (!externalTransaction && t) await t.rollback();
       return { status: false, message: error.message };
     }
   },
