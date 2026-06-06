@@ -10,33 +10,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
-    # steps:
-    #   - name: Check out code
-    #     uses: actions/checkout@v3
-
-    #   - name: Deploy to VPS via SSH
-    #     uses: appleboy/ssh-action@v1.0.0
-    #     with:
-    #       host: ${{ secrets.SERVER2_HOST }}
-    #       username: ${{ secrets.SERVER2_USER }}
-    #       key: ${{ secrets.SERVER2_SSH_PRIVATE_KEY }}
-    #       script: |
-    #         if [ "${{ github.ref }}" == "refs/heads/staging" ]; then
-    #           cd ${{ secrets.STAGING2_PATH }}
-    #           git pull
-    #           npm install --production
-    #           npx sequelize-cli db:migrate --config config/config.js
-    #           pm2 restart myskin-staging
-    #         fi
-
-    #         if [ "${{ github.ref }}" == "refs/heads/main" ]; then
-    #           cd ${{ secrets.PROD2_PATH }}
-    #           git pull
-    #           npm install --production
-    #           npx sequelize-cli db:migrate --config config/config.js
-    #           pm2 restart myskin-production
-    #         fi
-
     steps:
       - name: Check out code
         uses: actions/checkout@v3
@@ -52,10 +25,14 @@ jobs:
               cd ${{ secrets.STAGING2_PATH }}
               git pull
               npm install --production
+              npx sequelize-cli db:migrate --config config/config.js
+              pm2 restart myskinid-staging
             fi
 
             if [ "${{ github.ref }}" == "refs/heads/main" ]; then
               cd ${{ secrets.PROD2_PATH }}
               git pull
               npm install --production
+              npx sequelize-cli db:migrate --config config/config.js
+              pm2 restart myskinid-production
             fi
