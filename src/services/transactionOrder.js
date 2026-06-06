@@ -2609,8 +2609,8 @@ module.exports = {
               if (item.voucherCode) {
                 const now = new Date();
                 const expiredAt = new Date(
-                  now.getTime() + 7 * 24 * 60 * 60 * 1000,
-                ); // 7 days from now
+                  now.getTime() + 30 * 24 * 60 * 60 * 1000,
+                ); // 30 days from now
 
                 await customerVoucher.update(
                   { status: "BOOKED", expiredAt: expiredAt },
