@@ -28,6 +28,10 @@ module.exports = (sequelize, DataTypes) => {
                 as: "flashSaleItem",
                 constraints: false,
             });
+            transactionItem.hasOne(models.customerVoucher, {
+                foreignKey: "transactionItemId",
+                as: "customerVoucher",
+            });
         }
     }
 

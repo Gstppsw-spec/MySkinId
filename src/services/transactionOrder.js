@@ -5367,6 +5367,11 @@ module.exports = {
                 as: "service",
                 attributes: ["id", "name", "price"],
               },
+              {
+                model: customerVoucher,
+                as: "customerVoucher",
+                attributes: ["expiredAt", "status"],
+              },
             ],
           },
           {
@@ -5449,10 +5454,18 @@ module.exports = {
           const netForItem = itemSubtotal - platformFee - mdrFee - mitraSubsidy;
 
           const normalPrice = item.product?.price || item.package?.price || item.service?.price || null;
+          const voucher = item.customerVoucher || null;
+          const voucherEndDate = voucher ? voucher.expiredAt : null;
+          const isVoucherClaimed = voucher ? (voucher.status === "REDEEM") : false;
+          const voucherStatus = voucher ? voucher.status : null;
+
           return {
             ...item,
             isFlashSale: !!item.flashSaleItemId,
             normalPrice: normalPrice,
+            voucherEndDate,
+            isVoucherClaimed,
+            voucherStatus,
             financials: {
               itemSubtotal,
               itemMdrFee: mdrFee,
@@ -5540,6 +5553,11 @@ module.exports = {
                     as: "service",
                     attributes: ["id", "name", "price"],
                   },
+                  {
+                    model: customerVoucher,
+                    as: "customerVoucher",
+                    attributes: ["expiredAt", "status"],
+                  },
                 ],
               },
               {
@@ -5603,6 +5621,9 @@ module.exports = {
             imageUrl: item.product?.images?.[0]?.imageUrl || null,
             isFlashSale: !!item.flashSaleItemId,
             normalPrice: item.product?.price || item.package?.price || item.service?.price || null,
+            voucherEndDate: item.customerVoucher?.expiredAt || null,
+            isVoucherClaimed: item.customerVoucher ? (item.customerVoucher.status === "REDEEM") : false,
+            voucherStatus: item.customerVoucher?.status || null,
           })),
           shipping: trx.shipping
             ? {
