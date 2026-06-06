@@ -150,6 +150,7 @@ module.exports = (sequelize, DataTypes) => {
       platformFee: {
         type: DataTypes.FLOAT,
         allowNull: true,
+        defaultValue: 4.0,
       },
     },
     {
