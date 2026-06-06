@@ -52,12 +52,10 @@ jobs:
               cd ${{ secrets.STAGING2_PATH }}
               git pull
               npm install --production
-              pm2 restart myskin-staging
             fi
 
             if [ "${{ github.ref }}" == "refs/heads/main" ]; then
               cd ${{ secrets.PROD2_PATH }}
               git pull
               npm install --production
-              pm2 restart myskin-production
             fi
