@@ -391,7 +391,7 @@ module.exports = {
           {
             model: order,
             as: "order",
-            where: { paymentStatus: "PAID" }
+            required: false
           },
           {
             model: transactionItem,
