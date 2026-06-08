@@ -400,10 +400,12 @@ module.exports = {
           {
             model: masterLocation,
             as: "location",
+            required: false,
             include: [
               {
                 model: masterCompany,
-                as: "company"
+                as: "company",
+                required: false
               }
             ]
           }
@@ -465,7 +467,18 @@ module.exports = {
         const totalShare = pendapatanMySkin + feeApp;
         totalPlatformShare += totalShare;
 
-        if (trx.orderStatus === "COMPLETED") {
+        let isCompleted = trx.orderStatus === "COMPLETED";
+        
+        // 3-day aging rule for platform-direct revenues (Konsultasi & Iklan)
+        if (tipe === "Konsultasi" || tipe === "Iklan") {
+          const threeDaysAgo = new Date();
+          threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+          if (new Date(trx.createdAt) <= threeDaysAgo) {
+            isCompleted = true;
+          }
+        }
+
+        if (isCompleted) {
           completedPlatformShare += totalShare;
         } else {
           holdPlatformShare += totalShare;
