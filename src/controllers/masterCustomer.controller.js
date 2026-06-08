@@ -63,7 +63,7 @@ class masterCustomerController {
 
   async googleMobileLogin(req, res) {
     try {
-      const { idToken, referralCode, deviceId, platform } = req.body;
+      const { idToken, referralCode, deviceId, platform, ignoreDeviceLimit } = req.body;
       if (!idToken) {
         return response.error(res, "idToken is required", null);
       }
@@ -125,6 +125,7 @@ class masterCustomerController {
         referralCode: referralCode || null,
         deviceId: deviceId || null,
         platform: platform || null,
+        ignoreDeviceLimit: ignoreDeviceLimit === true || ignoreDeviceLimit === "true" || false,
       };
 
       const result = await masterCustomerService.googleLogin(profile);
@@ -142,7 +143,7 @@ class masterCustomerController {
 
   async googleIosLogin(req, res) {
     try {
-      const { idToken, referralCode, deviceId, platform } = req.body;
+      const { idToken, referralCode, deviceId, platform, ignoreDeviceLimit } = req.body;
       if (!idToken) {
         return response.error(res, "idToken is required", null);
       }
@@ -177,6 +178,7 @@ class masterCustomerController {
         referralCode: referralCode || null,
         deviceId: deviceId || null,
         platform: platform || null,
+        ignoreDeviceLimit: ignoreDeviceLimit === true || ignoreDeviceLimit === "true" || false,
       };
 
       const result = await masterCustomerService.googleLogin(profile);
@@ -194,7 +196,7 @@ class masterCustomerController {
 
   async appleIosLogin(req, res) {
     try {
-      const { identityToken, name, referralCode, deviceId, platform } = req.body;
+      const { identityToken, name, referralCode, deviceId, platform, ignoreDeviceLimit } = req.body;
       
       if (!identityToken) {
         return response.error(res, "identityToken is required", null);
@@ -228,6 +230,7 @@ class masterCustomerController {
         referralCode: referralCode || null,
         deviceId: deviceId || null,
         platform: platform || null,
+        ignoreDeviceLimit: ignoreDeviceLimit === true || ignoreDeviceLimit === "true" || false,
       };
 
       const result = await masterCustomerService.appleLogin(profile);

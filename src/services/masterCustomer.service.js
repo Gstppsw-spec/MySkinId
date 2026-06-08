@@ -28,7 +28,12 @@ class masterCustomerService {
         platform,
       } = data;
 
-      if (deviceId) {
+      const shouldCheckDevice = deviceId &&
+                                process.env.DISABLE_DEVICE_LIMIT !== "true" &&
+                                data.ignoreDeviceLimit !== true &&
+                                data.ignoreDeviceLimit !== "true";
+
+      if (shouldCheckDevice) {
         const existingDevice = await customerDevice.findOne({
           where: { deviceId, isActive: true },
         });
@@ -242,9 +247,14 @@ class masterCustomerService {
   }
 
   async verifyOtp(data) {
-    const { customerId, otp, deviceId, platform } = data;
+    const { customerId, otp, deviceId, platform, ignoreDeviceLimit } = data;
 
-    if (deviceId) {
+    const shouldCheckDevice = deviceId &&
+                              process.env.DISABLE_DEVICE_LIMIT !== "true" &&
+                              ignoreDeviceLimit !== true &&
+                              ignoreDeviceLimit !== "true";
+
+    if (shouldCheckDevice) {
       const existingDevice = await customerDevice.findOne({
         where: { deviceId, isActive: true },
       });
@@ -371,7 +381,7 @@ class masterCustomerService {
 
   async loginCustomer(data) {
     try {
-      const { email, phoneNumber, password, loginMethod, countryCode, deviceId } = data;
+      const { email, phoneNumber, password, loginMethod, countryCode, deviceId, ignoreDeviceLimit } = data;
       console.log(data);
 
       const otp = masterCustomerService.generateOtp();
@@ -402,7 +412,12 @@ class masterCustomerService {
       if (!customer)
         return { status: false, message: "Customer belum terdaftar" };
 
-      if (deviceId) {
+      const shouldCheckDevice = deviceId &&
+                                process.env.DISABLE_DEVICE_LIMIT !== "true" &&
+                                ignoreDeviceLimit !== true &&
+                                ignoreDeviceLimit !== "true";
+
+      if (shouldCheckDevice) {
         const existingDevice = await customerDevice.findOne({
           where: { deviceId, isActive: true },
         });
@@ -790,7 +805,12 @@ class masterCustomerService {
         });
       }
 
-      if (deviceId) {
+      const shouldCheckDevice = deviceId &&
+                                process.env.DISABLE_DEVICE_LIMIT !== "true" &&
+                                ignoreDeviceLimit !== true &&
+                                ignoreDeviceLimit !== "true";
+
+      if (shouldCheckDevice) {
         const existingDevice = await customerDevice.findOne({
           where: { deviceId, isActive: true },
         });
@@ -871,7 +891,7 @@ class masterCustomerService {
 
   async appleLogin(profile) {
     try {
-      const { id, displayName, emails, deviceId, platform } = profile;
+      const { id, displayName, emails, deviceId, platform, ignoreDeviceLimit } = profile;
       const email = emails && emails.length > 0 ? emails[0].value : null;
 
       let customer = await masterCustomer.findOne({
@@ -884,7 +904,12 @@ class masterCustomerService {
         });
       }
 
-      if (deviceId) {
+      const shouldCheckDevice = deviceId &&
+                                process.env.DISABLE_DEVICE_LIMIT !== "true" &&
+                                ignoreDeviceLimit !== true &&
+                                ignoreDeviceLimit !== "true";
+
+      if (shouldCheckDevice) {
         const existingDevice = await customerDevice.findOne({
           where: { deviceId, isActive: true },
         });
