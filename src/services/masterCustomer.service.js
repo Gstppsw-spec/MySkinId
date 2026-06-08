@@ -1,4 +1,4 @@
-const { masterCustomer, sequelize } = require("../models");
+const { masterCustomer, customerDevice, sequelize } = require("../models");
 const referralService = require("./referral.service");
 
 const bcrypt = require("bcrypt");
@@ -24,7 +24,32 @@ class masterCustomerService {
         countryCode,
         otpType,
         referralCode,
+        deviceId,
+        platform,
       } = data;
+
+      if (deviceId) {
+        const existingDevice = await customerDevice.findOne({
+          where: { deviceId, isActive: true },
+        });
+        if (existingDevice) {
+          let targetCustomerId = null;
+          if (email) {
+            const existEmail = await masterCustomer.findOne({ where: { email } });
+            if (existEmail) targetCustomerId = existEmail.id;
+          } else if (phoneNumber) {
+            const existPhone = await masterCustomer.findOne({ where: { phoneNumber } });
+            if (existPhone) targetCustomerId = existPhone.id;
+          }
+
+          if (existingDevice.customerId !== targetCustomerId) {
+            return {
+              status: false,
+              message: "Perangkat ini sudah digunakan oleh akun lain",
+            };
+          }
+        }
+      }
 
       console.log(data);
 
@@ -217,7 +242,20 @@ class masterCustomerService {
   }
 
   async verifyOtp(data) {
-    const { customerId, otp } = data;
+    const { customerId, otp, deviceId, platform } = data;
+
+    if (deviceId) {
+      const existingDevice = await customerDevice.findOne({
+        where: { deviceId, isActive: true },
+      });
+      if (existingDevice && existingDevice.customerId !== customerId) {
+        return {
+          status: false,
+          message: "Perangkat ini sudah digunakan oleh akun lain",
+        };
+      }
+    }
+
     const customer = await masterCustomer.findByPk(customerId);
     if (!customer)
       return {
@@ -258,6 +296,15 @@ class masterCustomerService {
 
     // customer.jwtToken = jwtToken;
     await customer.save();
+
+    if (deviceId) {
+      await customerDevice.upsert({
+        deviceId,
+        customerId: customer.id,
+        platform,
+        isActive: true,
+      });
+    }
 
     const customerData = customer.toJSON();
     customerData.jwtToken = jwtToken;
@@ -324,7 +371,7 @@ class masterCustomerService {
 
   async loginCustomer(data) {
     try {
-      const { email, phoneNumber, password, loginMethod, countryCode } = data;
+      const { email, phoneNumber, password, loginMethod, countryCode, deviceId } = data;
       console.log(data);
 
       const otp = masterCustomerService.generateOtp();
@@ -354,6 +401,18 @@ class masterCustomerService {
 
       if (!customer)
         return { status: false, message: "Customer belum terdaftar" };
+
+      if (deviceId) {
+        const existingDevice = await customerDevice.findOne({
+          where: { deviceId, isActive: true },
+        });
+        if (existingDevice && existingDevice.customerId !== customer.id) {
+          return {
+            status: false,
+            message: "Perangkat ini sudah digunakan oleh akun lain",
+          };
+        }
+      }
 
       if (password) {
         const match = await bcrypt.compare(password, customer.password);
@@ -717,7 +776,7 @@ class masterCustomerService {
 
   async googleLogin(profile) {
     try {
-      const { id, displayName, emails, photos } = profile;
+      const { id, displayName, emails, photos, deviceId, platform } = profile;
       const email = emails && emails.length > 0 ? emails[0].value : null;
       const profileImageUrl = photos && photos.length > 0 ? photos[0].value : null;
 
@@ -726,13 +785,27 @@ class masterCustomerService {
       });
 
       if (!customer && email) {
-        // If googleId not found, check by email (existing account linking)
         customer = await masterCustomer.findOne({
           where: { email },
         });
+      }
 
-        if (customer) {
-          // Link existing account with googleId
+      if (deviceId) {
+        const existingDevice = await customerDevice.findOne({
+          where: { deviceId, isActive: true },
+        });
+        if (existingDevice) {
+          if (!customer || existingDevice.customerId !== customer.id) {
+            return {
+              status: false,
+              message: "Perangkat ini sudah digunakan oleh akun lain",
+            };
+          }
+        }
+      }
+
+      if (customer) {
+        if (customer.googleId !== id) {
           await customer.update({
             googleId: id,
             loginMethod: "google",
@@ -740,9 +813,7 @@ class masterCustomerService {
             emailVerified: true,
           });
         }
-      }
-
-      if (!customer) {
+      } else {
         // Create new customer
         customer = await masterCustomer.create({
           name: displayName,
@@ -758,6 +829,15 @@ class masterCustomerService {
         if (profile.referralCode) {
           await referralService.applyReferral(customer.id, profile.referralCode);
         }
+      }
+
+      if (deviceId) {
+        await customerDevice.upsert({
+          deviceId,
+          customerId: customer.id,
+          platform,
+          isActive: true,
+        });
       }
 
       const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {
@@ -791,7 +871,7 @@ class masterCustomerService {
 
   async appleLogin(profile) {
     try {
-      const { id, displayName, emails } = profile;
+      const { id, displayName, emails, deviceId, platform } = profile;
       const email = emails && emails.length > 0 ? emails[0].value : null;
 
       let customer = await masterCustomer.findOne({
@@ -799,26 +879,38 @@ class masterCustomerService {
       });
 
       if (!customer && email) {
-        // If appleId not found, check by email (existing account linking)
         customer = await masterCustomer.findOne({
           where: { email },
         });
+      }
 
-        if (customer) {
-          // Link existing account with appleId
+      if (deviceId) {
+        const existingDevice = await customerDevice.findOne({
+          where: { deviceId, isActive: true },
+        });
+        if (existingDevice) {
+          if (!customer || existingDevice.customerId !== customer.id) {
+            return {
+              status: false,
+              message: "Perangkat ini sudah digunakan oleh akun lain",
+            };
+          }
+        }
+      }
+
+      if (customer) {
+        if (customer.appleId !== id) {
           await customer.update({
             appleId: id,
-            loginMethod: "apple", // Switch to or record apple as login method
+            loginMethod: "apple",
             isActive: true,
             emailVerified: true,
           });
         }
-      }
-
-      if (!customer) {
+      } else {
         // Create new customer
         customer = await masterCustomer.create({
-          name: displayName || "Apple User", // Apple only sends the name on first login. If not provided, fallback.
+          name: displayName || "Apple User",
           email: email,
           appleId: id,
           loginMethod: "apple",
@@ -830,6 +922,15 @@ class masterCustomerService {
         if (profile.referralCode) {
           await referralService.applyReferral(customer.id, profile.referralCode);
         }
+      }
+
+      if (deviceId) {
+        await customerDevice.upsert({
+          deviceId,
+          customerId: customer.id,
+          platform,
+          isActive: true,
+        });
       }
 
       const jwtToken = jwt.sign({ id: customer.id }, JWT_SECRET, {

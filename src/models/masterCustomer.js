@@ -160,6 +160,10 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "customerId",
       as: "consultationQuota",
     });
+    masterCustomer.hasMany(models.customerDevice, {
+      foreignKey: "customerId",
+      as: "devices",
+    });
   };
 
   return masterCustomer;
