@@ -791,7 +791,7 @@ class masterCustomerService {
 
   async googleLogin(profile) {
     try {
-      const { id, displayName, emails, photos, deviceId, platform } = profile;
+      const { id, displayName, emails, photos, deviceId, platform, ignoreDeviceLimit } = profile;
       const email = emails && emails.length > 0 ? emails[0].value : null;
       const profileImageUrl = photos && photos.length > 0 ? photos[0].value : null;
 
