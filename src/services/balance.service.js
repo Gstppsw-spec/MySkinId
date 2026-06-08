@@ -6,8 +6,12 @@ const {
   masterCompany,
   masterLocation,
   platformTransfer,
-  sequelize,
-  transaction
+  platformWithdrawal,
+  transaction,
+  transactionItem,
+  order,
+  masterCustomer,
+  sequelize
 } = require("../models");
 const payoutService = require("./payout.service");
 
@@ -370,6 +374,195 @@ module.exports = {
 
     } catch (error) {
       if (t) await t.rollback();
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Get platform balance info (Total, hold, withdrawable)
+   */
+  async getPlatformBalanceInfo() {
+    try {
+      const transactions = await transaction.findAll({
+        where: {
+          orderStatus: { [Op.in]: ["PAID", "SHIPPED", "DELIVERED", "COMPLETED"] },
+        },
+        include: [
+          {
+            model: order,
+            as: "order",
+            where: { paymentStatus: "PAID" }
+          },
+          {
+            model: transactionItem,
+            as: "items"
+          },
+          {
+            model: masterLocation,
+            as: "location",
+            include: [
+              {
+                model: masterCompany,
+                as: "company"
+              }
+            ]
+          }
+        ]
+      });
+
+      let totalPlatformShare = 0;
+      let holdPlatformShare = 0;
+      let completedPlatformShare = 0;
+
+      for (const trx of transactions) {
+        const subtotal = parseFloat(trx.subTotal || trx.grandTotal || 0);
+
+        // Determine Tipe (Treatment, Iklan, Konsultasi, Produk)
+        let tipe = "Treatment";
+        if (trx.items && trx.items.some(i => 
+          i.itemType === "ADS_PREMIUM_BADGE" || 
+          i.itemType === "ADS_DESIGN" || 
+          i.itemType === "ADS_BANNER" || 
+          i.itemType === "AD_BALANCE_TOPUP" || 
+          i.itemType === "premium_badge" || 
+          (i.itemType && i.itemType.toUpperCase().includes("ADS")) || 
+          (i.itemType && i.itemType.toUpperCase().startsWith("AD_"))
+        )) {
+          tipe = "Iklan";
+        } else if (trx.locationId === null || trx.items.some(i => i.itemType === "CONSULTATION_QUOTA" || i.itemType === "consultation")) {
+          tipe = "Konsultasi";
+        } else if (trx.items.some(i => i.itemType === "product" || i.itemType === "PRODUCT")) {
+          tipe = "Produk";
+        }
+
+        let pendapatanMySkin = 0;
+        if (trx.locationId === null || tipe === "Iklan") {
+          pendapatanMySkin = subtotal;
+        } else {
+          const companyCreatedAt = trx.location?.company?.createdAt;
+          const companyPlatformFee = trx.location?.company?.platformFee;
+          let platformFeePercent = parseFloat(process.env.XENDIT_PLATFORM_FEE_PERCENT || "1");
+
+          if (companyPlatformFee !== null && companyPlatformFee !== undefined) {
+            platformFeePercent = parseFloat(companyPlatformFee);
+          } else if (companyCreatedAt && new Date(companyCreatedAt) >= new Date("2026-05-01T00:00:00Z")) {
+            platformFeePercent = 4;
+          }
+          pendapatanMySkin = Math.round((subtotal * platformFeePercent) / 100);
+        }
+
+        const feeApp = (
+          subtotal > 0 &&
+          trx.order &&
+          trx.order.orderNumber &&
+          trx.order.orderNumber.startsWith("ORD-") &&
+          !trx.order.orderNumber.startsWith("ORD-PREM-") &&
+          !trx.order.orderNumber.startsWith("ORD-ADS-") &&
+          !trx.order.orderNumber.startsWith("ORD-TOPUP-") &&
+          !trx.order.orderNumber.startsWith("ORD-QUOTA-")
+        ) ? 4500 : 0;
+
+        const totalShare = pendapatanMySkin + feeApp;
+        totalPlatformShare += totalShare;
+
+        if (trx.orderStatus === "COMPLETED") {
+          completedPlatformShare += totalShare;
+        } else {
+          holdPlatformShare += totalShare;
+        }
+      }
+
+      const totalWithdrawals = await platformWithdrawal.sum("amount", {
+        where: { status: "SUCCESS" }
+      }) || 0;
+
+      const totalBalance = totalPlatformShare - totalWithdrawals;
+      const holdBalance = holdPlatformShare;
+      const withdrawableBalance = Math.max(0, completedPlatformShare - totalWithdrawals);
+
+      return {
+        status: true,
+        message: "Platform balance fetched",
+        data: {
+          totalBalance,
+          holdBalance,
+          withdrawableBalance
+        }
+      };
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Withdraw platform balance to bank account
+   */
+  async withdrawPlatformBalance(amount, bankDetails, userId) {
+    if (!amount || amount <= 0) {
+      return { status: false, message: "Amount must be positive" };
+    }
+
+    try {
+      const balanceRes = await this.getPlatformBalanceInfo();
+      if (!balanceRes.status) return balanceRes;
+
+      const { withdrawableBalance } = balanceRes.data;
+      if (withdrawableBalance < parseFloat(amount)) {
+        return { status: false, message: `Insufficient withdrawable balance. Max withdrawable: ${withdrawableBalance}` };
+      }
+
+      const { bankName, bankAccountNumber, bankAccountName } = bankDetails;
+
+      const withdrawal = await platformWithdrawal.create({
+        amount,
+        bankName,
+        bankAccountName,
+        bankAccountNumber,
+        status: "PENDING",
+        userId
+      });
+
+      const xenditRes = await payoutService.createDisbursement({
+        amount: parseFloat(amount) - 2500, // Rp2.500 bank fee
+        bankCode: bankName,
+        accountHolderName: bankAccountName,
+        accountNumber: bankAccountNumber,
+        externalId: withdrawal.id,
+        description: `MySkin Platform Withdrawal`
+      });
+
+      if (xenditRes.status) {
+        await withdrawal.update({
+          status: "SUCCESS",
+          xenditId: xenditRes.data.id
+        });
+        return { status: true, message: "Withdrawal successful and processed", data: withdrawal };
+      } else {
+        await withdrawal.update({
+          status: "FAILED",
+          errorMessage: xenditRes.message
+        });
+        return { status: false, message: `Withdrawal failed: ${xenditRes.message}`, data: withdrawal };
+      }
+    } catch (error) {
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
+   * Get platform withdrawal history
+   */
+  async getPlatformWithdrawalHistory(pagination = {}) {
+    try {
+      const { limit, offset } = pagination;
+      const { count, rows: data } = await platformWithdrawal.findAndCountAll({
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset
+      });
+
+      return { status: true, message: "Success", data, totalCount: count };
+    } catch (error) {
       return { status: false, message: error.message };
     }
   }

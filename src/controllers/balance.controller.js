@@ -81,5 +81,78 @@ module.exports = {
     } catch (error) {
       return res.status(500).json({ status: false, message: error.message });
     }
+  },
+
+  /**
+   * Get platform balance info
+   */
+  async getPlatformBalanceInfo(req, res) {
+    try {
+      if (!["SUPER_ADMIN", "OPERATIONAL_ADMIN"].includes(req.user.roleCode)) {
+        return res.status(403).json({ status: false, message: "Forbidden: Access denied" });
+      }
+
+      const result = await balanceService.getPlatformBalanceInfo();
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  /**
+   * Request platform withdrawal
+   */
+  async platformWithdraw(req, res) {
+    try {
+      if (!["SUPER_ADMIN", "OPERATIONAL_ADMIN"].includes(req.user.roleCode)) {
+        return res.status(403).json({ status: false, message: "Forbidden: Access denied" });
+      }
+
+      const { amount, bankName, bankAccountNumber, bankAccountName } = req.body;
+
+      if (!amount || amount < 10000) {
+        return res.status(400).json({ status: false, message: "Minimum withdrawal is Rp10.000" });
+      }
+
+      if (!bankName || !bankAccountNumber || !bankAccountName) {
+        return res.status(400).json({ status: false, message: "Bank details (bankName, bankAccountNumber, bankAccountName) are required" });
+      }
+
+      const result = await balanceService.withdrawPlatformBalance(
+        amount,
+        { bankName, bankAccountNumber, bankAccountName },
+        req.user.id
+      );
+      return res.status(result.status ? 200 : 400).json(result);
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
+  },
+
+  /**
+   * Get platform withdrawal history
+   */
+  async getPlatformWithdrawals(req, res) {
+    try {
+      if (!["SUPER_ADMIN", "OPERATIONAL_ADMIN"].includes(req.user.roleCode)) {
+        return res.status(403).json({ status: false, message: "Forbidden: Access denied" });
+      }
+
+      const { page = 1, pageSize = 10 } = req.query;
+      const result = await balanceService.getPlatformWithdrawalHistory({
+        limit: parseInt(pageSize),
+        offset: (parseInt(page) - 1) * parseInt(pageSize)
+      });
+
+      return res.status(result.status ? 200 : 400).json({
+        ...result,
+        data: result.data ? {
+          rows: result.data,
+          totalCount: result.totalCount
+        } : null
+      });
+    } catch (error) {
+      return res.status(500).json({ status: false, message: error.message });
+    }
   }
 };
