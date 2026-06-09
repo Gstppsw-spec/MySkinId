@@ -391,6 +391,7 @@ module.exports = {
           "COMPANY_ADMIN",
           "DOCTOR_GENERAL",
           "PATIENT",
+          "MARKETING",
         );
       } else if (userObj && userObj.roleCode === "OPERATIONAL_ADMIN") {
         // Operational Admin can see everything EXCEPT Super Admin
@@ -399,6 +400,7 @@ module.exports = {
           "COMPANY_ADMIN",
           "DOCTOR_GENERAL",
           "PATIENT",
+          "MARKETING",
         );
       } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
         // Company Admin only see staff: Outlet Admin & Outlet Doctor + Company Admin
@@ -647,6 +649,7 @@ module.exports = {
           "COMPANY_ADMIN",
           "DOCTOR_GENERAL",
           "PATIENT",
+          "MARKETING",
         );
       } else if (userObj && userObj.roleCode === "OPERATIONAL_ADMIN") {
         allowedRoles.push(
@@ -654,6 +657,7 @@ module.exports = {
           "COMPANY_ADMIN",
           "DOCTOR_GENERAL",
           "PATIENT",
+          "MARKETING",
         );
       } else if (userObj && userObj.roleCode === "COMPANY_ADMIN") {
         const locIds = userObj.locationIds || [];
