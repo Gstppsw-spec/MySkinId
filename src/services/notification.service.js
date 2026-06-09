@@ -478,6 +478,64 @@ class NotificationService {
       return { status: false, message: error.message };
     }
   }
+
+  async updateScheduledGeneralNotification(id, data) {
+    try {
+      const { scheduledNotification, masterCustomer } = require("../models");
+      const notif = await scheduledNotification.findByPk(id);
+      if (!notif) return { status: false, message: "Jadwal notifikasi tidak ditemukan" };
+
+      const { title, body, clickRoute, scheduledAt, repeatDaily, target } = data;
+
+      const updateData = {};
+      if (title !== undefined) updateData.title = title;
+      if (body !== undefined) updateData.body = body;
+      if (clickRoute !== undefined) updateData.clickRoute = clickRoute || null;
+      if (repeatDaily !== undefined) {
+        updateData.repeatDaily = !!repeatDaily;
+        if (notif.status === "ACTIVE" || notif.status === "INACTIVE" || notif.status === "PENDING") {
+          updateData.status = !!repeatDaily ? "ACTIVE" : "PENDING";
+        }
+      }
+
+      if (target !== undefined) {
+        updateData.target = target;
+        let potentialCount = 0;
+        if (target === "ALL") {
+          potentialCount = await masterCustomer.count({ where: { isActive: true } });
+        } else if (target === "FREELANCE") {
+          potentialCount = await masterCustomer.count({ where: { isActive: true, isFreelance: true } });
+        } else if (target.includes("@")) {
+          potentialCount = await masterCustomer.count({ where: { email: target.trim(), isActive: true } });
+        } else {
+          potentialCount = await masterCustomer.count({ where: { isActive: true } });
+        }
+        updateData.sentCount = potentialCount;
+      }
+
+      if (scheduledAt !== undefined) {
+        const parsedDate = new Date(scheduledAt);
+        if (isNaN(parsedDate.getTime())) {
+          return { status: false, message: "Format tanggal tidak valid" };
+        }
+        if (parsedDate <= new Date()) {
+          return { status: false, message: "Waktu jadwal pengiriman harus di masa depan" };
+        }
+        updateData.scheduledAt = parsedDate;
+      }
+
+      await notif.update(updateData);
+
+      return {
+        status: true,
+        message: "Berhasil memperbarui jadwal notifikasi umum",
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[NotificationService] updateScheduledGeneralNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  }
 }
 
 module.exports = new NotificationService();

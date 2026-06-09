@@ -32,6 +32,13 @@ router.delete(
 );
 
 router.put(
+  "/scheduled/:notificationId",
+  authMiddleware.verifyToken,
+  allowRoles("SUPER_ADMIN", "MARKETING"),
+  NotificationController.updateScheduledGeneralNotification
+);
+
+router.put(
   "/scheduled/:notificationId/toggle",
   authMiddleware.verifyToken,
   allowRoles("SUPER_ADMIN", "MARKETING"),
