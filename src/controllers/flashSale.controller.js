@@ -185,6 +185,17 @@ module.exports = {
     }
   },
 
+  async updateScheduledNotification(req, res) {
+    try {
+      const { notificationId } = req.params;
+      const result = await flashSaleService.updateScheduledNotification(notificationId, req.body);
+      if (!result.status) return response.error(res, result.message, result.data);
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  },
+
   // ── Customer ────────────────────────────────
 
   async getActive(req, res) {

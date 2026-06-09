@@ -1001,5 +1001,48 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
+  async updateScheduledNotification(id, data) {
+    try {
+      const { scheduledNotification } = require("../models");
+      const notif = await scheduledNotification.findByPk(id);
+      if (!notif) return { status: false, message: "Jadwal notifikasi tidak ditemukan" };
+
+      const { title, body, target, scheduledAt, repeatDaily } = data;
+
+      const updateData = {};
+      if (title !== undefined) updateData.title = title;
+      if (body !== undefined) updateData.body = body;
+      if (repeatDaily !== undefined) {
+        updateData.repeatDaily = !!repeatDaily;
+        if (notif.status === "ACTIVE" || notif.status === "INACTIVE" || notif.status === "PENDING") {
+          updateData.status = !!repeatDaily ? "ACTIVE" : "PENDING";
+        }
+      }
+      if (target !== undefined) updateData.target = target;
+
+      if (scheduledAt !== undefined) {
+        const parsedDate = new Date(scheduledAt);
+        if (isNaN(parsedDate.getTime())) {
+          return { status: false, message: "Format tanggal tidak valid" };
+        }
+        if (parsedDate <= new Date()) {
+          return { status: false, message: "Waktu jadwal pengiriman harus di masa depan" };
+        }
+        updateData.scheduledAt = parsedDate;
+      }
+
+      await notif.update(updateData);
+
+      return {
+        status: true,
+        message: "Berhasil memperbarui jadwal notifikasi flash sale",
+        data: notif,
+      };
+    } catch (error) {
+      console.error("[FlashSaleService] updateScheduledNotification Error:", error.message);
+      return { status: false, message: error.message };
+    }
+  },
 };
 

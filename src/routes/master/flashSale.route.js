@@ -99,4 +99,11 @@ router.delete(
   flashSaleController.deleteScheduledNotification
 );
 
+router.put(
+  "/:id/scheduled-notifications/:notificationId",
+  verifyToken,
+  allowRoles("SUPER_ADMIN", "MARKETING"),
+  flashSaleController.updateScheduledNotification
+);
+
 module.exports = router;
