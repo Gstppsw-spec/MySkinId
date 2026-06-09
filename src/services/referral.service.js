@@ -882,4 +882,125 @@ module.exports = {
       return { status: false, message: error.message };
     }
   },
+
+  /**
+   * Credit registration referral points when a referred customer becomes active.
+   * Checks if already credited to prevent duplicate points.
+   */
+  async creditRegistrationReferral(newCustomerId, externalTransaction = null) {
+    try {
+      const customer = await masterCustomer.findByPk(newCustomerId);
+      if (!customer || !customer.referredBy || !customer.isActive) {
+        return;
+      }
+
+      const referrerId = customer.referredBy;
+      const referrer = await masterCustomer.findByPk(referrerId);
+      if (!referrer) {
+        return;
+      }
+
+      // If referrer is freelance/busdev, skip registration bonus
+      if (referrer.isFreelance === true) {
+        console.log(`[Referral] Referrer ${referrerId} is freelance/busdev — skipping registration bonus for customer ${newCustomerId}`);
+        return;
+      }
+
+      // Prevent duplicate: check if we already credited for this customer registration
+      const existingCredit = await referralPoints.findOne({
+        where: {
+          referredCustomerId: newCustomerId,
+          referrerId,
+          orderId: null,
+        },
+      });
+      if (existingCredit) {
+        console.log("[Referral] Registration bonus already credited for customer:", newCustomerId);
+        return;
+      }
+
+      const pointsEarned = 2500;
+      const t = externalTransaction || (await sequelize.transaction());
+
+      try {
+        await referralPoints.create(
+          {
+            referrerId,
+            referredCustomerId: customer.id,
+            orderId: null,
+            transactionId: null,
+            transactionAmount: 0,
+            commissionRate: 0,
+            pointsEarned,
+            isFirstTransaction: false,
+            status: "CREDITED",
+          },
+          { transaction: t }
+        );
+
+        let balance = await referralBalance.findOne({
+          where: { customerId: referrerId },
+          transaction: t,
+          lock: true,
+        });
+
+        if (!balance) {
+          balance = await referralBalance.create(
+            {
+              customerId: referrerId,
+              balance: pointsEarned,
+              totalEarned: pointsEarned,
+              totalWithdrawn: 0,
+            },
+            { transaction: t }
+          );
+        } else {
+          await balance.update(
+            {
+              balance: parseFloat(balance.balance) + pointsEarned,
+              totalEarned: parseFloat(balance.totalEarned) + pointsEarned,
+            },
+            { transaction: t }
+          );
+        }
+
+        if (!externalTransaction) await t.commit();
+
+        // Send push notification to referrer (non-blocking)
+        try {
+          const formattedAmount = new Intl.NumberFormat("id-ID", {
+            style: "currency",
+            currency: "IDR",
+            minimumFractionDigits: 0,
+          }).format(pointsEarned);
+
+          await pushNotificationService.sendPushNotification(
+            referrerId,
+            "customer",
+            {
+              title: "Poin Referral Masuk! 🎉",
+              body: `Anda mendapat ${formattedAmount} poin referral karena mengundang ${customer.name || "teman Anda"}.`,
+              data: {
+                type: "referral_point_registration",
+                pointsEarned: pointsEarned.toString(),
+                referredCustomerId: customer.id,
+              },
+            }
+          );
+        } catch (notifErr) {
+          console.error("[Referral] Push notification error:", notifErr.message);
+        }
+
+        console.log(
+          `[Referral] Credited registration bonus of ${pointsEarned} to referrer ${referrerId} for customer ${newCustomerId}`
+        );
+      } catch (innerErr) {
+        if (!externalTransaction && t) await t.rollback();
+        throw innerErr;
+      }
+    } catch (error) {
+      console.error("[Referral] creditRegistrationReferral error:", error.message);
+    }
+  },
 };
+

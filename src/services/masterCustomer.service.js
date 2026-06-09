@@ -307,6 +307,10 @@ class masterCustomerService {
     // customer.jwtToken = jwtToken;
     await customer.save();
 
+    if (customer.referredBy) {
+      await referralService.creditRegistrationReferral(customer.id);
+    }
+
     if (deviceId) {
       await customerDevice.upsert({
         deviceId,
@@ -848,6 +852,7 @@ class masterCustomerService {
         // Apply referral if code provided
         if (profile.referralCode) {
           await referralService.applyReferral(customer.id, profile.referralCode);
+          await referralService.creditRegistrationReferral(customer.id);
         }
       }
 
@@ -946,6 +951,7 @@ class masterCustomerService {
         // Apply referral if code provided
         if (profile.referralCode) {
           await referralService.applyReferral(customer.id, profile.referralCode);
+          await referralService.creditRegistrationReferral(customer.id);
         }
       }
 
@@ -990,7 +996,7 @@ class masterCustomerService {
 
   async getCustomerListForAdmin(filters) {
     try {
-      const { page = 1, limit = 10, search, isFreelance, startDate, endDate } = filters;
+      const { page = 1, limit = 10, search, isFreelance, isDownline, startDate, endDate } = filters;
       const { getPagination, formatPagination } = require("../utils/pagination");
       const { limit: queryLimit, offset } = getPagination(page, limit);
 
@@ -1010,6 +1016,11 @@ class masterCustomerService {
       if (isFreelance !== undefined && isFreelance !== '') {
         const freelanceBool = isFreelance === true || isFreelance === 'true';
         andConditions.push({ isFreelance: freelanceBool });
+      }
+
+      if (isDownline !== undefined && isDownline !== '') {
+        const downlineBool = isDownline === true || isDownline === 'true';
+        andConditions.push({ isDownline: downlineBool });
       }
 
       if (startDate || endDate) {
@@ -1033,7 +1044,7 @@ class masterCustomerService {
         where: whereCondition,
         attributes: [
           "id", "name", "username", "email", "phoneNumber", "countryCode",
-          "profileImageUrl", "isActive", "isFreelance", "lastActiveAt", "createdAt"
+          "profileImageUrl", "isActive", "isFreelance", "isDownline", "lastActiveAt", "createdAt"
         ],
         order: [["createdAt", "DESC"]],
         limit: queryLimit,

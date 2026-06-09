@@ -446,7 +446,7 @@ class masterCustomerController {
 
       const { count, rows: latestCustomers } = await masterCustomer.findAndCountAll({
         where: customerWhere,
-        attributes: ["id", "name", "email", "lastActiveAt", "loginMethod", "profileImageUrl", "createdAt", "isFreelance"],
+        attributes: ["id", "name", "email", "lastActiveAt", "loginMethod", "profileImageUrl", "createdAt", "isFreelance", "isDownline"],
         order: [
           [Sequelize.literal("CASE WHEN lastActiveAt IS NULL THEN 1 ELSE 0 END"), "ASC"],
           ["lastActiveAt", "DESC"],
@@ -497,6 +497,7 @@ class masterCustomerController {
           status: isOnline ? "ONLINE" : "OFFLINE",
           source: "MOBILE APP",
           isFreelance: c.isFreelance || false,
+          isDownline: c.isDownline || false,
         };
       });
 
@@ -551,14 +552,44 @@ class masterCustomerController {
     }
   }
 
+  async toggleDownline(req, res) {
+    try {
+      const { customerId, isDownline } = req.body || {};
+      if (!customerId || typeof isDownline !== "boolean") {
+        return response.error(res, "customerId dan isDownline (boolean) wajib diisi", null);
+      }
+
+      const { masterCustomer } = require("../models");
+      const customer = await masterCustomer.findByPk(customerId);
+      if (!customer) {
+        return response.error(res, "Customer tidak ditemukan", null);
+      }
+
+      await customer.update({ isDownline });
+
+      return response.success(
+        res,
+        `Customer berhasil ditandai sebagai ${isDownline ? "downline" : "non-downline"}`,
+        {
+          id: customer.id,
+          name: customer.name,
+          isDownline: customer.isDownline,
+        }
+      );
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+
   async getCustomerListForAdmin(req, res) {
     try {
-      const { page, limit, search, isFreelance, startDate, endDate } = req.query;
+      const { page, limit, search, isFreelance, isDownline, startDate, endDate } = req.query;
       const result = await masterCustomerService.getCustomerListForAdmin({
         page,
         limit,
         search,
         isFreelance,
+        isDownline,
         startDate,
         endDate
       });

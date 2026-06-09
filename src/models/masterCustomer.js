@@ -120,6 +120,11 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: false,
         comment: "Ditandai oleh superadmin, freelance/busdev tidak dapat komisi referral",
       },
+      isDownline: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: "Ditandai oleh superadmin, status partner downline",
+      },
       lastLoginAt: {
         type: DataTypes.DATE,
         allowNull: true,

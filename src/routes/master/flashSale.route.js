@@ -72,7 +72,7 @@ router.post(
 router.post(
   "/:id/notify",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "MARKETING"),
   flashSaleController.sendFlashSaleNotification
 );
 
@@ -80,7 +80,7 @@ router.post(
 router.post(
   "/:id/notify-customer",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "MARKETING"),
   flashSaleController.sendFlashSaleCustomerNotification
 );
 
@@ -88,14 +88,14 @@ router.post(
 router.get(
   "/:id/scheduled-notifications",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "MARKETING"),
   flashSaleController.getScheduledNotifications
 );
 
 router.delete(
   "/:id/scheduled-notifications/:notificationId",
   verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "MARKETING"),
   flashSaleController.deleteScheduledNotification
 );
 

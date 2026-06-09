@@ -13,28 +13,28 @@ router.put("/read-all", authMiddleware.verifyToken, NotificationController.markA
 router.post(
   "/send-broadcast",
   authMiddleware.verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "MARKETING"),
   NotificationController.sendGeneralBroadcast
 );
 
 router.get(
   "/scheduled",
   authMiddleware.verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "MARKETING"),
   NotificationController.getScheduledGeneralNotifications
 );
 
 router.delete(
   "/scheduled/:notificationId",
   authMiddleware.verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "MARKETING"),
   NotificationController.deleteScheduledGeneralNotification
 );
 
 router.put(
   "/scheduled/:notificationId/toggle",
   authMiddleware.verifyToken,
-  allowRoles("SUPER_ADMIN"),
+  allowRoles("SUPER_ADMIN", "MARKETING"),
   NotificationController.toggleScheduledNotification
 );
 

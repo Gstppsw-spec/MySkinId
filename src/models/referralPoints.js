@@ -41,7 +41,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       orderId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
       },
       transactionId: {
         type: DataTypes.UUID,

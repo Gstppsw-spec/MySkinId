@@ -38,6 +38,14 @@ router.put(
   masterCustomerController.toggleFreelance
 );
 
+// Admin: Toggle downline status
+router.put(
+  "/toggle-downline",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterCustomerController.toggleDownline
+);
+
 // Admin: Get customer list with pagination and filters
 router.get(
   "/admin/list",
