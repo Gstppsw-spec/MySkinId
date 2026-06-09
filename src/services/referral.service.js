@@ -919,7 +919,7 @@ module.exports = {
         return;
       }
 
-      const pointsEarned = 2500;
+      const pointsEarned = 3000;
       const t = externalTransaction || (await sequelize.transaction());
 
       try {
