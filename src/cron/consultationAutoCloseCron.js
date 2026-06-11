@@ -1,6 +1,6 @@
 const cron = require("node-cron");
 const { Op } = require("sequelize");
-const { masterRoomConsultation } = require("../models");
+const { masterRoomConsultation, masterConsultationMessage, masterCustomer } = require("../models");
 const socketInstance = require("../socket/socketInstance");
 
 /**
@@ -39,6 +39,13 @@ function initConsultationAutoCloseCron() {
             },
           ],
         },
+        include: [
+          {
+            model: masterCustomer,
+            as: "customer",
+            attributes: ["id", "name", "referralCode"],
+          },
+        ],
       });
 
       console.log(
@@ -50,6 +57,33 @@ function initConsultationAutoCloseCron() {
 
       for (const room of expiredRooms) {
         try {
+          // Kirim pesan penutupan dengan link referral sebelum status diubah
+          try {
+            const referralCode = room.customer?.referralCode;
+            const referralLink = referralCode
+              ? `https://myskin.blog/?ref=${referralCode}`
+              : "https://myskin.blog/";
+            const closingMessage = `Konsultasi ini telah berakhir, dapatkan quota tambahan konsultasi gratis dengan membagikan link aplikasi untuk teman dan keluarga kamu. \n\n${referralLink}`;
+
+            const savedMessage = await masterConsultationMessage.create({
+              roomId: room.id,
+              senderRole: "doctor",
+              message: closingMessage,
+              messageType: "text",
+              isRead: false,
+            });
+
+            socketInstance.emitConsultationMessage(room.id, {
+              ...savedMessage.get({ plain: true }),
+              senderProfile: { name: "Sistem", image: null, role: "doctor" },
+            });
+          } catch (msgErr) {
+            console.error(
+              `[ConsultationAutoClose] Gagal kirim pesan penutupan room ${room.id}:`,
+              msgErr.message
+            );
+          }
+
           room.status = "closed";
           await room.save();
 
