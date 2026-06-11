@@ -395,6 +395,8 @@ class masterCustomerController {
       const status = req.query.status || "";
       const startDate = req.query.startDate || "";
       const endDate = req.query.endDate || "";
+      const lastActiveStartDate = req.query.lastActiveStartDate || req.query.lastOnlineStartDate || req.query.onlineStartDate || "";
+      const lastActiveEndDate = req.query.lastActiveEndDate || req.query.lastOnlineEndDate || req.query.onlineEndDate || "";
 
       const customerWhere = {};
       const andConditions = [];
@@ -438,6 +440,19 @@ class masterCustomerController {
           dateCondition[Op.lte] = end;
         }
         andConditions.push({ createdAt: dateCondition });
+      }
+
+      if (lastActiveStartDate || lastActiveEndDate) {
+        const lastActiveCondition = {};
+        if (lastActiveStartDate) {
+          lastActiveCondition[Op.gte] = new Date(lastActiveStartDate);
+        }
+        if (lastActiveEndDate) {
+          const end = new Date(lastActiveEndDate);
+          end.setHours(23, 59, 59, 999);
+          lastActiveCondition[Op.lte] = end;
+        }
+        andConditions.push({ lastActiveAt: lastActiveCondition });
       }
 
       if (andConditions.length > 0) {
