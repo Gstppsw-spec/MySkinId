@@ -521,6 +521,9 @@ class MasterLocationService {
 
   async detail(id) {
     try {
+      const excludeFields = MasterLocationService.SENSITIVE_LOCATION_FIELDS.filter(
+        (field) => !["bankName", "bankAccountNumber", "bankAccountName"].includes(field)
+      );
       const location = await masterLocation.findByPk(id, {
         include: [
           {
@@ -540,7 +543,7 @@ class MasterLocationService {
             limit: 1,
           },
         ],
-        attributes: { exclude: MasterLocationService.SENSITIVE_LOCATION_FIELDS },
+        attributes: { exclude: excludeFields },
       });
 
       if (!location) {
@@ -705,9 +708,12 @@ class MasterLocationService {
   async getLocationByUser({ id: userId, roleCode, locationIds, name }, pagination = {}) {
     try {
       const { limit, offset } = pagination;
+      const excludeFields = MasterLocationService.SENSITIVE_LOCATION_FIELDS.filter(
+        (field) => !["bankName", "bankAccountNumber", "bankAccountName"].includes(field)
+      );
       const options = {
         where: {},
-        attributes: { exclude: MasterLocationService.SENSITIVE_LOCATION_FIELDS },
+        attributes: { exclude: excludeFields },
         include: [
           {
             model: masterLocationImage,
