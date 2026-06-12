@@ -78,4 +78,12 @@ router.get(
   masterCustomerController.getFreelancersListForAdmin
 );
 
+// Admin: Get list of all downline accounts with their metrics
+router.get(
+  "/admin/downlines",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterCustomerController.getDownlinesListForAdmin
+);
+
 module.exports = router;

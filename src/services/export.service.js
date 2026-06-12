@@ -990,6 +990,57 @@ async function fetchFreelancers(startDate, endDate, companyIds, locationIds, sea
   };
 }
 
+async function fetchDownlines(startDate, endDate, companyIds, locationIds, search) {
+  const dateWhere = buildDateFilter(startDate, endDate);
+  const where = { isDownline: true, ...dateWhere };
+
+  if (search) {
+    where[Op.or] = [
+      { name: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { phoneNumber: { [Op.like]: `%${search}%` } },
+    ];
+  }
+
+  const downlines = await masterCustomer.findAll({
+    where,
+    order: [["createdAt", "ASC"]],
+  });
+
+  const rows = await Promise.all(
+    downlines.map(async (d, idx) => {
+      const referredCount = await masterCustomer.count({
+        where: { referredBy: d.id }
+      });
+
+      return [
+        idx + 1,
+        d.name || "-",
+        d.email || "-",
+        d.phoneNumber || "-",
+        d.referralCode || "-",
+        referredCount,
+        formatDate(d.createdAt),
+      ];
+    })
+  );
+
+  return {
+    title: "Laporan Data Customer Downline",
+    columns: [
+      { header: "No", width: 30 },
+      { header: "Nama Lengkap", width: 120 },
+      { header: "Email", width: 130 },
+      { header: "No. Telepon", width: 100 },
+      { header: "Kode Referral", width: 90 },
+      { header: "Jumlah Diajak", width: 80 },
+      { header: "Tanggal Gabung", width: 120 },
+    ],
+    rows,
+    totalData: rows.length,
+  };
+}
+
 // ─── Exported Functions ──────────────────────────────────────────────────────
 
 module.exports = {
@@ -1001,6 +1052,7 @@ module.exports = {
   fetchLocations,
   fetchCustomers,
   fetchFreelancers,
+  fetchDownlines,
   fetchAdsPerformance,
   fetchConsultationSummary,
   generatePDF,

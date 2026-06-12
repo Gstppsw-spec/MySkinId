@@ -137,6 +137,10 @@ module.exports = {
     return handleExport(req, res, exportService.fetchFreelancers, "laporan_freelance");
   },
 
+  async exportDownlines(req, res) {
+    return handleExport(req, res, exportService.fetchDownlines, "laporan_downline");
+  },
+
   async exportAdsPerformance(req, res) {
     const { status } = req.query;
     const fetchFn = (startDate, endDate, companyIdsArray, locationIdsArray, search) => {

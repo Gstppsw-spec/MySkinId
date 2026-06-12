@@ -1342,6 +1342,123 @@ class masterCustomerService {
     }
   }
 
+  async getDownlinesListForAdmin(filters) {
+    try {
+      const { page = 1, limit = 10, search, startDate, endDate } = filters;
+      const { getPagination, formatPagination } = require("../utils/pagination");
+      const { limit: queryLimit, offset } = getPagination(page, limit);
+
+      const whereCondition = { isDownline: true };
+      const andConditions = [];
+
+      if (search) {
+        andConditions.push({
+          [Op.or]: [
+            { name: { [Op.like]: `%${search}%` } },
+            { email: { [Op.like]: `%${search}%` } },
+            { phoneNumber: { [Op.like]: `%${search}%` } },
+          ]
+        });
+      }
+
+      if (startDate || endDate) {
+        const dateCondition = {};
+        if (startDate) {
+          dateCondition[Op.gte] = new Date(startDate);
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          dateCondition[Op.lte] = end;
+        }
+        andConditions.push({ createdAt: dateCondition });
+      }
+
+      if (andConditions.length > 0) {
+        whereCondition[Op.and] = andConditions;
+      }
+
+      const { count, rows: downlines } = await masterCustomer.findAndCountAll({
+        where: whereCondition,
+        attributes: [
+          "id", "name", "username", "email", "phoneNumber", "countryCode",
+          "referralCode", "profileImageUrl", "isActive", "createdAt"
+        ],
+        include: [
+          {
+            model: sequelize.models.referralBalance,
+            as: "referralBalance",
+            attributes: ["balance", "totalEarned", "totalWithdrawn"]
+          }
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: queryLimit,
+        offset: offset,
+      });
+
+      // Map downlines to include referred count
+      const items = await Promise.all(
+        downlines.map(async (d) => {
+          const referredCount = await masterCustomer.count({
+            where: { referredBy: d.id }
+          });
+
+          return {
+            id: d.id,
+            name: d.name,
+            username: d.username,
+            email: d.email,
+            phoneNumber: d.phoneNumber,
+            countryCode: d.countryCode,
+            referralCode: d.referralCode,
+            profileImageUrl: d.profileImageUrl,
+            isActive: d.isActive,
+            createdAt: d.createdAt,
+            referredCount,
+            balance: d.referralBalance ? parseFloat(d.referralBalance.balance) : 0,
+            totalEarned: d.referralBalance ? parseFloat(d.referralBalance.totalEarned) : 0,
+            totalWithdrawn: d.referralBalance ? parseFloat(d.referralBalance.totalWithdrawn) : 0,
+          };
+        })
+      );
+
+      // Get overall total downlines count
+      const totalDownlines = await masterCustomer.count({
+        where: { isDownline: true }
+      });
+
+      // Get all downline IDs to count their total referred customers
+      const allDownlines = await masterCustomer.findAll({
+        where: { isDownline: true },
+        attributes: ["id"]
+      });
+      const downlineIds = allDownlines.map(d => d.id);
+
+      const totalReferredByAllDownlines = downlineIds.length > 0
+        ? await masterCustomer.count({ where: { referredBy: { [Op.in]: downlineIds } } })
+        : 0;
+
+      return {
+        status: true,
+        message: "Downlines list fetched successfully",
+        data: {
+          stats: {
+            totalDownlines,
+            totalReferredByAllDownlines,
+          },
+          items,
+          pagination: formatPagination(count, page, limit),
+        },
+      };
+    } catch (error) {
+      console.error("getDownlinesListForAdmin error:", error);
+      return {
+        status: false,
+        message: error.message || "Error fetching downlines list",
+      };
+    }
+  }
+
   static normalizeNumber(phoneNumber, countryCode = "62") {
     phoneNumber = phoneNumber.toString().replace(/[^0-9]/g, "");
     countryCode = countryCode.toString().replace(/[^0-9]/g, "");
