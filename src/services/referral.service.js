@@ -765,6 +765,7 @@ module.exports = {
         data: {
           totalReferrers,
           totalReferred,
+          totalReferredCustomer: totalReferred,
           totalPointsCredited: parseFloat(totalPointsCredited || 0),
           totalWithdrawalsCompleted: parseFloat(totalWithdrawalsCompleted || 0),
           pendingWithdrawals,
