@@ -808,11 +808,12 @@ module.exports = {
       }
 
       const { count, rows } = await referralBalance.findAndCountAll({
+        distinct: true,
         include: [
           {
             model: masterCustomer,
             as: "customer",
-            attributes: ["id", "name", "email", "phoneNumber", "profileImageUrl"],
+            attributes: ["id", "name", "username", "email", "phoneNumber", "profileImageUrl"],
             where: Object.keys(whereCustomer).length > 0 ? whereCustomer : undefined,
             required: Object.keys(whereCustomer).length > 0,
           },

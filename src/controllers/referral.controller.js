@@ -202,9 +202,22 @@ class referralController {
         { search },
         { limit, offset }
       );
-      return result.status
-        ? response.success(res, result.message, result.data)
-        : response.error(res, result.message);
+      
+      if (!result.status) {
+        return response.error(res, result.message);
+      }
+
+      return res.status(200).json({
+        status: true,
+        message: result.message,
+        data: result.data,
+        pagination: {
+          totalItem: result.totalCount,
+          pageNumber: parseInt(page),
+          pageSize: parseInt(limit),
+          totalPages: Math.ceil(result.totalCount / parseInt(limit))
+        }
+      });
     } catch (err) {
       return response.serverError(res, err);
     }
