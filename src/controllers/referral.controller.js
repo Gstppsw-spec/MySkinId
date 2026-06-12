@@ -193,6 +193,23 @@ class referralController {
    * Admin: Manually adjust customer referral balance (ADD or SUBTRACT)
    * Body: { customerId, amount, type: "ADD" | "SUBTRACT", reason?: string }
    */
+  async adminGetBalances(req, res) {
+    try {
+      const { search, page = 1, limit = 20 } = req.query;
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+
+      const result = await referralService.getBalances(
+        { search },
+        { limit, offset }
+      );
+      return result.status
+        ? response.success(res, result.message, result.data)
+        : response.error(res, result.message);
+    } catch (err) {
+      return response.serverError(res, err);
+    }
+  }
+
   async adminAdjustBalance(req, res) {
     try {
       const adminId = req.user.id;

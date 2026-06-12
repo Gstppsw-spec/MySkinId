@@ -31,6 +31,12 @@ router.get(
   allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
   referralController.adminGetReferralStats
 );
+router.get(
+  "/admin/balances",
+  verifyToken,
+  allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN"),
+  referralController.adminGetBalances
+);
 router.post(
   "/admin/adjust-balance",
   verifyToken,

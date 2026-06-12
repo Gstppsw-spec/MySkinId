@@ -1041,6 +1041,120 @@ async function fetchDownlines(startDate, endDate, companyIds, locationIds, searc
   };
 }
 
+async function fetchReferralBalances(startDate, endDate, companyIds, locationIds, search) {
+  const dateWhere = buildDateFilter(startDate, endDate);
+  const whereBalance = { ...dateWhere };
+
+  const whereCustomer = {};
+  if (search && search.trim() !== "") {
+    whereCustomer[Op.or] = [
+      { name: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { phoneNumber: { [Op.like]: `%${search}%` } },
+    ];
+  }
+
+  const { referralBalance } = require("../models");
+  const balances = await referralBalance.findAll({
+    where: whereBalance,
+    include: [
+      {
+        model: masterCustomer,
+        as: "customer",
+        attributes: ["name", "email", "phoneNumber"],
+        where: Object.keys(whereCustomer).length > 0 ? whereCustomer : undefined,
+        required: Object.keys(whereCustomer).length > 0,
+      }
+    ],
+    order: [["balance", "DESC"]],
+  });
+
+  const rows = balances.map((b, idx) => [
+    idx + 1,
+    b.customer?.name || "-",
+    b.customer?.email || "-",
+    b.customer?.phoneNumber || "-",
+    formatRupiah(parseFloat(b.balance || 0)),
+    formatRupiah(parseFloat(b.totalEarned || 0)),
+    formatRupiah(parseFloat(b.totalWithdrawn || 0)),
+    formatDate(b.updatedAt),
+  ]);
+
+  return {
+    title: "Laporan Saldo Referral Customer",
+    columns: [
+      { header: "No", width: 30 },
+      { header: "Nama Lengkap", width: 140 },
+      { header: "Email", width: 140 },
+      { header: "No. Telepon", width: 100 },
+      { header: "Saldo Saat Ini", width: 100 },
+      { header: "Total Pendapatan", width: 100 },
+      { header: "Total Ditarik", width: 100 },
+      { header: "Terakhir Update", width: 120 },
+    ],
+    rows,
+    totalData: rows.length,
+  };
+}
+
+async function fetchReferralWithdrawals(startDate, endDate, companyIds, locationIds, search) {
+  const dateWhere = buildDateFilter(startDate, endDate);
+  const whereWithdrawal = { ...dateWhere };
+
+  const whereCustomer = {};
+  if (search && search.trim() !== "") {
+    whereCustomer[Op.or] = [
+      { name: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { phoneNumber: { [Op.like]: `%${search}%` } },
+    ];
+  }
+
+  const { referralWithdrawal } = require("../models");
+  const withdrawals = await referralWithdrawal.findAll({
+    where: whereWithdrawal,
+    include: [
+      {
+        model: masterCustomer,
+        as: "customer",
+        attributes: ["name", "email", "phoneNumber"],
+        where: Object.keys(whereCustomer).length > 0 ? whereCustomer : undefined,
+        required: Object.keys(whereCustomer).length > 0,
+      }
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  const rows = withdrawals.map((w, idx) => [
+    idx + 1,
+    w.customer?.name || "-",
+    w.customer?.email || "-",
+    w.customer?.phoneNumber || "-",
+    formatRupiah(parseFloat(w.amount || 0)),
+    `${w.bankName} - ${w.accountNumber} (A/N ${w.accountName})`,
+    w.status,
+    formatDate(w.createdAt),
+    w.processedAt ? formatDate(w.processedAt) : "-",
+  ]);
+
+  return {
+    title: "Laporan Riwayat Penarikan Referral",
+    columns: [
+      { header: "No", width: 30 },
+      { header: "Nama Mitra", width: 120 },
+      { header: "Email", width: 120 },
+      { header: "No. Telepon", width: 100 },
+      { header: "Jumlah Penarikan", width: 100 },
+      { header: "Detail Rekening", width: 220 },
+      { header: "Status", width: 80 },
+      { header: "Tanggal Pengajuan", width: 100 },
+      { header: "Tanggal Diproses", width: 100 },
+    ],
+    rows,
+    totalData: rows.length,
+  };
+}
+
 // ─── Exported Functions ──────────────────────────────────────────────────────
 
 module.exports = {
@@ -1053,6 +1167,8 @@ module.exports = {
   fetchCustomers,
   fetchFreelancers,
   fetchDownlines,
+  fetchReferralBalances,
+  fetchReferralWithdrawals,
   fetchAdsPerformance,
   fetchConsultationSummary,
   generatePDF,

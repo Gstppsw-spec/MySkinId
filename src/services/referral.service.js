@@ -791,6 +791,50 @@ module.exports = {
   },
 
   /**
+   * Admin: Get all customer referral balances with filters.
+   */
+  async getBalances(filters = {}, pagination = {}) {
+    try {
+      const { limit = 20, offset = 0 } = pagination;
+      const { search } = filters;
+      
+      const whereCustomer = {};
+      if (search && search.trim() !== "") {
+        whereCustomer[Op.or] = [
+          { name: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+          { phoneNumber: { [Op.like]: `%${search}%` } },
+        ];
+      }
+
+      const { count, rows } = await referralBalance.findAndCountAll({
+        include: [
+          {
+            model: masterCustomer,
+            as: "customer",
+            attributes: ["id", "name", "email", "phoneNumber", "profileImageUrl"],
+            where: Object.keys(whereCustomer).length > 0 ? whereCustomer : undefined,
+            required: Object.keys(whereCustomer).length > 0,
+          },
+        ],
+        order: [["balance", "DESC"]],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      });
+
+      return {
+        status: true,
+        message: "Success",
+        data: rows,
+        totalCount: count,
+      };
+    } catch (error) {
+      console.error("[Referral] getBalances error:", error);
+      return { status: false, message: error.message };
+    }
+  },
+
+  /**
    * Get list of referred customers for a referrer.
    */
   async getReferredCustomers(customerId, pagination = {}) {

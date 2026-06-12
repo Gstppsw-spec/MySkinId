@@ -15,6 +15,8 @@ router.get("/locations", ...auth, exportController.exportLocations);
 router.get("/customers", exportController.exportCustomers);
 router.get("/freelancers", ...auth, exportController.exportFreelancers);
 router.get("/downlines", ...auth, exportController.exportDownlines);
+router.get("/referral-balances", ...auth, exportController.exportReferralBalances);
+router.get("/referral-withdrawals", ...auth, exportController.exportReferralWithdrawals);
 router.get("/ads-performance", verifyToken, allowRoles("SUPER_ADMIN", "OPERATIONAL_ADMIN", "COMPANY_ADMIN", "OUTLET_ADMIN"), exportController.exportAdsPerformance);
 router.get("/consultation-summary", verifyToken, allowRoles("SUPER_ADMIN", "OUTLET_ADMIN"), exportController.exportConsultationSummary);
 

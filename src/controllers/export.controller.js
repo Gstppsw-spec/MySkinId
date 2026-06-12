@@ -141,6 +141,14 @@ module.exports = {
     return handleExport(req, res, exportService.fetchDownlines, "laporan_downline");
   },
 
+  async exportReferralBalances(req, res) {
+    return handleExport(req, res, exportService.fetchReferralBalances, "laporan_saldo_referral");
+  },
+
+  async exportReferralWithdrawals(req, res) {
+    return handleExport(req, res, exportService.fetchReferralWithdrawals, "laporan_penarikan_referral");
+  },
+
   async exportAdsPerformance(req, res) {
     const { status } = req.query;
     const fetchFn = (startDate, endDate, companyIdsArray, locationIdsArray, search) => {
