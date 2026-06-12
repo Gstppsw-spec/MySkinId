@@ -12,6 +12,7 @@ const {
 const { nanoid } = require("nanoid");
 const pushNotificationService = require("./pushNotification.service");
 const NotificationService = require("./notification.service");
+const payoutService = require("./payout.service");
 
 const MIN_WITHDRAWAL_AMOUNT = 100000; // Rp 100.000
 const FIRST_TRANSACTION_RATE = 3; // 3%
@@ -583,7 +584,8 @@ module.exports = {
 
   /**
    * Admin: Process a withdrawal request (approve/reject).
-   * If rejected, refund the balance back to the customer.
+   * If APPROVE → auto-disburse via Xendit. If Xendit fails, keep PENDING (admin can retry).
+   * If REJECT → refund balance back to customer.
    */
   async processWithdrawal(withdrawalId, adminId, action, note = null) {
     const t = await sequelize.transaction();
@@ -604,12 +606,37 @@ module.exports = {
       }
 
       if (action === "APPROVE" || action === "COMPLETED") {
+        // === AUTO DISBURSEMENT via Xendit ===
+        // bankName di DB menyimpan Xendit bank_code (contoh: BCA, MANDIRI, BNI, dll)
+        const disbursementResult = await payoutService.createDisbursement({
+          amount: parseFloat(withdrawal.amount),
+          bankCode: withdrawal.bankName,
+          accountHolderName: withdrawal.accountName,
+          accountNumber: withdrawal.accountNumber,
+          description: `Referral withdrawal MySkinId - ${withdrawal.id}`,
+          externalId: `REF-WD-${withdrawal.id}`,
+        });
+
+        if (!disbursementResult.status) {
+          // Xendit gagal → rollback, jangan approve, biarkan PENDING
+          if (t) await t.rollback();
+          console.error("[Referral] Xendit disbursement failed for withdrawal:", withdrawal.id, disbursementResult.message);
+          return {
+            status: false,
+            message: `Gagal transfer via Xendit: ${disbursementResult.message}. Withdrawal tetap PENDING, silakan coba lagi.`,
+          };
+        }
+
+        const xenditDisbursementId = disbursementResult.data?.id || disbursementResult.data?.external_id || null;
+        console.log(`[Referral] Xendit disbursement created: ${xenditDisbursementId} for withdrawal ${withdrawal.id}`);
+
         await withdrawal.update(
           {
             status: "COMPLETED",
             adminNote: note,
             processedAt: new Date(),
             processedBy: adminId,
+            disbursementId: xenditDisbursementId,
           },
           { transaction: t }
         );
@@ -649,7 +676,7 @@ module.exports = {
 
       // Notify customer
       try {
-        const statusText = action === "REJECT" ? "ditolak" : "disetujui";
+        const statusText = action === "REJECT" ? "ditolak" : "disetujui dan sedang diproses transfer";
         const formattedAmount = new Intl.NumberFormat("id-ID", {
           style: "currency",
           currency: "IDR",

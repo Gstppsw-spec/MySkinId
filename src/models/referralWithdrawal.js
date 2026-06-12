@@ -60,6 +60,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      disbursementId: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: "Xendit disbursement ID, filled after successful auto-disbursement",
+      },
       createdAt: { type: DataTypes.DATE },
       updatedAt: { type: DataTypes.DATE },
     },
