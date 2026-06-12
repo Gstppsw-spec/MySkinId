@@ -70,6 +70,14 @@ router.put(
   masterCustomerController.setReferrerForAdmin
 );
 
+// Admin: Manually remove referrer association for customers
+router.put(
+  "/admin/remove-referrer",
+  verifyToken,
+  allowRoles("SUPER_ADMIN"),
+  masterCustomerController.removeReferrerForAdmin
+);
+
 // Admin: Get list of all freelance/busdev accounts with their metrics
 router.get(
   "/admin/freelancers",

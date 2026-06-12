@@ -1225,6 +1225,73 @@ class masterCustomerService {
     }
   }
 
+  async removeReferrerForAdmin({ customerIds, customerId, custId, custid }) {
+    try {
+      let ids = [];
+      const addId = (val) => {
+        if (!val) return;
+        if (Array.isArray(val)) {
+          ids.push(...val);
+        } else if (typeof val === "string") {
+          ids.push(val);
+        }
+      };
+
+      addId(customerIds);
+      addId(customerId);
+      addId(custId);
+      addId(custid);
+
+      // Remove duplicates and filter empty/falsy values
+      ids = [...new Set(ids.filter(Boolean))];
+
+      if (ids.length === 0) {
+        return { status: false, message: "customerIds, customerId, custId, atau custid wajib diisi" };
+      }
+
+      const validIds = [];
+      const errors = [];
+
+      for (const id of ids) {
+        const customer = await masterCustomer.findByPk(id);
+        if (!customer) {
+          errors.push({ id, message: "Customer tidak ditemukan" });
+          continue;
+        }
+
+        validIds.push(id);
+      }
+
+      if (validIds.length === 0) {
+        return {
+          status: false,
+          message: "Tidak ada customer ID yang valid untuk diproses",
+          errors
+        };
+      }
+
+      await masterCustomer.update(
+        { referredBy: null },
+        { where: { id: { [Op.in]: validIds } } }
+      );
+
+      return {
+        status: true,
+        message: `Berhasil menghapus referrer dari ${validIds.length} customer secara manual`,
+        data: {
+          processedCount: validIds.length,
+          errors: errors.length > 0 ? errors : undefined
+        }
+      };
+    } catch (error) {
+      console.error("removeReferrerForAdmin error:", error);
+      return {
+        status: false,
+        message: error.message || "Error removing referrer",
+      };
+    }
+  }
+
   async getFreelancersListForAdmin(filters) {
     try {
       const { page = 1, limit = 10, search, startDate, endDate } = filters;

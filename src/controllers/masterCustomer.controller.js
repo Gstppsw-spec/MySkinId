@@ -659,6 +659,25 @@ class masterCustomerController {
     }
   }
 
+  async removeReferrerForAdmin(req, res) {
+    try {
+      const { customerIds, customerId, custId, custid } = req.body || {};
+      const result = await masterCustomerService.removeReferrerForAdmin({
+        customerIds,
+        customerId,
+        custId,
+        custid
+      });
+
+      if (!result.status) {
+        return response.error(res, result.message, result.data);
+      }
+      return response.success(res, result.message, result.data);
+    } catch (error) {
+      return response.serverError(res, error);
+    }
+  }
+
   async getFreelancersListForAdmin(req, res) {
     try {
       const { page, limit, search, startDate, endDate } = req.query;
