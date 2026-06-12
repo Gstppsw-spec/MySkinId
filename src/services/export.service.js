@@ -1043,10 +1043,16 @@ async function fetchDownlines(startDate, endDate, companyIds, locationIds, searc
 
 async function fetchReferralBalances(startDate, endDate, companyIds, locationIds, search) {
   const dateWhere = buildDateFilter(startDate, endDate);
-  const whereBalance = { ...dateWhere };
+  const whereBalance = {
+    ...dateWhere,
+    totalEarned: {
+      [Op.gt]: 0,
+    },
+  };
 
   const whereCustomer = {};
-  if (search && search.trim() !== "") {
+  const hasSearch = !!(search && search.trim() !== "");
+  if (hasSearch) {
     whereCustomer[Op.or] = [
       { name: { [Op.like]: `%${search}%` } },
       { email: { [Op.like]: `%${search}%` } },
@@ -1062,8 +1068,8 @@ async function fetchReferralBalances(startDate, endDate, companyIds, locationIds
         model: masterCustomer,
         as: "customer",
         attributes: ["name", "email", "phoneNumber"],
-        where: Object.keys(whereCustomer).length > 0 ? whereCustomer : undefined,
-        required: Object.keys(whereCustomer).length > 0,
+        where: hasSearch ? whereCustomer : undefined,
+        required: hasSearch,
       }
     ],
     order: [["balance", "DESC"]],
@@ -1102,7 +1108,8 @@ async function fetchReferralWithdrawals(startDate, endDate, companyIds, location
   const whereWithdrawal = { ...dateWhere };
 
   const whereCustomer = {};
-  if (search && search.trim() !== "") {
+  const hasSearch = !!(search && search.trim() !== "");
+  if (hasSearch) {
     whereCustomer[Op.or] = [
       { name: { [Op.like]: `%${search}%` } },
       { email: { [Op.like]: `%${search}%` } },
@@ -1118,8 +1125,8 @@ async function fetchReferralWithdrawals(startDate, endDate, companyIds, location
         model: masterCustomer,
         as: "customer",
         attributes: ["name", "email", "phoneNumber"],
-        where: Object.keys(whereCustomer).length > 0 ? whereCustomer : undefined,
-        required: Object.keys(whereCustomer).length > 0,
+        where: hasSearch ? whereCustomer : undefined,
+        required: hasSearch,
       }
     ],
     order: [["createdAt", "DESC"]],
