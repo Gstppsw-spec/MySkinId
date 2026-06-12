@@ -799,7 +799,9 @@ module.exports = {
       const { search } = filters;
       
       const whereCustomer = {};
-      if (search && search.trim() !== "") {
+      const hasSearch = !!(search && search.trim() !== "");
+      
+      if (hasSearch) {
         whereCustomer[Op.or] = [
           { name: { [Op.like]: `%${search}%` } },
           { email: { [Op.like]: `%${search}%` } },
@@ -809,13 +811,18 @@ module.exports = {
 
       const { count, rows } = await referralBalance.findAndCountAll({
         distinct: true,
+        where: {
+          totalEarned: {
+            [Op.gt]: 0,
+          },
+        },
         include: [
           {
             model: masterCustomer,
             as: "customer",
             attributes: ["id", "name", "username", "email", "phoneNumber", "profileImageUrl"],
-            where: Object.keys(whereCustomer).length > 0 ? whereCustomer : undefined,
-            required: Object.keys(whereCustomer).length > 0,
+            where: hasSearch ? whereCustomer : undefined,
+            required: hasSearch,
           },
         ],
         order: [["balance", "DESC"]],
